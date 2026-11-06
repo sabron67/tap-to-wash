@@ -7,10 +7,10 @@ function logo({ prefix = 'l', animated = true, className = '' } = {}) {
   return html`<svg class="ttw-logo ${animated ? '' : 'static'} ${className}" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tap to Wash logo: a finger tapping a washing machine">
   <defs>
     <linearGradient id="${id('body')}" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#34d399"/><stop offset="0.55" stop-color="#0d9488"/><stop offset="1" stop-color="#047857"/>
+      <stop offset="0" stop-color="#e8bd94"/><stop offset="0.55" stop-color="#c2663a"/><stop offset="1" stop-color="#8f4a28"/>
     </linearGradient>
     <linearGradient id="${id('glass')}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ccfbf1"/><stop offset="1" stop-color="#0f766e"/>
+      <stop offset="0" stop-color="#fff6e8"/><stop offset="1" stop-color="#c9a27c"/>
     </linearGradient>
     <linearGradient id="${id('skin')}" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#ffe3c8"/><stop offset="1" stop-color="#f0a070"/>
@@ -25,13 +25,13 @@ function logo({ prefix = 'l', animated = true, className = '' } = {}) {
     <rect x="22" y="30" width="96" height="116" rx="18" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="2"/>
     <rect x="30" y="38" width="80" height="22" rx="9" fill="#fff" fill-opacity=".22"/>
     <circle cx="44" cy="49" r="7" fill="#fff"/>
-    <path d="M44 49 V43.6" stroke="#0d9488" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M44 49 V43.6" stroke="#c2663a" stroke-width="2.4" stroke-linecap="round"/>
     <circle cx="78" cy="49" r="3.6" fill="#fde047"/>
     <circle cx="90" cy="49" r="3.6" fill="#fb7185"/>
-    <circle cx="102" cy="49" r="3.6" fill="#4ade80"/>
+    <circle cx="102" cy="49" r="3.6" fill="#f5e6d0"/>
 
     <circle cx="70" cy="100" r="34" fill="#fff" fill-opacity=".95"/>
-    <circle cx="70" cy="100" r="30" fill="#d1fae5"/>
+    <circle cx="70" cy="100" r="30" fill="#f5e6d0"/>
     <circle cx="70" cy="100" r="28" fill="url(#${id('glass')})"/>
     <g clip-path="url(#${id('clip')})">
       <g class="ttw-drum">

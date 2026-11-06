@@ -22,7 +22,7 @@ if (!process.env.SESSION_SECRET) {
     console.error('SESSION_SECRET must be set in production.');
     process.exit(1);
   }
-  console.warn('⚠ SESSION_SECRET is not set - using an insecure development default.');
+  console.warn('WARNING: SESSION_SECRET is not set - using an insecure development default.');
 }
 
 app.use(securityHeaders);
@@ -65,4 +65,4 @@ app.use(async (err, req, res, next) => {
 });
 
 const port = Number(process.env.PORT) || 3000;
-app.listen(port, () => console.log(`🫧 Tap to Wash running at http://localhost:${port}`));
+app.listen(port, () => console.log(`Tap to Wash running at http://localhost:${port}`));

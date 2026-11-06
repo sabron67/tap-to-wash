@@ -6,9 +6,9 @@ function head(title, settings, description) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title ? `${title} · ` : ''}${settings.business_name}</title>
 <meta name="description" content="${description || settings.tagline}">
-<meta name="theme-color" content="#064e3b" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#d1fae5" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#064e3b" data-dynamic>
+<meta name="theme-color" content="#2e211a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#faf1e3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#2e211a" data-dynamic>
 ${themeBoot}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">

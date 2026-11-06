@@ -4,6 +4,7 @@ const { publicLayout } = require('../layouts/public');
 const { logo } = require('../partials/logo');
 const { timeline } = require('../partials/ui');
 const { themeSwitch } = require('../partials/theme');
+const { icon } = require('../../lib/icons');
 
 function trackPage(ctx, { ref = '', error = '', result = null }) {
   const s = ctx.settings;
@@ -12,7 +13,7 @@ function trackPage(ctx, { ref = '', error = '', result = null }) {
     <a class="brand" href="/">${logo({ prefix: 'trk', animated: false, className: 'brand-logo' })}<span>${s.business_name}</span></a>
     <nav class="nav-links"><a href="/#categories">Categories</a><a href="/track">Track order</a></nav>
     ${themeSwitch()}
-    <a class="btn btn-primary btn-sm" href="/">👆 Tap to wash</a>
+    <a class="btn btn-primary btn-sm" href="/">${icon('pointer')} Tap to wash</a>
   </header>
 
   <main class="container narrow section">
@@ -53,7 +54,7 @@ function messagePage(ctx, { title, message, code = '' }) {
   const body = html`
   <main class="container narrow section center">
     <div class="glass pad">
-      <div class="big">${code === '404' ? '🧺' : '🫧'}</div>
+      <div class="big">${icon(code === '404' ? 'shopping-basket' : 'droplets')}</div>
       <h2>${title}</h2>
       <p class="muted">${message}</p>
       <a class="btn btn-primary" href="/">Back to home</a>

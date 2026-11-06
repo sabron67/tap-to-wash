@@ -5,6 +5,7 @@ const { pool } = require('../config/db');
 const { getSettings, saveSettings } = require('../lib/settings');
 const { rateLimit, safeEqual } = require('../lib/security');
 const { wrap, STATUS_MAP, cleanText, cleanMultiline } = require('../lib/helpers');
+const { categoryIconName } = require('../lib/icons');
 
 const { loginPage } = require('../views/admin/login');
 const { dashboardPage } = require('../views/admin/dashboard');
@@ -249,14 +250,14 @@ router.post(
 // ---------- categories ----------
 function parseCategory(body) {
   const name = cleanText(body.name, 60);
-  const color = /^#[0-9a-fA-F]{6}$/.test(body.color || '') ? body.color : '#10b981';
+  const color = /^#[0-9a-fA-F]{6}$/.test(body.color || '') ? body.color : '#c2663a';
   const priceRaw = String(body.price == null ? '' : body.price).trim();
   const price = priceRaw === '' ? null : Number(priceRaw);
   const sort = parseInt(body.sort_order, 10);
   return {
     name,
     description: cleanText(body.description, 200),
-    icon: cleanText(body.icon, 8) || '🧺',
+    icon: categoryIconName(body.icon),
     color,
     price: price !== null && Number.isFinite(price) && price >= 0 ? price : null,
     unit: cleanText(body.unit, 20) || 'item',

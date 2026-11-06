@@ -17,15 +17,6 @@
     });
   });
 
-  // Emoji chips fill the nearest icon field
-  document.querySelectorAll('.emoji').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var form = btn.closest('form');
-      var input = form && form.querySelector('.icon-input');
-      if (input) input.value = btn.getAttribute('data-emoji');
-    });
-  });
-
   // "Use estimate" style helpers
   document.querySelectorAll('[data-fill]').forEach(function (btn) {
     btn.addEventListener('click', function () {

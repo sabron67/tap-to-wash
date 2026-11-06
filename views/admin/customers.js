@@ -2,6 +2,7 @@ const { html } = require('../../lib/html');
 const { money, fmtDate } = require('../../lib/helpers');
 const { adminLayout } = require('../layouts/admin');
 const { pager } = require('../partials/ui');
+const { icon } = require('../../lib/icons');
 
 function customersPage(ctx, { rows, total, page, pages, q }) {
   const cur = ctx.settings.currency;
@@ -28,7 +29,7 @@ function customersPage(ctx, { rows, total, page, pages, q }) {
           )}</tbody></table></div>
         ${pager(base, page, pages)}
         <p class="muted small">${total} customer${total === 1 ? '' : 's'}</p>`
-      : html`<div class="empty"><div class="big">👥</div><p>No customers yet.</p></div>`}
+      : html`<div class="empty"><div class="big">${icon('users')}</div><p>No customers yet.</p></div>`}
   </section>`;
   return adminLayout(ctx, { title: 'Customers', active: 'customers', body });
 }

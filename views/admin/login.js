@@ -3,6 +3,7 @@ const { head, blobs } = require('../layouts/public');
 const { logo } = require('../partials/logo');
 const { csrfField } = require('../partials/ui');
 const { themeSwitch } = require('../partials/theme');
+const { icon } = require('../../lib/icons');
 
 function loginPage(ctx, { error = '', email = '' } = {}) {
   const s = ctx.settings;
@@ -22,7 +23,7 @@ ${blobs}
     <label class="field"><span>Email</span><input type="email" name="email" value="${email}" required autocomplete="username" autofocus></label>
     <label class="field"><span>Password</span><input type="password" name="password" required autocomplete="current-password"></label>
     <button class="btn btn-primary btn-block btn-lg" type="submit">Sign in</button>
-    <a class="back-link" href="/">← Back to website</a>
+    <a class="back-link" href="/">${icon('arrow-left')} Back to website</a>
   </form>
 </main>
 <script src="/js/theme.js"></script>

@@ -3,13 +3,14 @@ const { head, blobs } = require('./public');
 const { logo } = require('../partials/logo');
 const { csrfField } = require('../partials/ui');
 const { themeSwitch } = require('../partials/theme');
+const { icon } = require('../../lib/icons');
 
 const NAV = [
-  ['dashboard', '/admin', '📊', 'Dashboard'],
-  ['requests', '/admin/requests', '🧺', 'Requests'],
-  ['categories', '/admin/categories', '🏷️', 'Categories'],
-  ['customers', '/admin/customers', '👥', 'Customers'],
-  ['settings', '/admin/settings', '⚙️', 'Settings'],
+  ['dashboard', '/admin', 'layout-dashboard', 'Dashboard'],
+  ['requests', '/admin/requests', 'clipboard-list', 'Requests'],
+  ['categories', '/admin/categories', 'tag', 'Categories'],
+  ['customers', '/admin/customers', 'users', 'Customers'],
+  ['settings', '/admin/settings', 'settings', 'Settings'],
 ];
 
 function adminLayout(ctx, { title, active, body }) {
@@ -27,22 +28,22 @@ ${blobs}
     <a class="brand" href="/admin">${logo({ prefix: 'adm', animated: false, className: 'brand-logo' })}<span>${s.business_name}<small>Admin</small></span></a>
     <nav class="side-nav">
       ${NAV.map(
-        ([key, href, icon, label]) => html`<a href="${href}" class="${key === active ? 'active' : ''}">
-          <span class="ni">${icon}</span><span>${label}</span>
+        ([key, href, ic, label]) => html`<a href="${href}" class="${key === active ? 'active' : ''}">
+          <span class="ni">${icon(ic)}</span><span>${label}</span>
           ${key === 'requests' && ctx.newCount > 0 ? html`<span class="count">${ctx.newCount}</span>` : ''}
         </a>`
       )}
     </nav>
     <div class="side-foot">
-      <a href="/" target="_blank" rel="noopener" class="side-link">🌐 View website</a>
+      <a href="/" target="_blank" rel="noopener" class="side-link">${icon('globe')} View website</a>
       <div class="who">Signed in as <strong>${ctx.admin.name}</strong></div>
-      <form method="post" action="/admin/logout">${csrfField(ctx)}<button class="btn btn-ghost btn-sm btn-block" type="submit">Sign out</button></form>
+      <form method="post" action="/admin/logout">${csrfField(ctx)}<button class="btn btn-ghost btn-sm btn-block" type="submit">${icon('log-out')} Sign out</button></form>
     </div>
   </aside>
 
   <div class="main">
     <header class="topbar glass">
-      <button class="icon-btn menu-btn" id="menuBtn" aria-label="Menu">☰</button>
+      <button class="icon-btn menu-btn" id="menuBtn" aria-label="Menu">${icon('menu')}</button>
       <h1>${title}</h1>
       ${themeSwitch()}
       <span class="topbar-date">${new Intl.DateTimeFormat('en-KE', { dateStyle: 'full', timeZone: 'Africa/Nairobi' }).format(new Date())}</span>

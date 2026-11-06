@@ -4,6 +4,7 @@
   const data = JSON.parse(document.getElementById('app-data').textContent || '{}');
   const categories = data.categories || [];
   const currency = data.currency || 'KES';
+  const ui = data.ui || {};
   const byId = new Map(categories.map((c) => [c.id, c]));
 
   const $ = (sel, root) => (root || document).querySelector(sel);
@@ -37,7 +38,7 @@
       card.classList.toggle('selected', on);
       card.setAttribute('aria-pressed', on ? 'true' : 'false');
       const check = $('.cat-check', card);
-      if (check) check.textContent = on ? '✓' : '＋';
+      if (check) check.innerHTML = on ? ui.check : ui.plus;
     });
     const n = selectedIds().length;
     if (selBar) {
@@ -83,7 +84,7 @@
       main.setAttribute('aria-pressed', on ? 'true' : 'false');
       const ico = document.createElement('span');
       ico.className = 'pick-ico';
-      ico.textContent = c.icon;
+      ico.innerHTML = c.icon; // trusted SVG rendered by the server
       const txt = document.createElement('span');
       txt.className = 'pick-txt';
       const nm = document.createElement('strong');
@@ -93,7 +94,7 @@
       txt.append(nm, pr);
       const chk = document.createElement('span');
       chk.className = 'pick-check';
-      chk.textContent = on ? '✓' : '';
+      chk.innerHTML = on ? ui.check : '';
       main.append(ico, txt, chk);
       main.addEventListener('click', () => toggleCategory(String(c.id)));
       row.appendChild(main);
@@ -103,13 +104,13 @@
         q.className = 'qty';
         const minus = document.createElement('button');
         minus.type = 'button';
-        minus.textContent = '−';
+        minus.innerHTML = ui.minus;
         minus.setAttribute('aria-label', 'Less ' + c.name);
         const val = document.createElement('span');
         val.textContent = qty + ' ' + c.unit;
         const plus = document.createElement('button');
         plus.type = 'button';
-        plus.textContent = '+';
+        plus.innerHTML = ui.plus;
         plus.setAttribute('aria-label', 'More ' + c.name);
         minus.addEventListener('click', () => {
           state.items[c.id] = Math.max(1, state.items[c.id] - 1);
@@ -149,7 +150,7 @@
     if (!done) {
       sub.textContent = subtitles[n];
       backBtn.style.visibility = n === 1 ? 'hidden' : 'visible';
-      nextBtn.textContent = n === 3 ? '👆 Send my request' : 'Next →';
+      nextBtn.innerHTML = n === 3 ? ui.pointer + ' Send my request' : 'Next ' + ui.arrow;
       nextBtn.disabled = false;
     } else {
       sub.textContent = 'All done!';
@@ -170,13 +171,13 @@
         total += c.price * q;
         hasPrice = true;
       }
-      return '<li><span>' + esc(c.icon + ' ' + c.name) + '</span><strong>× ' + q + ' ' + esc(c.unit) + '</strong></li>';
+      return '<li><span class="sum-name">' + c.icon + ' ' + esc(c.name) + '</span><strong>× ' + q + ' ' + esc(c.unit) + '</strong></li>';
     });
     box.innerHTML =
       '<h4>Your request</h4><ul>' +
       lines.join('') +
       '</ul>' +
-      (state.lat !== null ? '<p class="small">📍 Location shared</p>' : '') +
+      (state.lat !== null ? '<p class="small sum-loc">' + ui.pin + ' Location shared</p>' : '') +
       (hasPrice ? '<p class="small muted">Estimated from ' + money(total) + ' - final price is confirmed after weighing/inspection.</p>' : '');
   }
 
@@ -256,7 +257,7 @@
     state.lat = state.lng = state.acc = null;
     mapBox.hidden = true;
     mapFrame.removeAttribute('src');
-    locBtn.textContent = '📍 Share my location';
+    locBtn.innerHTML = ui.pin + ' Share my location';
     locStatus.textContent = 'Tap the button so our rider can find you quickly. Your location is only used for this request.';
   }
   $('#locClear').addEventListener('click', clearLocation);
@@ -267,7 +268,7 @@
       return;
     }
     locBtn.disabled = true;
-    locBtn.textContent = '📡 Finding you…';
+    locBtn.innerHTML = ui.loader + ' Finding you…';
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         state.lat = pos.coords.latitude;
@@ -275,13 +276,13 @@
         state.acc = pos.coords.accuracy;
         showMap(state.lat, state.lng);
         locBtn.disabled = false;
-        locBtn.textContent = '🔄 Update my location';
+        locBtn.innerHTML = ui.refresh + ' Update my location';
         locStatus.textContent = 'Location captured (about ' + Math.round(state.acc) + ' m accuracy). Now describe where you are.';
         showError(2, '');
       },
       (err) => {
         locBtn.disabled = false;
-        locBtn.textContent = '📍 Try again';
+        locBtn.innerHTML = ui.pin + ' Try again';
         locStatus.textContent =
           err.code === 1
             ? 'Location permission was blocked. You can allow it in your browser settings, or just describe where you are below.'
@@ -328,7 +329,7 @@
     } catch (err) {
       showError(3, err.message);
       nextBtn.disabled = false;
-      nextBtn.textContent = '👆 Send my request';
+      nextBtn.innerHTML = ui.pointer + ' Send my request';
     } finally {
       state.sending = false;
     }

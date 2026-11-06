@@ -6,15 +6,19 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const { pool } = require('../config/db');
 const { DEFAULTS } = require('../lib/settings');
+const { categoryIconName } = require('../lib/icons');
 
 const STARTER_CATEGORIES = [
-  ['Everyday Clothes', 'T-shirts, trousers, dresses and daily wear.', '👕', '#10b981', 150, 'kg', 1],
-  ['Bedding & Duvets', 'Sheets, blankets, duvets and pillow cases.', '🛏️', '#f59e0b', 400, 'item', 2],
-  ['Suits & Formal Wear', 'Suits, coats, uniforms and dress shirts.', '👔', '#fb7185', 500, 'item', 3],
-  ['Curtains', 'Curtains and drapes, washed and pressed.', '🪟', '#14b8a6', 350, 'item', 4],
-  ['Shoes & Sneakers', 'Deep clean for sneakers and casual shoes.', '👟', '#84cc16', 300, 'pair', 5],
-  ['Carpets & Rugs', 'Deep wash and dry for carpets and rugs.', '🧶', '#fb7185', 250, 'sq m', 6],
+  ['Everyday Clothes', 'T-shirts, trousers, dresses and daily wear.', 'shirt', '#c2663a', 150, 'kg', 1],
+  ['Bedding & Duvets', 'Sheets, blankets, duvets and pillow cases.', 'bed-double', '#d99a4e', 400, 'item', 2],
+  ['Suits & Formal Wear', 'Suits, coats, uniforms and dress shirts.', 'briefcase-business', '#a8707f', 500, 'item', 3],
+  ['Curtains', 'Curtains and drapes, washed and pressed.', 'blinds', '#b8935a', 350, 'item', 4],
+  ['Shoes & Sneakers', 'Deep clean for sneakers and casual shoes.', 'footprints', '#8c6a52', 300, 'pair', 5],
+  ['Carpets & Rugs', 'Deep wash and dry for carpets and rugs.', 'layers', '#c98b6b', 250, 'sq m', 6],
 ];
+
+// Older versions used green/blue starter colours and emoji icons. Move those to the current look.
+const OLD_COLOURS = { '#10b981': '#c2663a', '#14b8a6': '#b8935a', '#84cc16': '#d99a4e', '#22d3ee': '#c2663a', '#38bdf8': '#c98b6b', '#34d399': '#d6b48a' };
 
 async function main() {
   if (!process.env.DATABASE_URL) {
@@ -24,7 +28,7 @@ async function main() {
 
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   await pool.query(schema);
-  console.log('✔ Tables are ready');
+  console.log('[ok] Tables are ready');
 
   const admins = await pool.query('SELECT COUNT(*)::int AS n FROM admins');
   if (admins.rows[0].n === 0) {
@@ -33,15 +37,15 @@ async function main() {
     const password = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
     const hash = await bcrypt.hash(password, 10);
     await pool.query('INSERT INTO admins (name, email, password_hash) VALUES ($1, $2, $3)', [name, email, hash]);
-    console.log(`✔ Admin created: ${email}  (change the password after first login)`);
+    console.log(`[ok] Admin created: ${email}  (change the password after first login)`);
   } else {
-    console.log('• Admin already exists - skipped');
+    console.log('[--] Admin already exists - skipped');
   }
 
   for (const [key, value] of Object.entries(DEFAULTS)) {
     await pool.query('INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING', [key, value]);
   }
-  console.log('✔ Default settings in place');
+  console.log('[ok] Default settings in place');
 
   const cats = await pool.query('SELECT COUNT(*)::int AS n FROM categories');
   if (cats.rows[0].n === 0) {
@@ -51,10 +55,22 @@ async function main() {
         c
       );
     }
-    console.log('✔ Starter categories added (edit or delete them in Admin → Categories)');
+    console.log('[ok] Starter categories added (edit or delete them in Admin > Categories)');
   } else {
-    console.log('• Categories already exist - skipped');
+    console.log('[--] Categories already exist - skipped');
   }
+  // Move old emoji icons / green-blue colours on existing categories to the current icon set and palette.
+  const existing = await pool.query('SELECT id, icon, color FROM categories');
+  let migrated = 0;
+  for (const c of existing.rows) {
+    const icon = categoryIconName(c.icon);
+    const color = OLD_COLOURS[String(c.color).toLowerCase()] || c.color;
+    if (icon !== c.icon || color !== c.color) {
+      await pool.query('UPDATE categories SET icon = $1, color = $2 WHERE id = $3', [icon, color, c.id]);
+      migrated += 1;
+    }
+  }
+  if (migrated) console.log(`[ok] Updated icons/colours on ${migrated} existing categor${migrated === 1 ? 'y' : 'ies'}`);
 }
 
 main()
