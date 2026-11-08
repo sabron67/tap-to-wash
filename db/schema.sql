@@ -77,6 +77,8 @@ ALTER TABLE admins   ADD COLUMN IF NOT EXISTS failed_attempts      INTEGER     N
 ALTER TABLE admins   ADD COLUMN IF NOT EXISTS locked_until         TIMESTAMPTZ;
 ALTER TABLE admins   ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN     NOT NULL DEFAULT FALSE;
 ALTER TABLE admins   ADD COLUMN IF NOT EXISTS last_login_at        TIMESTAMPTZ;
+ALTER TABLE admins   ADD COLUMN IF NOT EXISTS role                 TEXT        NOT NULL DEFAULT 'owner';
+ALTER TABLE admins   ADD COLUMN IF NOT EXISTS is_active            BOOLEAN     NOT NULL DEFAULT TRUE;
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS terms_version     INTEGER;
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
 

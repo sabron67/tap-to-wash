@@ -32,12 +32,12 @@ function requestsPage(ctx, { rows, total, page, pages, status, q, tabCounts }) {
 
     <div class="tabs">
       <a class="tab ${status === '' ? 'active' : ''}" href="${qs('')}">All <span>${tabCounts.all}</span></a>
-      ${STATUSES.map((s) => html`<a class="tab ${status === s.key ? 'active' : ''}" href="${qs(s.key)}">${icon(s.icon)} ${s.label} <span>${tabCounts[s.key] || 0}</span></a>`)}
+      ${STATUSES.filter((s) => !ctx.visible || ctx.visible.includes(s.key)).map((s) => html`<a class="tab ${status === s.key ? 'active' : ''}" href="${qs(s.key)}">${icon(s.icon)} ${s.label} <span>${tabCounts[s.key] || 0}</span></a>`)}
     </div>
 
     ${rows.length
       ? html`<div class="table-wrap"><table class="table">
-          <thead><tr><th>Ref</th><th>Customer</th><th>Items</th><th>Location</th><th>Status</th><th>Payment</th><th>Received</th></tr></thead>
+          <thead><tr><th>Ref</th><th>Customer</th><th>Items</th><th>Location</th><th>Status</th>${ctx.can('billing') ? html`<th>Payment</th>` : ''}<th>Received</th></tr></thead>
           <tbody>${rows.map(
             (r) => html`<tr>
               <td><a class="link strong" href="/admin/requests/${r.id}">${r.ref_code}</a></td>
@@ -45,7 +45,7 @@ function requestsPage(ctx, { rows, total, page, pages, status, q, tabCounts }) {
               <td class="clip">${r.items || '—'}</td>
               <td class="clip">${r.latitude !== null ? html`<a class="link" href="${mapsLink(r.latitude, r.longitude)}" target="_blank" rel="noopener" aria-label="Open location in maps">${icon('map-pin')}</a> ` : ''}${r.location_description}</td>
               <td>${statusBadge(r.status)}</td>
-              <td>${paymentBadge(r.total_amount, r.amount_paid)}<div class="muted small">${Number(r.total_amount) > 0 ? money(r.total_amount, cur) : ''}</div></td>
+              ${ctx.can('billing') ? html`<td>${paymentBadge(r.total_amount, r.amount_paid)}<div class="muted small">${Number(r.total_amount) > 0 ? money(r.total_amount, cur) : ''}</div></td>` : ''}
               <td class="nowrap">${fmtDate(r.created_at)}</td>
             </tr>`
           )}</tbody></table></div>
@@ -72,20 +72,22 @@ function requestDetailPage(ctx, { r, items, events, estimate }) {
         <div class="ref-box sm">${r.ref_code}</div>
         <div class="muted small">Received ${fmtDate(r.created_at)}</div>
       </div>
-      <div class="detail-badges">${statusBadge(r.status)} ${paymentBadge(r.total_amount, r.amount_paid)}</div>
+      <div class="detail-badges">${statusBadge(r.status)} ${ctx.can('billing') ? paymentBadge(r.total_amount, r.amount_paid) : ''}</div>
     </div>
     ${timeline(r.status)}
-    <div class="status-actions">
-      ${nxt
+    ${ctx.settable && ctx.settable.length === 0
+      ? ''
+      : html`<div class="status-actions">
+      ${nxt && (!ctx.settable || ctx.settable.includes(nxt))
         ? html`<form method="post" action="/admin/requests/${r.id}/status" class="inline">${csrfField(ctx)}<input type="hidden" name="status" value="${nxt}"><button class="btn btn-primary" type="submit">Move to: ${icon(STATUS_MAP[nxt].icon)} ${STATUS_MAP[nxt].label}</button></form>`
         : ''}
       <form method="post" action="/admin/requests/${r.id}/status" class="inline row-form">
         ${csrfField(ctx)}
-        <select name="status" aria-label="Set status">${STATUSES.map((s) => html`<option value="${s.key}" ${s.key === r.status ? 'selected' : ''}>${s.label}</option>`)}</select>
+        <select name="status" aria-label="Set status">${STATUSES.filter((s) => !ctx.settable || ctx.settable.includes(s.key)).map((s) => html`<option value="${s.key}" ${s.key === r.status ? 'selected' : ''}>${s.label}</option>`)}</select>
         <input name="note" type="text" maxlength="200" placeholder="Optional note for the customer">
         <button class="btn btn-ghost" type="submit">Update status</button>
       </form>
-    </div>
+    </div>`}
   </section>
 
   <section class="grid-2 gap">
@@ -111,7 +113,7 @@ function requestDetailPage(ctx, { r, items, events, estimate }) {
       <h2>Items to wash</h2>
       <ul class="plain-list large">${items.map((i) => html`<li>${i.category_name} <strong>× ${i.quantity}</strong></li>`)}</ul>
 
-      <h2>Billing</h2>
+      ${ctx.can('billing') ? html`<h2>Billing</h2>
       <form method="post" action="/admin/requests/${r.id}/billing" class="stack">
         ${csrfField(ctx)}
         <div class="grid-2">
@@ -123,18 +125,20 @@ function requestDetailPage(ctx, { r, items, events, estimate }) {
           <span class="muted small">Balance: <strong>${money(balance, cur)}</strong></span>
         </div>
         <button class="btn btn-primary" type="submit">Save billing</button>
-      </form>
+      </form>`  : ''}
     </div>
   </section>
 
   <section class="grid-2 gap">
     <div class="glass pad">
       <h2>Internal notes</h2>
-      <form method="post" action="/admin/requests/${r.id}/notes" class="stack">
+      ${ctx.can('notes')
+        ? html`<form method="post" action="/admin/requests/${r.id}/notes" class="stack">
         ${csrfField(ctx)}
         <textarea name="admin_notes" rows="4" maxlength="2000" placeholder="Only staff can see this…">${r.admin_notes}</textarea>
         <button class="btn btn-ghost" type="submit">Save notes</button>
-      </form>
+      </form>`
+        : html`<p class="pre">${r.admin_notes || '—'}</p>`}
     </div>
     <div class="glass pad">
       <h2>History</h2>
@@ -142,12 +146,12 @@ function requestDetailPage(ctx, { r, items, events, estimate }) {
     </div>
   </section>
 
-  <section class="danger glass pad">
+  ${ctx.can('delete') ? html`  <section class="danger glass pad">
     <form method="post" action="/admin/requests/${r.id}/delete" data-confirm="Delete this request permanently? This cannot be undone.">
       ${csrfField(ctx)}
       <button class="btn btn-danger btn-sm" type="submit">${icon('trash-2')} Delete request</button>
     </form>
-  </section>`;
+  </section>` : ''}`;
 
   return adminLayout(ctx, { title: `Request ${r.ref_code}`, active: 'requests', body });
 }

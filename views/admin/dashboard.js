@@ -37,7 +37,7 @@ function dashboardPage(ctx, d) {
       <div class="quick">
         <a class="btn btn-primary" href="/admin/requests?status=new">Review new requests</a>
         <a class="btn btn-ghost" href="/admin/categories">Manage categories</a>
-        <a class="btn btn-ghost" href="/admin/settings">Business settings</a>
+        ${ctx.can('settings') ? html`<a class="btn btn-ghost" href="/admin/settings">Business settings</a>` : ''}
         <a class="btn btn-ghost" href="/" target="_blank" rel="noopener">Open public site</a>
       </div>
     </div>

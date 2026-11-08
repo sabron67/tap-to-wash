@@ -5,14 +5,15 @@ const { themeSwitch } = require('../partials/theme');
 const { icon } = require('../../lib/icons');
 
 const NAV = [
-  ['dashboard', '/admin', 'layout-dashboard', 'Dashboard'],
-  ['requests', '/admin/requests', 'clipboard-list', 'Requests'],
-  ['categories', '/admin/categories', 'tag', 'Categories'],
-  ['customers', '/admin/customers', 'users', 'Customers'],
-  ['reports', '/admin/reports', 'file-spreadsheet', 'Reports'],
-  ['photos', '/admin/photos', 'image', 'Photos'],
-  ['activity', '/admin/activity', 'history', 'Activity'],
-  ['settings', '/admin/settings', 'settings', 'Settings'],
+  ['dashboard', '/admin', 'layout-dashboard', 'Dashboard', 'dashboard'],
+  ['requests', '/admin/requests', 'clipboard-list', 'Requests', 'requests'],
+  ['categories', '/admin/categories', 'tag', 'Categories', 'categories'],
+  ['customers', '/admin/customers', 'users', 'Customers', 'customers'],
+  ['reports', '/admin/reports', 'file-spreadsheet', 'Reports', 'reports'],
+  ['photos', '/admin/photos', 'image', 'Photos', 'photos'],
+  ['staff', '/admin/staff', 'shield-check', 'Staff', 'staff'],
+  ['activity', '/admin/activity', 'history', 'Activity', 'activity'],
+  ['settings', '/admin/settings', 'settings', 'Settings', 'settings'],
 ];
 
 function adminLayout(ctx, { title, active, body }) {
@@ -26,9 +27,9 @@ ${head(`${title} · Admin`, s)}
 <body class="admin">
 <div class="shell">
   <aside class="sidebar glass" id="sidebar">
-    <a class="brand" href="/admin"><span>${s.business_name}<small>Admin</small></span></a>
+    <a class="brand" href="${ctx.can('dashboard') ? '/admin' : '/admin/requests'}"><span>${s.business_name}<small>Admin</small></span></a>
     <nav class="side-nav">
-      ${NAV.map(
+      ${NAV.filter((n) => ctx.can(n[4])).map(
         ([key, href, ic, label]) => html`<a href="${href}" class="${key === active ? 'active' : ''}">
           <span class="ni">${icon(ic)}</span><span>${label}</span>
           ${key === 'requests' && ctx.newCount > 0 ? html`<span class="count">${ctx.newCount}</span>` : ''}
@@ -37,7 +38,8 @@ ${head(`${title} · Admin`, s)}
     </nav>
     <div class="side-foot">
       <a href="/" target="_blank" rel="noopener" class="side-link">${icon('globe')} View website</a>
-      <div class="who">Signed in as <strong>${ctx.admin.name}</strong></div>
+      <a class="side-link ${active === 'account' ? 'strong' : ''}" href="/admin/account">${icon('key-round')} My account</a>
+      <div class="who">Signed in as <strong>${ctx.admin.name}</strong> · ${ctx.roleLabel}</div>
       <form method="post" action="/admin/logout">${csrfField(ctx)}<button class="btn btn-ghost btn-sm btn-block" type="submit">${icon('log-out')} Sign out</button></form>
     </div>
   </aside>

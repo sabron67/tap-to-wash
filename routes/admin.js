@@ -8,6 +8,7 @@ const { audit } = require('../lib/audit');
 const { passwordProblem } = require('../lib/password');
 const { wrap, STATUS_MAP, cleanText, cleanMultiline } = require('../lib/helpers');
 const { categoryIconName } = require('../lib/icons');
+const { can, roleOf, visibleStatuses, settableStatuses } = require('../lib/roles');
 
 const { loginPage } = require('../views/admin/login');
 const { dashboardPage } = require('../views/admin/dashboard');
@@ -15,6 +16,8 @@ const { requestsPage, requestDetailPage } = require('../views/admin/requests');
 const { categoriesPage } = require('../views/admin/categories');
 const { customersPage } = require('../views/admin/customers');
 const { settingsPage } = require('../views/admin/settings');
+const { accountPage } = require('../views/admin/account');
+const { forbiddenPage } = require('../views/admin/forbidden');
 
 const router = express.Router();
 router.use(adminNoCache);
@@ -25,7 +28,7 @@ const ABSOLUTE_SESSION_MS = 12 * 60 * 60 * 1000;
 const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 12); // keeps login timing the same for unknown emails
 const NAIROBI_TODAY = `(now() AT TIME ZONE 'Africa/Nairobi')::date`;
 
-const loginLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 12, message: 'Too many sign-in attempts. Please wait a few minutes.' });
+const loginLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: +process.env.LOGIN_MAX || 12, message: 'Too many sign-in attempts. Please wait a few minutes.' });
 
 // ---------- session helpers ----------
 router.use((req, res, next) => {
@@ -54,7 +57,19 @@ async function buildCtx(req) {
     const n = await pool.query(`SELECT COUNT(*)::int AS n FROM requests WHERE status = 'new'`);
     newCount = n.rows[0].n;
   }
-  return { settings, admin: req.session.admin, csrf: req.session.csrf, flash: f, newCount };
+  const role = req.session.admin ? req.session.admin.role : '';
+  return {
+    settings,
+    admin: req.session.admin,
+    csrf: req.session.csrf,
+    flash: f,
+    newCount,
+    role,
+    roleLabel: roleOf(role).label,
+    can: (perm) => can(role, perm),
+    visible: visibleStatuses(role),
+    settable: settableStatuses(role),
+  };
 }
 
 // ---------- auth ----------
@@ -73,7 +88,7 @@ router.post(
     const email = cleanText(req.body.email, 120).toLowerCase();
     const password = String(req.body.password || '').slice(0, 200);
     const { rows } = await pool.query(
-      'SELECT id, name, email, password_hash, failed_attempts, locked_until, must_change_password FROM admins WHERE email = $1',
+      'SELECT id, name, email, role, is_active, password_hash, failed_attempts, locked_until, must_change_password FROM admins WHERE email = $1',
       [email]
     );
     const a = rows[0];
@@ -103,16 +118,20 @@ router.post(
       return fail(401, 'Incorrect email or password.');
     }
 
+    if (!a.is_active) {
+      await audit(req, 'login_blocked', 'Disabled account', { id: a.id, email: a.email });
+      return fail(403, 'This account has been disabled. Please contact the owner.');
+    }
     await pool.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = $1', [a.id]);
-    const admin = { id: a.id, name: a.name, email: a.email, mustChange: a.must_change_password, since: Date.now() };
+    const admin = { id: a.id, name: a.name, email: a.email, role: a.role, mustChange: a.must_change_password, since: Date.now() };
     req.session.regenerate((err) => {
       if (err) return next(err);
       req.session.admin = admin;
       req.session.csrf = crypto.randomBytes(24).toString('hex');
       req.session.save(async (err2) => {
         if (err2) return next(err2);
-        await audit(req, 'login', 'Signed in', admin);
-        res.redirect(admin.mustChange ? '/admin/settings' : '/admin');
+        await audit(req, 'login', `Signed in (${a.role})`, admin);
+        res.redirect(admin.mustChange ? '/admin/account' : can(a.role, 'dashboard') ? '/admin' : '/admin/requests');
       });
     });
   })
@@ -123,23 +142,41 @@ router.post('/logout', async (req, res) => {
   req.session.destroy(() => res.redirect('/admin/login'));
 });
 
-router.use((req, res, next) => {
-  const a = req.session.admin;
-  if (!a) return res.redirect('/admin/login');
-  if (Date.now() - (a.since || 0) > ABSOLUTE_SESSION_MS) {
-    return req.session.destroy(() => res.redirect('/admin/login'));
-  }
-  // A temporary / default password must be replaced before anything else can be used.
-  if (a.mustChange) {
-    const ok = (req.method === 'GET' && req.path === '/settings') || (req.method === 'POST' && req.path === '/settings/password');
-    if (!ok) return res.redirect('/admin/settings');
-  }
-  next();
-});
+router.use(
+  wrap(async (req, res, next) => {
+    const a = req.session.admin;
+    if (!a) return res.redirect('/admin/login');
+    if (Date.now() - (a.since || 0) > ABSOLUTE_SESSION_MS) {
+      return req.session.destroy(() => res.redirect('/admin/login'));
+    }
+    // Re-read the account on every request so role changes and disabling take effect immediately.
+    const { rows } = await pool.query('SELECT name, email, role, is_active, must_change_password FROM admins WHERE id = $1', [a.id]);
+    if (!rows.length || !rows[0].is_active) {
+      return req.session.destroy(() => res.redirect('/admin/login'));
+    }
+    Object.assign(a, { name: rows[0].name, email: rows[0].email, role: rows[0].role, mustChange: rows[0].must_change_password });
+    // A temporary / default password must be replaced before anything else can be used.
+    if (a.mustChange) {
+      const ok = (req.method === 'GET' && req.path === '/account') || (req.method === 'POST' && req.path === '/account/password');
+      if (!ok) return res.redirect('/admin/account');
+    }
+    next();
+  })
+);
+
+// Route guard: only roles holding the permission get through.
+const need = (perm) =>
+  wrap(async (req, res, next) => {
+    if (can(req.session.admin.role, perm)) return next();
+    await audit(req, 'access_denied', `${req.method} ${req.originalUrl}`.slice(0, 200));
+    const ctx = await buildCtx(req);
+    res.status(403).view(forbiddenPage(ctx));
+  });
 
 // ---------- dashboard ----------
 router.get(
   '/',
+  (req, res, next) => (can(req.session.admin.role, 'dashboard') ? next() : res.redirect('/admin/requests')),
   wrap(async (req, res) => {
     const [ctx, counts, customers, money, week, recent] = await Promise.all([
       buildCtx(req),
@@ -181,28 +218,31 @@ router.get(
 // ---------- requests ----------
 router.get(
   '/requests',
+  need('requests'),
   wrap(async (req, res) => {
     const status = STATUS_MAP[req.query.status] ? req.query.status : '';
     const q = cleanText(req.query.q, 80);
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const like = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
 
+    const vis = visibleStatuses(req.session.admin.role); // null = every status
     const where = `($1 = '' OR r.status = $1)
-      AND ($2 = '' OR r.ref_code ILIKE $3 OR c.name ILIKE $3 OR c.phone ILIKE $3 OR r.location_description ILIKE $3)`;
+      AND ($2 = '' OR r.ref_code ILIKE $3 OR c.name ILIKE $3 OR c.phone ILIKE $3 OR r.location_description ILIKE $3)
+      AND ($4::text[] IS NULL OR r.status = ANY($4::text[]))`;
 
     const [ctx, count, rows, tabs] = await Promise.all([
       buildCtx(req),
-      pool.query(`SELECT COUNT(*)::int AS n FROM requests r JOIN customers c ON c.id = r.customer_id WHERE ${where}`, [status, q, like]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM requests r JOIN customers c ON c.id = r.customer_id WHERE ${where}`, [status, q, like, vis]),
       pool.query(
         `SELECT r.id, r.ref_code, r.status, r.created_at, r.location_description, r.latitude, r.longitude, r.total_amount, r.amount_paid,
             c.name AS customer_name, c.phone AS customer_phone,
             (SELECT string_agg(i.category_name || ' ×' || i.quantity, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items
            FROM requests r JOIN customers c ON c.id = r.customer_id
           WHERE ${where}
-          ORDER BY r.created_at DESC LIMIT ${PAGE_SIZE} OFFSET $4`,
-        [status, q, like, (page - 1) * PAGE_SIZE]
+          ORDER BY r.created_at DESC LIMIT ${PAGE_SIZE} OFFSET $5`,
+        [status, q, like, vis, (page - 1) * PAGE_SIZE]
       ),
-      pool.query('SELECT status, COUNT(*)::int AS n FROM requests GROUP BY status'),
+      pool.query('SELECT status, COUNT(*)::int AS n FROM requests WHERE ($1::text[] IS NULL OR status = ANY($1::text[])) GROUP BY status', [vis]),
     ]);
 
     const tabCounts = { all: 0 };
@@ -217,6 +257,7 @@ router.get(
 
 router.get(
   '/requests/:id',
+  need('requests'),
   wrap(async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return next();
@@ -236,6 +277,8 @@ router.get(
       pool.query('SELECT status, note, created_by, created_at FROM request_events WHERE request_id = $1 ORDER BY created_at DESC, id DESC', [id]),
     ]);
     if (!reqRes.rows.length) return next();
+    const vis = visibleStatuses(req.session.admin.role);
+    if (vis && !vis.includes(reqRes.rows[0].status)) return next(); // not one of this role's jobs
     const estimate = items.rows.reduce((sum, i) => sum + (i.price === null ? 0 : Number(i.price) * i.quantity), 0);
     res.view(requestDetailPage(ctx, { r: reqRes.rows[0], items: items.rows, events: events.rows, estimate }));
   })
@@ -243,6 +286,7 @@ router.get(
 
 router.post(
   '/requests/:id/status',
+  need('status'),
   wrap(async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const status = req.body.status;
@@ -251,7 +295,18 @@ router.post(
       return res.redirect('/admin/requests');
     }
     const note = cleanText(req.body.note, 200);
-    const upd = await pool.query('UPDATE requests SET status = $1, updated_at = now() WHERE id = $2 RETURNING id', [status, id]);
+    const role = req.session.admin.role;
+    const settable = settableStatuses(role);
+    const vis = visibleStatuses(role);
+    if (settable && !settable.includes(status)) {
+      await audit(req, 'access_denied', `Status ${status} on request #${id}`);
+      flash(req, 'error', 'Your role cannot set that status.');
+      return res.redirect(`/admin/requests/${id}`);
+    }
+    const upd = await pool.query(
+      'UPDATE requests SET status = $1, updated_at = now() WHERE id = $2 AND ($3::text[] IS NULL OR status = ANY($3::text[])) RETURNING id',
+      [status, id, vis]
+    );
     if (upd.rows.length) {
       await pool.query('INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,$2,$3,$4)', [id, status, note, req.session.admin.name]);
       await audit(req, 'request_status', `Request #${id} → ${status}`);
@@ -263,6 +318,7 @@ router.post(
 
 router.post(
   '/requests/:id/billing',
+  need('billing'),
   wrap(async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const total = Number(req.body.total_amount);
@@ -280,6 +336,7 @@ router.post(
 
 router.post(
   '/requests/:id/notes',
+  need('notes'),
   wrap(async (req, res) => {
     const id = parseInt(req.params.id, 10);
     await pool.query('UPDATE requests SET admin_notes = $1, updated_at = now() WHERE id = $2', [cleanMultiline(req.body.admin_notes, 2000), id]);
@@ -290,6 +347,7 @@ router.post(
 
 router.post(
   '/requests/:id/delete',
+  need('delete'),
   wrap(async (req, res) => {
     const rid = parseInt(req.params.id, 10);
     await pool.query('DELETE FROM requests WHERE id = $1', [rid]);
@@ -319,6 +377,7 @@ function parseCategory(body) {
 
 router.get(
   '/categories',
+  need('categories'),
   wrap(async (req, res) => {
     const [ctx, cats] = await Promise.all([
       buildCtx(req),
@@ -333,6 +392,7 @@ router.get(
 
 router.post(
   '/categories',
+  need('categories'),
   wrap(async (req, res) => {
     const c = parseCategory(req.body);
     if (!c.name) {
@@ -351,6 +411,7 @@ router.post(
 
 router.post(
   '/categories/:id',
+  need('categories'),
   wrap(async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const c = parseCategory(req.body);
@@ -370,6 +431,7 @@ router.post(
 
 router.post(
   '/categories/:id/toggle',
+  need('categories'),
   wrap(async (req, res) => {
     await pool.query('UPDATE categories SET is_active = NOT is_active WHERE id = $1', [parseInt(req.params.id, 10)]);
     await audit(req, 'category_toggle', `#${req.params.id}`);
@@ -380,6 +442,7 @@ router.post(
 
 router.post(
   '/categories/:id/delete',
+  need('categories'),
   wrap(async (req, res) => {
     await pool.query('DELETE FROM categories WHERE id = $1', [parseInt(req.params.id, 10)]);
     await audit(req, 'category_delete', `#${req.params.id}`);
@@ -391,6 +454,7 @@ router.post(
 // ---------- customers ----------
 router.get(
   '/customers',
+  need('customers'),
   wrap(async (req, res) => {
     const q = cleanText(req.query.q, 80);
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
@@ -420,6 +484,7 @@ router.get(
 // ---------- settings ----------
 router.get(
   '/settings',
+  need('settings'),
   wrap(async (req, res) => {
     res.view(settingsPage(await buildCtx(req)));
   })
@@ -427,6 +492,7 @@ router.get(
 
 router.post(
   '/settings',
+  need('settings'),
   wrap(async (req, res) => {
     const b = req.body;
     const currency = cleanText(b.currency, 6).toUpperCase() || 'KES';
@@ -449,6 +515,7 @@ router.post(
 
 router.post(
   '/settings/terms',
+  need('settings'),
   wrap(async (req, res) => {
     const text = cleanMultiline(req.body.terms_text, 20000);
     if (text.length < 50) {
@@ -468,8 +535,17 @@ router.post(
   })
 );
 
+// ---------- my account (every role) ----------
+router.get(
+  '/account',
+  wrap(async (req, res) => {
+    const { rows } = await pool.query('SELECT last_login_at FROM admins WHERE id = $1', [req.session.admin.id]);
+    res.view(accountPage(await buildCtx(req), { lastLogin: rows[0] && rows[0].last_login_at }));
+  })
+);
+
 router.post(
-  '/settings/password',
+  '/account/password',
   wrap(async (req, res) => {
     const { current, password, confirm } = req.body;
     const { rows } = await pool.query('SELECT password_hash, name, email FROM admins WHERE id = $1', [req.session.admin.id]);
@@ -491,12 +567,13 @@ router.post(
       req.session.admin.mustChange = false;
       await audit(req, 'password_change', 'Password updated');
       flash(req, 'success', 'Password updated.');
-      return res.redirect('/admin');
+      return res.redirect(can(req.session.admin.role, 'dashboard') ? '/admin' : '/admin/requests');
     }
-    res.redirect('/admin/settings');
+    res.redirect('/admin/account');
   })
 );
 
-require('./admin-tools')(router, { buildCtx, flash });
+require('./admin-tools')(router, { buildCtx, flash, need });
+require('./admin-staff')(router, { buildCtx, flash, need });
 
 module.exports = router;

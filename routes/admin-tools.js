@@ -53,10 +53,11 @@ async function resolveRange(q) {
   return { from, to, today };
 }
 
-module.exports = function mount(router, { buildCtx, flash }) {
+module.exports = function mount(router, { buildCtx, flash, need }) {
   /* ---------- reports ---------- */
   router.get(
     '/reports',
+    need('reports'),
     wrap(async (req, res) => {
       const { from, to, today } = await resolveRange(req.query);
       const [ctx, k] = await Promise.all([
@@ -77,6 +78,7 @@ module.exports = function mount(router, { buildCtx, flash }) {
 
   router.get(
     '/reports/download',
+    need('reports'),
     wrap(async (req, res) => {
       const { from, to } = await resolveRange(req.query);
       const [settings, reqs, itemRows, custs, cats] = await Promise.all([
@@ -126,6 +128,7 @@ module.exports = function mount(router, { buildCtx, flash }) {
   /* ---------- background photos ---------- */
   router.get(
     '/photos',
+    need('photos'),
     wrap(async (req, res) => {
       const [ctx, versions] = await Promise.all([buildCtx(req), mediaVersions()]);
       res.view(photosPage(ctx, { versions }));
@@ -134,6 +137,7 @@ module.exports = function mount(router, { buildCtx, flash }) {
 
   router.post(
     '/photos/:slot',
+    need('photos'),
     express.raw({ type: 'image/jpeg', limit: '3mb' }),
     wrap(async (req, res) => {
       const slot = req.params.slot;
@@ -157,6 +161,7 @@ module.exports = function mount(router, { buildCtx, flash }) {
 
   router.post(
     '/photos/:slot/reset',
+    need('photos'),
     wrap(async (req, res) => {
       if (Object.prototype.hasOwnProperty.call(SLOTS, req.params.slot)) {
         await pool.query('DELETE FROM media WHERE slot = $1', [req.params.slot]);
@@ -170,6 +175,7 @@ module.exports = function mount(router, { buildCtx, flash }) {
   /* ---------- activity log ---------- */
   router.get(
     '/activity',
+    need('activity'),
     wrap(async (req, res) => {
       const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
       const size = 30;
