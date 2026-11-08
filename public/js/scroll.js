@@ -49,7 +49,7 @@
     var max = Math.max(doc.scrollHeight - vh, 1);
     if (bar) bar.style.transform = 'scaleX(' + Math.min(y / max, 1) + ')';
     if (nav) nav.classList.toggle('scrolled', y > 8);
-    if (reduce) return;
+    if (reduce || window.innerWidth <= 720) return;
     if (hero && y < vh * 1.3) {
       hero.style.setProperty('--py', (y * 0.22).toFixed(1) + 'px');
       if (heroInner) {

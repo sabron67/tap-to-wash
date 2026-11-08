@@ -461,6 +461,18 @@ div.big .ic { width: 3.2rem; height: 3.2rem; stroke-width: 1.5; vertical-align: 
   .icon-btn.menu-btn { display: inline-grid; }
   .topbar-date { display: none; }
 }
+/* Phones: show each picture whole (full width, 16:9) as a banner instead of cropping it behind the content */
+@media (max-width: 720px) {
+  .hero { position: relative; height: auto; min-height: 0; padding-top: var(--nav-h); }
+  .hero-img { position: relative; inset: auto; width: 100%; aspect-ratio: 16 / 9; transform: none; }
+  .hero-inner { height: auto; padding: 0 0 2.2rem; margin-top: -2.2rem; opacity: 1 !important; transform: none !important; }
+  .hero-panel { width: calc(100% - 1.6rem); margin-inline: auto; }
+  .scroll-cue { display: none; }
+  .sheet { border-radius: 0; box-shadow: none; }
+  .band.has-img { padding-top: calc(56.25vw + 1.6rem); }
+  .band.has-img::before { inset: 0 0 auto 0; height: auto; aspect-ratio: 16 / 9; opacity: .95; transform: none; }
+  .band.has-img .section-head.on-img, .band.has-img .cta { margin-top: -2.2rem; position: relative; }
+}
 @media (max-width: 720px) {
   .nav-links { display: none; }
   .nav .theme-switch { margin-left: auto; }
