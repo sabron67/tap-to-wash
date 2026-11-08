@@ -1,25 +1,20 @@
 const { html, raw } = require('../../lib/html');
-const { themeBoot } = require('../partials/theme');
 
 function head(title, settings, description) {
   return html`<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title ? `${title} · ` : ''}${settings.business_name}</title>
 <meta name="description" content="${description || settings.tagline}">
-<meta name="theme-color" content="#2e211a" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#faf1e3" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#2e211a" data-dynamic>
-${themeBoot}
+<meta name="theme-color" content="#1c1713" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fbf9f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#fbf9f4" data-dynamic>
+<script src="/js/boot.js"></script>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">`;
 }
-
-const blobs = raw(
-  '<div class="blobs" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span><span class="blob b4"></span></div>'
-);
 
 function publicLayout(ctx, { title = '', body, scripts = '', bodyClass = '' }) {
   return html`<!doctype html>
@@ -28,7 +23,7 @@ function publicLayout(ctx, { title = '', body, scripts = '', bodyClass = '' }) {
 ${head(title, ctx.settings)}
 </head>
 <body class="${bodyClass}">
-${blobs}
+<div id="progress" aria-hidden="true"></div>
 ${body}
 <script src="/js/theme.js"></script>
 ${scripts}
@@ -36,4 +31,4 @@ ${scripts}
 </html>`;
 }
 
-module.exports = { publicLayout, head, blobs };
+module.exports = { publicLayout, head };

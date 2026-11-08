@@ -1,21 +1,21 @@
 const { html, raw } = require('../../lib/html');
 const { money } = require('../../lib/helpers');
 const { publicLayout } = require('../layouts/public');
-const { logo } = require('../partials/logo');
 const { themeSwitch } = require('../partials/theme');
 const { icon, svg, categoryIconName } = require('../../lib/icons');
+const { mediaUrl } = require('../../lib/media');
 
 function nav(s) {
-  return html`<header class="nav glass">
-    <a class="brand" href="/">${logo({ prefix: 'nav', animated: false, className: 'brand-logo' })}<span>${s.business_name}</span></a>
+  return html`<header class="nav">
+    <a class="brand" href="/"><span>${s.business_name}</span></a>
     <nav class="nav-links" aria-label="Main">
-      <a href="#categories">Categories</a>
+      <a href="#categories">Services</a>
       <a href="#how">How it works</a>
       <a href="/track">Track order</a>
       <a href="#contact">Contact</a>
     </nav>
     ${themeSwitch()}
-    <button class="btn btn-primary btn-sm" type="button" data-open-wizard>${icon('pointer')} Tap to wash</button>
+    <button class="btn btn-primary btn-sm" type="button" data-open-wizard>Tap to wash</button>
   </header>`;
 }
 
@@ -38,23 +38,18 @@ function contactBlock(s) {
     s.address && html`<li><span>${icon('map-pin')}</span>${s.address}</li>`,
     s.opening_hours && html`<li><span>${icon('clock')}</span>${s.opening_hours}</li>`,
   ].filter(Boolean);
-  return items.length
-    ? html`<ul class="contact-list">${items}</ul>`
-    : html`<p class="muted">Contact details will appear here soon.</p>`;
+  return items.length ? html`<ul class="contact-list">${items}</ul>` : html`<p class="muted">Contact details will appear here soon.</p>`;
 }
 
-function wizard(s) {
+function wizard() {
   return html`<div class="modal" id="wizard" hidden>
     <div class="modal-backdrop" data-close></div>
     <div class="modal-card glass-strong" role="dialog" aria-modal="true" aria-labelledby="wizTitle">
       <button class="modal-x" type="button" data-close aria-label="Close">${icon('x')}</button>
 
       <div class="wiz-head">
-        <div class="wiz-logo">${logo({ prefix: 'wiz', animated: true })}</div>
-        <div>
-          <h2 id="wizTitle">Tap to wash</h2>
-          <p class="muted" id="wizSub">Tell us what to wash and where to find you.</p>
-        </div>
+        <h2 id="wizTitle">Tap to wash</h2>
+        <p class="muted" id="wizSub">Tell us what to wash and where to find you.</p>
       </div>
 
       <ol class="wiz-steps" id="wizSteps">
@@ -91,11 +86,12 @@ function wizard(s) {
         <label class="field"><span>Anything we should know?</span><textarea id="fNotes" rows="2" maxlength="1000" placeholder="Stains, delicate fabrics, special care…"></textarea></label>
         <input type="text" id="fWebsite" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
         <div class="summary" id="summary"></div>
+        <label class="check"><input type="checkbox" id="fTerms"><span>I have read and accept the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a>. <em>*</em></span></label>
         <p class="err" id="err3" role="alert"></p>
       </section>
 
       <section class="wiz-pane success" data-pane="done" hidden>
-        <div class="success-burst">${icon('party-popper')}</div>
+        <div class="success-burst">${icon('circle-check')}</div>
         <h3>Request received!</h3>
         <p class="muted">Keep your reference code. We will call you shortly to confirm pick-up.</p>
         <div class="ref-box" id="refBox">—</div>
@@ -115,6 +111,8 @@ function wizard(s) {
 
 function homePage(ctx, categories) {
   const s = ctx.settings;
+  const mv = ctx.media || {};
+  const img = (slot) => `--img:url(${mediaUrl(slot, mv)})`;
   const data = categories.map((c) => ({
     id: c.id,
     name: c.name,
@@ -127,11 +125,12 @@ function homePage(ctx, categories) {
   const json = JSON.stringify({
     categories: data,
     currency: s.currency,
+    termsVersion: Number(s.terms_version) || 1,
     ui: {
       pin: svg('map-pin'),
       refresh: svg('refresh-cw'),
       loader: svg('loader-circle', { cls: 'spin' }),
-      pointer: svg('pointer'),
+      send: svg('send'),
       check: svg('check'),
       plus: svg('plus'),
       minus: svg('minus'),
@@ -142,89 +141,92 @@ function homePage(ctx, categories) {
   const body = html`
   ${nav(s)}
 
-  <section class="hero container">
-    <div class="hero-copy">
-      <span class="pill">${icon('droplets')} Pick-up &amp; delivery laundry</span>
-      <h1>${s.tagline}</h1>
-      <p class="lead">${s.about}</p>
-      <div class="hero-actions">
-        <button class="btn btn-primary btn-lg" type="button" data-open-wizard>${icon('pointer')} Tap to wash</button>
-        <a class="btn btn-ghost btn-lg" href="#categories">See what we wash</a>
+  <section class="hero" style="${raw(img('hero'))}" aria-label="Welcome">
+    <div class="hero-img" role="img" aria-label="Washing machines in a laundry room"></div>
+    <div class="hero-inner container">
+      <div class="hero-panel">
+        <span class="pill">${icon('droplets')} Pick-up &amp; delivery laundry</span>
+        <h1>${s.tagline}</h1>
+        <p class="lead">${s.about}</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary tap-btn" type="button" id="tapScene" data-open-wizard>Tap to wash</button>
+          <a class="btn btn-ghost btn-lg" href="#categories">See our services</a>
+        </div>
+        <ul class="hero-points">
+          <li>${icon('zap')} Fast turnaround</li>
+          <li>${icon('truck')} We come to you</li>
+          <li>${icon('sparkles')} Fresh &amp; folded</li>
+        </ul>
       </div>
-      <ul class="hero-points">
-        <li>${icon('zap')} Fast turnaround</li>
-        <li>${icon('map-pin')} We come to you</li>
-        <li>${icon('sparkles')} Fresh &amp; folded</li>
-      </ul>
     </div>
-
-    <div class="hero-visual">
-      <button class="tap-scene" type="button" id="tapScene" data-open-wizard aria-label="Tap to wash - start your laundry request">
-        <span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span>
-        <span class="tap-glass glass-strong">${logo({ prefix: 'hero', animated: true })}</span>
-        <span class="tap-label">TAP TO WASH</span>
-      </button>
-      <span class="float-chip c1">${icon('sparkles')} Spotless</span>
-      <span class="float-chip c2">${icon('flower-2')} Fresh scent</span>
-      <span class="float-chip c3">${icon('truck')} Doorstep</span>
-    </div>
+    <a class="scroll-cue" href="#categories" aria-label="Scroll to services">${icon('chevron-down')}</a>
   </section>
 
-  <section class="section container" id="categories">
-    <div class="section-head">
-      <span class="pill">Step 1</span>
-      <h2>What would you like washed?</h2>
-      <p class="muted">Select one or more categories, then tap to wash.</p>
-    </div>
-    ${categories.length
-      ? html`<div class="cat-grid" id="catGrid">${categories.map((c) => categoryCard(c, s.currency))}</div>`
-      : html`<div class="empty glass"><div class="big">${icon('shopping-basket')}</div><p>Our services are being set up. Please check back soon!</p></div>`}
-  </section>
-
-  <section class="section container" id="how">
-    <div class="section-head">
-      <span class="pill">Simple</span>
-      <h2>How it works</h2>
-    </div>
-    <div class="steps-grid">
-      <div class="step glass"><span class="step-no">1</span><div class="step-ico">${icon('pointer')}</div><h3>Tap</h3><p>Choose what to wash and tap the machine.</p></div>
-      <div class="step glass"><span class="step-no">2</span><div class="step-ico">${icon('map-pin')}</div><h3>Share location</h3><p>Send where you are with a short description.</p></div>
-      <div class="step glass"><span class="step-no">3</span><div class="step-ico">${icon('truck')}</div><h3>We collect</h3><p>Our rider confirms by phone and picks up.</p></div>
-      <div class="step glass"><span class="step-no">4</span><div class="step-ico">${icon('sparkles')}</div><h3>Fresh delivery</h3><p>Washed, dried and folded, back at your door.</p></div>
-    </div>
-  </section>
-
-  <section class="section container">
-    <div class="cta glass-strong">
-      <div>
-        <h2>Ready for fresh clothes?</h2>
-        <p>It takes less than a minute to place a request.</p>
+  <main class="sheet">
+    <section class="band has-img" id="categories" style="${raw(img('services'))}">
+      <div class="container">
+        <div class="section-head on-img rv">
+          <span class="pill">Step 1</span>
+          <h2>What would you like washed?</h2>
+          <p class="muted">Select one or more services, then tap to wash.</p>
+        </div>
+        ${categories.length
+          ? html`<div class="cat-grid" id="catGrid" data-stagger>${categories.map((c) => categoryCard(c, s.currency))}</div>`
+          : html`<div class="empty glass rv"><div class="big">${icon('shopping-basket')}</div><p>Our services are being set up. Please check back soon!</p></div>`}
       </div>
-      <button class="btn btn-primary btn-lg" type="button" data-open-wizard>${icon('pointer')} Tap to wash</button>
-    </div>
-  </section>
+    </section>
 
-  <footer class="footer container" id="contact">
-    <div class="footer-grid glass">
-      <div>
-        <a class="brand" href="/">${logo({ prefix: 'foot', animated: false, className: 'brand-logo' })}<span>${s.business_name}</span></a>
-        <p class="muted">${s.tagline}</p>
+    <section class="band has-img alt" id="how" style="${raw(img('how'))}">
+      <div class="container">
+        <div class="section-head on-img rv">
+          <span class="pill">Simple</span>
+          <h2>How it works</h2>
+        </div>
+        <div class="steps-grid" data-stagger>
+          <div class="step glass"><span class="step-no">1</span><div class="step-ico">${icon('pointer')}</div><h3>Tap</h3><p>Choose what to wash and tap to wash.</p></div>
+          <div class="step glass"><span class="step-no">2</span><div class="step-ico">${icon('map-pin')}</div><h3>Share location</h3><p>Send where you are with a short description.</p></div>
+          <div class="step glass"><span class="step-no">3</span><div class="step-ico">${icon('truck')}</div><h3>We collect</h3><p>Our rider confirms by phone and picks up.</p></div>
+          <div class="step glass"><span class="step-no">4</span><div class="step-ico">${icon('sparkles')}</div><h3>Fresh delivery</h3><p>Washed, dried and folded, back at your door.</p></div>
+        </div>
       </div>
-      <div><h4>Contact</h4>${contactBlock(s)}</div>
-      <div><h4>Quick links</h4><ul class="contact-list"><li><a href="/track">Track my order</a></li><li><a href="#categories">Categories</a></li><li><a href="/admin">Staff login</a></li></ul></div>
-    </div>
-    <p class="copy">© ${new Date().getFullYear()} ${s.business_name}. All rights reserved.</p>
-  </footer>
+    </section>
+
+    <section class="band has-img" style="${raw(img('cta'))}">
+      <div class="container">
+        <div class="cta glass-strong rv">
+          <div>
+            <h2>Ready for fresh clothes?</h2>
+            <p>It takes less than a minute to place a request.</p>
+          </div>
+          <button class="btn btn-primary btn-lg tap-btn" type="button" data-open-wizard>Tap to wash</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer" id="contact">
+      <div class="container">
+        <div class="footer-grid">
+          <div>
+            <a class="brand" href="/"><span>${s.business_name}</span></a>
+            <p class="muted" style="margin-top:.8rem">${s.tagline}</p>
+          </div>
+          <div><h4>Contact</h4>${contactBlock(s)}</div>
+          <div><h4>Quick links</h4><ul class="contact-list"><li><a href="/track">Track my order</a></li><li><a href="#categories">Our services</a></li><li><a href="/terms">Terms of Service</a></li><li><a href="/admin">Staff login</a></li></ul></div>
+        </div>
+        <p class="copy">© ${new Date().getFullYear()} ${s.business_name}. All rights reserved.</p>
+      </div>
+    </footer>
+  </main>
 
   <div class="selbar glass-strong" id="selBar" hidden>
     <span id="selText">0 selected</span>
-    <button class="btn btn-primary btn-sm" type="button" data-open-wizard>${icon('pointer')} Tap to wash</button>
+    <button class="btn btn-primary btn-sm" type="button" data-open-wizard>Tap to wash</button>
   </div>
 
-  ${wizard(s)}
+  ${wizard()}
   <script type="application/json" id="app-data">${raw(json)}</script>`;
 
-  return publicLayout(ctx, { body, scripts: raw('<script src="/js/app.js"></script>'), bodyClass: 'public' });
+  return publicLayout(ctx, { body, scripts: raw('<script src="/js/app.js"></script><script src="/js/scroll.js"></script>'), bodyClass: 'public' });
 }
 
 module.exports = { homePage };

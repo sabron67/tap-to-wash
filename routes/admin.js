@@ -3,7 +3,9 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { pool } = require('../config/db');
 const { getSettings, saveSettings } = require('../lib/settings');
-const { rateLimit, safeEqual } = require('../lib/security');
+const { rateLimit, safeEqual, adminNoCache } = require('../lib/security');
+const { audit } = require('../lib/audit');
+const { passwordProblem } = require('../lib/password');
 const { wrap, STATUS_MAP, cleanText, cleanMultiline } = require('../lib/helpers');
 const { categoryIconName } = require('../lib/icons');
 
@@ -15,7 +17,12 @@ const { customersPage } = require('../views/admin/customers');
 const { settingsPage } = require('../views/admin/settings');
 
 const router = express.Router();
+router.use(adminNoCache);
 const PAGE_SIZE = 20;
+const MAX_FAILS = 5;
+const LOCK_MINUTES = 15;
+const ABSOLUTE_SESSION_MS = 12 * 60 * 60 * 1000;
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 12); // keeps login timing the same for unknown emails
 const NAIROBI_TODAY = `(now() AT TIME ZONE 'Africa/Nairobi')::date`;
 
 const loginLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 12, message: 'Too many sign-in attempts. Please wait a few minutes.' });
@@ -27,7 +34,8 @@ router.use((req, res, next) => {
 });
 
 router.use((req, res, next) => {
-  if (req.method === 'POST' && !safeEqual(req.body && req.body._csrf, req.session.csrf)) {
+  const sent = req.get('x-csrf-token') || (req.body && req.body._csrf);
+  if (req.method === 'POST' && !safeEqual(sent, req.session.csrf)) {
     return res.status(403).send('Your form expired. Go back, refresh the page and try again.');
   }
   next();
@@ -63,29 +71,69 @@ router.post(
   loginLimit,
   wrap(async (req, res, next) => {
     const email = cleanText(req.body.email, 120).toLowerCase();
-    const password = String(req.body.password || '');
-    const { rows } = await pool.query('SELECT id, name, email, password_hash FROM admins WHERE email = $1', [email]);
-    const ok = rows.length && (await bcrypt.compare(password, rows[0].password_hash));
-    if (!ok) {
+    const password = String(req.body.password || '').slice(0, 200);
+    const { rows } = await pool.query(
+      'SELECT id, name, email, password_hash, failed_attempts, locked_until, must_change_password FROM admins WHERE email = $1',
+      [email]
+    );
+    const a = rows[0];
+    const match = await bcrypt.compare(password, a ? a.password_hash : DUMMY_HASH); // always run, so timing does not reveal valid emails
+    const fail = async (status, error) => {
       const ctx = await buildCtx(req);
-      return res.status(401).view(loginPage(ctx, { error: 'Incorrect email or password.', email }));
+      return res.status(status).view(loginPage(ctx, { error, email }));
+    };
+
+    if (a && a.locked_until && new Date(a.locked_until) > new Date()) {
+      await audit(req, 'login_blocked', 'Account is locked', { id: a.id, email: a.email });
+      return fail(429, 'Too many failed attempts. This account is locked for a short while - please try again later.');
     }
-    const admin = { id: rows[0].id, name: rows[0].name, email: rows[0].email };
+    if (!a || !match) {
+      if (a) {
+        const fails = a.failed_attempts + 1;
+        const lock = fails >= MAX_FAILS;
+        await pool.query('UPDATE admins SET failed_attempts = $1, locked_until = $2 WHERE id = $3', [
+          lock ? 0 : fails,
+          lock ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000) : null,
+          a.id,
+        ]);
+        await audit(req, lock ? 'login_locked' : 'login_failed', lock ? `Locked for ${LOCK_MINUTES} minutes` : `Attempt ${fails} of ${MAX_FAILS}`, { id: a.id, email: a.email });
+      } else {
+        await audit(req, 'login_failed', `Unknown email: ${email}`.slice(0, 120), { email });
+      }
+      return fail(401, 'Incorrect email or password.');
+    }
+
+    await pool.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = $1', [a.id]);
+    const admin = { id: a.id, name: a.name, email: a.email, mustChange: a.must_change_password, since: Date.now() };
     req.session.regenerate((err) => {
       if (err) return next(err);
       req.session.admin = admin;
       req.session.csrf = crypto.randomBytes(24).toString('hex');
-      req.session.save((err2) => (err2 ? next(err2) : res.redirect('/admin')));
+      req.session.save(async (err2) => {
+        if (err2) return next(err2);
+        await audit(req, 'login', 'Signed in', admin);
+        res.redirect(admin.mustChange ? '/admin/settings' : '/admin');
+      });
     });
   })
 );
 
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
+  if (req.session.admin) await audit(req, 'logout', 'Signed out');
   req.session.destroy(() => res.redirect('/admin/login'));
 });
 
 router.use((req, res, next) => {
-  if (!req.session.admin) return res.redirect('/admin/login');
+  const a = req.session.admin;
+  if (!a) return res.redirect('/admin/login');
+  if (Date.now() - (a.since || 0) > ABSOLUTE_SESSION_MS) {
+    return req.session.destroy(() => res.redirect('/admin/login'));
+  }
+  // A temporary / default password must be replaced before anything else can be used.
+  if (a.mustChange) {
+    const ok = (req.method === 'GET' && req.path === '/settings') || (req.method === 'POST' && req.path === '/settings/password');
+    if (!ok) return res.redirect('/admin/settings');
+  }
   next();
 });
 
@@ -206,6 +254,7 @@ router.post(
     const upd = await pool.query('UPDATE requests SET status = $1, updated_at = now() WHERE id = $2 RETURNING id', [status, id]);
     if (upd.rows.length) {
       await pool.query('INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,$2,$3,$4)', [id, status, note, req.session.admin.name]);
+      await audit(req, 'request_status', `Request #${id} → ${status}`);
       flash(req, 'success', `Status updated to “${STATUS_MAP[status].label}”.`);
     }
     res.redirect(`/admin/requests/${id}`);
@@ -223,6 +272,7 @@ router.post(
       return res.redirect(`/admin/requests/${id}`);
     }
     await pool.query('UPDATE requests SET total_amount = $1, amount_paid = $2, updated_at = now() WHERE id = $3', [total, paid, id]);
+    await audit(req, 'request_billing', `Request #${id}: total ${total}, paid ${paid}`);
     flash(req, 'success', 'Billing saved.');
     res.redirect(`/admin/requests/${id}`);
   })
@@ -241,7 +291,9 @@ router.post(
 router.post(
   '/requests/:id/delete',
   wrap(async (req, res) => {
-    await pool.query('DELETE FROM requests WHERE id = $1', [parseInt(req.params.id, 10)]);
+    const rid = parseInt(req.params.id, 10);
+    await pool.query('DELETE FROM requests WHERE id = $1', [rid]);
+    await audit(req, 'request_delete', `Request #${rid}`);
     flash(req, 'success', 'Request deleted.');
     res.redirect('/admin/requests');
   })
@@ -291,6 +343,7 @@ router.post(
       'INSERT INTO categories (name, description, icon, color, price, unit, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7)',
       [c.name, c.description, c.icon, c.color, c.price, c.unit, c.sort_order]
     );
+    await audit(req, 'category_add', c.name);
     flash(req, 'success', `Category “${c.name}” added. It is now live on the public page.`);
     res.redirect('/admin/categories');
   })
@@ -309,6 +362,7 @@ router.post(
       'UPDATE categories SET name=$1, description=$2, icon=$3, color=$4, price=$5, unit=$6, sort_order=$7 WHERE id=$8',
       [c.name, c.description, c.icon, c.color, c.price, c.unit, c.sort_order, id]
     );
+    await audit(req, 'category_edit', `#${id} ${c.name}`);
     flash(req, 'success', 'Category updated.');
     res.redirect('/admin/categories');
   })
@@ -318,6 +372,7 @@ router.post(
   '/categories/:id/toggle',
   wrap(async (req, res) => {
     await pool.query('UPDATE categories SET is_active = NOT is_active WHERE id = $1', [parseInt(req.params.id, 10)]);
+    await audit(req, 'category_toggle', `#${req.params.id}`);
     flash(req, 'success', 'Category visibility changed.');
     res.redirect('/admin/categories');
   })
@@ -327,6 +382,7 @@ router.post(
   '/categories/:id/delete',
   wrap(async (req, res) => {
     await pool.query('DELETE FROM categories WHERE id = $1', [parseInt(req.params.id, 10)]);
+    await audit(req, 'category_delete', `#${req.params.id}`);
     flash(req, 'success', 'Category deleted.');
     res.redirect('/admin/categories');
   })
@@ -385,7 +441,29 @@ router.post(
       opening_hours: cleanText(b.opening_hours, 120),
       currency,
     });
+    await audit(req, 'settings_save', 'Business details');
     flash(req, 'success', 'Settings saved.');
+    res.redirect('/admin/settings');
+  })
+);
+
+router.post(
+  '/settings/terms',
+  wrap(async (req, res) => {
+    const text = cleanMultiline(req.body.terms_text, 20000);
+    if (text.length < 50) {
+      flash(req, 'error', 'The Terms of Service are too short.');
+      return res.redirect('/admin/settings');
+    }
+    const cur = await getSettings();
+    if (text === cur.terms_text) {
+      flash(req, 'success', 'No changes - the terms are the same as before.');
+      return res.redirect('/admin/settings');
+    }
+    const version = (Number(cur.terms_version) || 1) + 1;
+    await saveSettings({ terms_text: text, terms_version: String(version) });
+    await audit(req, 'terms_update', `Terms version ${version}`);
+    flash(req, 'success', `Terms saved as version ${version}. Customers will be asked to accept the new version.`);
     res.redirect('/admin/settings');
   })
 );
@@ -394,19 +472,31 @@ router.post(
   '/settings/password',
   wrap(async (req, res) => {
     const { current, password, confirm } = req.body;
-    const { rows } = await pool.query('SELECT password_hash FROM admins WHERE id = $1', [req.session.admin.id]);
+    const { rows } = await pool.query('SELECT password_hash, name, email FROM admins WHERE id = $1', [req.session.admin.id]);
+    const problem = passwordProblem(password, rows[0] || {});
     if (!rows.length || !(await bcrypt.compare(String(current || ''), rows[0].password_hash))) {
+      await audit(req, 'password_change_failed', 'Wrong current password');
       flash(req, 'error', 'Your current password is incorrect.');
-    } else if (String(password || '').length < 8) {
-      flash(req, 'error', 'The new password must be at least 8 characters.');
+    } else if (problem) {
+      flash(req, 'error', problem);
     } else if (password !== confirm) {
       flash(req, 'error', 'The new passwords do not match.');
+    } else if (password === current) {
+      flash(req, 'error', 'The new password must be different from the current one.');
     } else {
-      await pool.query('UPDATE admins SET password_hash = $1 WHERE id = $2', [await bcrypt.hash(password, 10), req.session.admin.id]);
+      await pool.query('UPDATE admins SET password_hash = $1, must_change_password = FALSE, failed_attempts = 0, locked_until = NULL WHERE id = $2', [
+        await bcrypt.hash(password, 12),
+        req.session.admin.id,
+      ]);
+      req.session.admin.mustChange = false;
+      await audit(req, 'password_change', 'Password updated');
       flash(req, 'success', 'Password updated.');
+      return res.redirect('/admin');
     }
     res.redirect('/admin/settings');
   })
 );
+
+require('./admin-tools')(router, { buildCtx, flash });
 
 module.exports = router;

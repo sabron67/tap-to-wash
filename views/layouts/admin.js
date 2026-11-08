@@ -1,6 +1,5 @@
 const { html } = require('../../lib/html');
-const { head, blobs } = require('./public');
-const { logo } = require('../partials/logo');
+const { head } = require('./public');
 const { csrfField } = require('../partials/ui');
 const { themeSwitch } = require('../partials/theme');
 const { icon } = require('../../lib/icons');
@@ -10,6 +9,9 @@ const NAV = [
   ['requests', '/admin/requests', 'clipboard-list', 'Requests'],
   ['categories', '/admin/categories', 'tag', 'Categories'],
   ['customers', '/admin/customers', 'users', 'Customers'],
+  ['reports', '/admin/reports', 'file-spreadsheet', 'Reports'],
+  ['photos', '/admin/photos', 'image', 'Photos'],
+  ['activity', '/admin/activity', 'history', 'Activity'],
   ['settings', '/admin/settings', 'settings', 'Settings'],
 ];
 
@@ -22,10 +24,9 @@ ${head(`${title} · Admin`, s)}
 <meta name="robots" content="noindex,nofollow">
 </head>
 <body class="admin">
-${blobs}
 <div class="shell">
   <aside class="sidebar glass" id="sidebar">
-    <a class="brand" href="/admin">${logo({ prefix: 'adm', animated: false, className: 'brand-logo' })}<span>${s.business_name}<small>Admin</small></span></a>
+    <a class="brand" href="/admin"><span>${s.business_name}<small>Admin</small></span></a>
     <nav class="side-nav">
       ${NAV.map(
         ([key, href, ic, label]) => html`<a href="${href}" class="${key === active ? 'active' : ''}">

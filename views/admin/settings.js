@@ -10,7 +10,8 @@ function settingsPage(ctx) {
   };
 
   const body = html`
-  <section class="grid-2 gap">
+  ${ctx.admin.mustChange ? html`<div class="notice"><strong>Please choose a new password.</strong> You are using a temporary or default password. The rest of the admin area unlocks once you change it.</div>` : ''}
+  <section class="grid-2 gap" style="margin-top:0">
     <form class="glass pad stack" method="post" action="/admin/settings">
       ${csrfField(ctx)}
       <h2>Business details</h2>
@@ -33,9 +34,19 @@ function settingsPage(ctx) {
       <h2>Change my password</h2>
       <p class="muted small">Signed in as <strong>${ctx.admin.email}</strong></p>
       <label class="field"><span>Current password</span><input type="password" name="current" required autocomplete="current-password"></label>
-      <label class="field"><span>New password</span><input type="password" name="password" minlength="8" required autocomplete="new-password"></label>
-      <label class="field"><span>Repeat new password</span><input type="password" name="confirm" minlength="8" required autocomplete="new-password"></label>
+      <label class="field"><span>New password</span><input type="password" name="password" minlength="10" required autocomplete="new-password"><small class="muted">At least 10 characters with a letter and a number.</small></label>
+      <label class="field"><span>Repeat new password</span><input type="password" name="confirm" minlength="10" required autocomplete="new-password"></label>
       <button class="btn btn-ghost" type="submit">Update password</button>
+    </form>
+  </section>
+
+  <section class="glass pad">
+    <form class="stack" method="post" action="/admin/settings/terms">
+      ${csrfField(ctx)}
+      <div class="card-head"><h2>Terms of Service</h2><span class="muted small">Current version ${s.terms_version} · <a class="link" href="/terms" target="_blank" rel="noopener">View public page</a></span></div>
+      <p class="muted small">Customers must accept these before sending a request. Use <span class="mono">## Heading</span> for headings, <span class="mono">- text</span> for bullet points and <span class="mono">{{business}}</span> for your business name. Saving a change creates a new version that customers accept afresh.</p>
+      <textarea name="terms_text" rows="16" maxlength="20000" required>${s.terms_text}</textarea>
+      <button class="btn btn-primary" type="submit">Save terms</button>
     </form>
   </section>`;
 

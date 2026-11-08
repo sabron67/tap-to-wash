@@ -1,7 +1,6 @@
 const { html } = require('../../lib/html');
 const { fmtDate, STATUS_MAP } = require('../../lib/helpers');
 const { publicLayout } = require('../layouts/public');
-const { logo } = require('../partials/logo');
 const { timeline } = require('../partials/ui');
 const { themeSwitch } = require('../partials/theme');
 const { icon } = require('../../lib/icons');
@@ -9,14 +8,14 @@ const { icon } = require('../../lib/icons');
 function trackPage(ctx, { ref = '', error = '', result = null }) {
   const s = ctx.settings;
   const body = html`
-  <header class="nav glass">
-    <a class="brand" href="/">${logo({ prefix: 'trk', animated: false, className: 'brand-logo' })}<span>${s.business_name}</span></a>
-    <nav class="nav-links"><a href="/#categories">Categories</a><a href="/track">Track order</a></nav>
+  <header class="nav scrolled">
+    <a class="brand" href="/"><span>${s.business_name}</span></a>
+    <nav class="nav-links"><a href="/#categories">Services</a><a href="/track">Track order</a><a href="/terms">Terms</a></nav>
     ${themeSwitch()}
-    <a class="btn btn-primary btn-sm" href="/">${icon('pointer')} Tap to wash</a>
+    <a class="btn btn-primary btn-sm" href="/">Tap to wash</a>
   </header>
 
-  <main class="container narrow section">
+  <main class="container narrow section" style="padding-top:calc(var(--nav-h) + 2.5rem)">
     <div class="section-head">
       <span class="pill">Track</span>
       <h2>Where is my laundry?</h2>
@@ -52,7 +51,8 @@ function trackPage(ctx, { ref = '', error = '', result = null }) {
 
 function messagePage(ctx, { title, message, code = '' }) {
   const body = html`
-  <main class="container narrow section center">
+  <header class="nav scrolled"><a class="brand" href="/"><span>${ctx.settings.business_name}</span></a></header>
+  <main class="container narrow section center" style="padding-top:calc(var(--nav-h) + 2.5rem)">
     <div class="glass pad">
       <div class="big">${icon(code === '404' ? 'shopping-basket' : 'droplets')}</div>
       <h2>${title}</h2>

@@ -150,7 +150,7 @@
     if (!done) {
       sub.textContent = subtitles[n];
       backBtn.style.visibility = n === 1 ? 'hidden' : 'visible';
-      nextBtn.innerHTML = n === 3 ? ui.pointer + ' Send my request' : 'Next ' + ui.arrow;
+      nextBtn.innerHTML = n === 3 ? ui.send + ' Send my request' : 'Next ' + ui.arrow;
       nextBtn.disabled = false;
     } else {
       sub.textContent = 'All done!';
@@ -228,6 +228,7 @@
     state.lat = state.lng = state.acc = null;
     state.step = 1;
     ['#locDesc', '#fName', '#fPhone', '#fTime', '#fNotes'].forEach((s) => ($(s).value = ''));
+    $('#fTerms').checked = false;
     clearLocation();
     syncCards();
   }
@@ -299,6 +300,7 @@
     const phone = $('#fPhone').value.trim();
     if (name.length < 2) return showError(3, 'Please enter your name.');
     if (phone.replace(/\D/g, '').length < 9) return showError(3, 'Please enter a valid phone number.');
+    if (!$('#fTerms').checked) return showError(3, 'Please accept the Terms of Service to continue.');
     showError(3, '');
 
     state.sending = true;
@@ -318,6 +320,8 @@
           longitude: state.lng,
           accuracy: state.acc,
           website: $('#fWebsite').value,
+          accept_terms: true,
+          terms_version: data.termsVersion,
           items: selectedIds().map((id) => ({ category_id: id, quantity: state.items[id] })),
         }),
       });
@@ -329,7 +333,7 @@
     } catch (err) {
       showError(3, err.message);
       nextBtn.disabled = false;
-      nextBtn.innerHTML = ui.pointer + ' Send my request';
+      nextBtn.innerHTML = ui.send + ' Send my request';
     } finally {
       state.sending = false;
     }

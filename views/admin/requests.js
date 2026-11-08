@@ -103,6 +103,8 @@ function requestDetailPage(ctx, { r, items, events, estimate }) {
         : html`<p class="muted small">The customer did not share GPS coordinates.</p>`}
       ${r.preferred_time ? html`<h3>Preferred pick-up</h3><p>${r.preferred_time}</p>` : ''}
       ${r.notes ? html`<h3>Customer notes</h3><p class="pre">${r.notes}</p>` : ''}
+      <h3>Terms of Service</h3>
+      <p>${r.terms_version ? html`Accepted version ${r.terms_version} on ${fmtDate(r.terms_accepted_at)}` : html`<span class="muted">Placed before terms acceptance was required.</span>`}</p>
     </div>
 
     <div class="glass pad">

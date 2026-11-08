@@ -43,7 +43,8 @@ app.use(
     secret: process.env.SESSION_SECRET || 'dev-only-secret-change-me',
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'lax', secure: isProd, maxAge: 1000 * 60 * 60 * 12 },
+    rolling: true, // idle timeout: the cookie is renewed on every request and expires after 2 hours of inactivity
+    cookie: { httpOnly: true, sameSite: 'lax', secure: isProd, maxAge: 1000 * 60 * 60 * 2 },
   })
 );
 
@@ -57,9 +58,12 @@ app.use(async (req, res) => {
 
 // eslint-disable-next-line no-unused-vars
 app.use(async (err, req, res, next) => {
-  console.error(err);
+  const clientErr = err && err.status >= 400 && err.status < 500;
+  if (!clientErr) console.error(err);
   if (res.headersSent) return;
-  if (req.originalUrl.startsWith('/api')) return res.status(500).json({ ok: false, error: 'Something went wrong. Please try again.' });
+  if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/admin/photos')) {
+    return res.status(clientErr ? err.status : 500).json({ ok: false, error: clientErr ? 'That request could not be processed (too large or malformed).' : 'Something went wrong. Please try again.' });
+  }
   const settings = await getSettings().catch(() => ({ business_name: 'Tap to Wash', tagline: '' }));
   res.status(500).view(messagePage({ settings }, { title: 'Something went wrong', message: 'Please try again in a moment.' }));
 });

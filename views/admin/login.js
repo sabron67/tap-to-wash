@@ -1,6 +1,5 @@
 const { html } = require('../../lib/html');
-const { head, blobs } = require('../layouts/public');
-const { logo } = require('../partials/logo');
+const { head } = require('../layouts/public');
 const { csrfField } = require('../partials/ui');
 const { themeSwitch } = require('../partials/theme');
 const { icon } = require('../../lib/icons');
@@ -11,12 +10,10 @@ function loginPage(ctx, { error = '', email = '' } = {}) {
 <html lang="en">
 <head>${head('Admin login', s)}<meta name="robots" content="noindex,nofollow"></head>
 <body class="admin login-page">
-${blobs}
 <div class="theme-float">${themeSwitch()}</div>
 <main class="login-wrap">
   <form class="login-card glass-strong" method="post" action="/admin/login">
     ${csrfField(ctx)}
-    <div class="login-logo">${logo({ prefix: 'login', animated: true })}</div>
     <h1>${s.business_name}</h1>
     <p class="muted">Admin sign in</p>
     ${error ? html`<div class="flash error">${error}</div>` : ''}

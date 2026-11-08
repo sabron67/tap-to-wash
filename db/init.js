@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const { pool } = require('../config/db');
 const { DEFAULTS } = require('../lib/settings');
 const { categoryIconName } = require('../lib/icons');
+const { passwordProblem } = require('../lib/password');
 
 const STARTER_CATEGORIES = [
   ['Everyday Clothes', 'T-shirts, trousers, dresses and daily wear.', 'shirt', '#c2663a', 150, 'kg', 1],
@@ -30,16 +31,38 @@ async function main() {
   await pool.query(schema);
   console.log('[ok] Tables are ready');
 
+  // Fast "contains" search for the admin search boxes (ILIKE '%text%'). Needs the pg_trgm extension; skipped if the host does not allow it.
+  try {
+    await pool.query('CREATE EXTENSION IF NOT EXISTS pg_trgm');
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS requests_ref_trgm      ON requests  USING gin (ref_code gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS requests_loc_trgm      ON requests  USING gin (location_description gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS customers_name_trgm    ON customers USING gin (name gin_trgm_ops);
+      CREATE INDEX IF NOT EXISTS customers_phone_trgm   ON customers USING gin (phone gin_trgm_ops);`);
+    console.log('[ok] Search indexes (pg_trgm) are ready');
+  } catch (err) {
+    console.log(`[--] Search indexes skipped (${err.message}). Searching still works, just without the speed-up.`);
+  }
+
   const admins = await pool.query('SELECT COUNT(*)::int AS n FROM admins');
   if (admins.rows[0].n === 0) {
     const name = process.env.ADMIN_NAME || 'Administrator';
     const email = (process.env.ADMIN_EMAIL || 'admin@taptowash.local').trim().toLowerCase();
     const password = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
-    const hash = await bcrypt.hash(password, 10);
-    await pool.query('INSERT INTO admins (name, email, password_hash) VALUES ($1, $2, $3)', [name, email, hash]);
-    console.log(`[ok] Admin created: ${email}  (change the password after first login)`);
+    const hash = await bcrypt.hash(password, 12);
+    const weak = passwordProblem(password, { email, name }) !== '';
+    await pool.query('INSERT INTO admins (name, email, password_hash, must_change_password) VALUES ($1, $2, $3, $4)', [name, email, hash, weak]);
+    console.log(`[ok] Admin created: ${email}${weak ? '  (you will be asked to choose a new password at first login)' : ''}`);
   } else {
     console.log('[--] Admin already exists - skipped');
+    // An admin still using the well-known default password must change it.
+    const all = await pool.query('SELECT id, password_hash FROM admins WHERE NOT must_change_password');
+    for (const a of all.rows) {
+      if (await bcrypt.compare('ChangeMe123!', a.password_hash)) {
+        await pool.query('UPDATE admins SET must_change_password = TRUE WHERE id = $1', [a.id]);
+        console.log('[ok] An admin still has the default password - a change will be required at next login');
+      }
+    }
   }
 
   for (const [key, value] of Object.entries(DEFAULTS)) {

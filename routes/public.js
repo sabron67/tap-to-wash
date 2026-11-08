@@ -1,10 +1,13 @@
 const express = require('express');
+const path = require('path');
 const { pool } = require('../config/db');
 const { getSettings } = require('../lib/settings');
 const { rateLimit } = require('../lib/security');
 const { wrap, phoneKey, validPhone, genRef, cleanText, cleanMultiline } = require('../lib/helpers');
 const { homePage } = require('../views/public/home');
 const { trackPage } = require('../views/public/track');
+const { termsPage } = require('../views/public/terms');
+const { SLOTS, mediaVersions } = require('../lib/media');
 
 const router = express.Router();
 
@@ -14,14 +17,42 @@ const trackLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, message: 'Too 
 router.get(
   '/',
   wrap(async (req, res) => {
-    const [settings, cats] = await Promise.all([
+    const [settings, media, cats] = await Promise.all([
       getSettings(),
+      mediaVersions(),
       pool.query(
         `SELECT id, name, description, icon, color, price, unit
            FROM categories WHERE is_active ORDER BY sort_order, name`
       ),
     ]);
-    res.view(homePage({ settings }, cats.rows));
+    res.view(homePage({ settings, media }, cats.rows));
+  })
+);
+
+router.get(
+  '/terms',
+  wrap(async (req, res) => {
+    res.view(termsPage({ settings: await getSettings() }));
+  })
+);
+
+// Background pictures: the admin's uploaded photo if there is one, otherwise the drawn default.
+router.get(
+  '/media/:slot',
+  wrap(async (req, res, next) => {
+    const slot = req.params.slot;
+    if (!Object.prototype.hasOwnProperty.call(SLOTS, slot)) return next();
+    const { rows } = await pool.query('SELECT mime, data, updated_at FROM media WHERE slot = $1', [slot]);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (!rows.length) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.sendFile(path.join(__dirname, '..', 'public', 'img', `${slot}.svg`));
+    }
+    const etag = `"${slot}-${Math.floor(new Date(rows[0].updated_at).getTime() / 1000)}"`;
+    res.setHeader('ETag', etag);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.type(rows[0].mime).send(rows[0].data);
   })
 );
 
@@ -34,6 +65,12 @@ router.post(
     const fail = (error, status = 400) => res.status(status).json({ ok: false, error });
 
     if (b.website) return res.json({ ok: true, ref: 'TTW-OK' }); // honeypot: pretend success to bots
+
+    const settings = await getSettings();
+    if (b.accept_terms !== true) return fail('Please accept the Terms of Service to continue.');
+    if (String(b.terms_version) !== String(settings.terms_version)) {
+      return fail('Our Terms of Service were just updated. Please refresh the page, read them and try again.', 409);
+    }
 
     const name = cleanText(b.name, 80);
     const phone = cleanText(b.phone, 20);
@@ -87,9 +124,9 @@ router.post(
         await client.query('SAVEPOINT ref_try');
         try {
           const ins = await client.query(
-            `INSERT INTO requests (ref_code, customer_id, location_description, notes, latitude, longitude, location_accuracy, preferred_time)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-            [candidate, cust.rows[0].id, locationDescription, notes, lat, lng, accuracy, preferredTime]
+            `INSERT INTO requests (ref_code, customer_id, location_description, notes, latitude, longitude, location_accuracy, preferred_time, terms_version, terms_accepted_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now()) RETURNING id`,
+            [candidate, cust.rows[0].id, locationDescription, notes, lat, lng, accuracy, preferredTime, Number(settings.terms_version) || 1]
           );
           requestId = ins.rows[0].id;
           ref = candidate;
