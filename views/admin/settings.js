@@ -35,6 +35,16 @@ function settingsPage(ctx) {
       <textarea name="terms_text" rows="16" maxlength="20000" required>${s.terms_text}</textarea>
       <button class="btn btn-primary" type="submit">Save terms</button>
     </form>
+  </section>
+
+  <section class="glass pad">
+    <form class="stack" method="post" action="/admin/settings/privacy">
+      ${csrfField(ctx)}
+      <div class="card-head"><h2>Privacy Notice</h2><span class="muted small">Current version ${s.privacy_version} · <a class="link" href="/privacy" target="_blank" rel="noopener">View public page</a></span></div>
+      <p class="muted small">Shown to customers who create an account. Same format as the terms. This is a starting point - please check it matches how you really handle customer information.</p>
+      <textarea name="privacy_text" rows="14" maxlength="20000" required>${s.privacy_text}</textarea>
+      <button class="btn btn-primary" type="submit">Save Privacy Notice</button>
+    </form>
   </section>`;
 
   return adminLayout(ctx, { title: 'Settings', active: 'settings', body });

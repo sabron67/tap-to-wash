@@ -3,6 +3,7 @@ const { head } = require('./public');
 const { csrfField } = require('../partials/ui');
 const { themeSwitch } = require('../partials/theme');
 const { icon } = require('../../lib/icons');
+const { adminTabbar } = require('../partials/tabbar');
 
 const NAV = [
   ['dashboard', '/admin', 'layout-dashboard', 'Dashboard', 'dashboard'],
@@ -14,6 +15,7 @@ const NAV = [
   ['staff', '/admin/staff', 'shield-check', 'Staff', 'staff'],
   ['activity', '/admin/activity', 'history', 'Activity', 'activity'],
   ['settings', '/admin/settings', 'settings', 'Settings', 'settings'],
+  ['whatsapp', '/admin/whatsapp', 'message-circle', 'WhatsApp', 'settings'],
 ];
 
 function adminLayout(ctx, { title, active, body }) {
@@ -48,6 +50,7 @@ ${head(`${title} · Admin`, s)}
     <header class="topbar glass">
       <button class="icon-btn menu-btn" id="menuBtn" aria-label="Menu">${icon('menu')}</button>
       <h1>${title}</h1>
+      <a class="icon-btn bell" id="bell" href="/admin/notifications" aria-label="Alerts" data-last="${ctx.lastAlert || 0}">${icon('bell')}<span class="bell-count" id="bellCount" ${ctx.unread ? '' : 'hidden'}>${ctx.unread || 0}</span></a>
       ${themeSwitch()}
       <span class="topbar-date">${new Intl.DateTimeFormat('en-KE', { dateStyle: 'full', timeZone: 'Africa/Nairobi' }).format(new Date())}</span>
     </header>
@@ -55,7 +58,10 @@ ${head(`${title} · Admin`, s)}
     <main class="content">${body}</main>
   </div>
 </div>
+<div class="side-scrim" id="sideScrim"></div>
+${adminTabbar(ctx, NAV, active)}
 <script src="/js/theme.js"></script>
+<script src="/js/password.js"></script>
 <script src="/js/admin.js"></script>
 </body>
 </html>`;

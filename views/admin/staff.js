@@ -4,6 +4,7 @@ const { adminLayout } = require('../layouts/admin');
 const { csrfField } = require('../partials/ui');
 const { icon } = require('../../lib/icons');
 const { ROLES } = require('../../lib/roles');
+const { waLink, validWaNumber } = require('../../lib/whatsapp');
 
 const roleOptions = (sel) => Object.entries(ROLES).map(([k, r]) => html`<option value="${k}" ${k === sel ? 'selected' : ''}>${r.label}</option>`);
 
@@ -14,6 +15,9 @@ function staffPage(ctx, { rows, created }) {
         <h2>${created.what === 'reset' ? 'New temporary password' : 'Account created'} for ${created.name}</h2>
         <p>Give these sign-in details to ${created.name} now. <strong>The password is shown only once</strong> and they must choose their own at first sign-in.</p>
         <p class="mono" style="font-size:1rem">Email: <strong>${created.email}</strong><br>Temporary password: <strong>${created.password}</strong></p>
+        ${created.phone && validWaNumber(created.phone)
+          ? html`<p><a class="btn btn-accent btn-sm" href="${waLink(created.phone, `Hello ${String(created.name).split(' ')[0]}, your ${ctx.settings.business_name} staff account is ready.\nEmail: ${created.email}\nTemporary password: ${created.password}\nPlease choose your own password when you first sign in.`)}" target="_blank" rel="noopener">${icon('message-circle')} Send on WhatsApp</a></p>`
+          : ''}
       </section>`
     : ''}
 
@@ -25,7 +29,8 @@ function staffPage(ctx, { rows, created }) {
         const me = r.id === ctx.admin.id;
         const f = `f${r.id}`;
         return html`<tr>
-        <td><strong>${r.name}</strong><div class="muted small">${r.email}</div></td>
+        <td><strong>${r.name}</strong><div class="muted small">${r.email}</div>
+          <input class="phone-in" name="phone" form="${f}" value="${r.phone}" maxlength="20" placeholder="WhatsApp number" aria-label="WhatsApp number for ${r.name}" inputmode="tel"></td>
         <td>
           <select name="role" form="${f}" aria-label="Role for ${r.name}" ${me ? 'disabled' : ''}>${roleOptions(r.role)}</select>
           ${me ? html`<input type="hidden" form="${f}" name="role" value="${r.role}">` : ''}
@@ -53,6 +58,7 @@ function staffPage(ctx, { rows, created }) {
       <h2>Add a staff member</h2>
       <label class="field"><span>Full name</span><input name="name" maxlength="80" required></label>
       <label class="field"><span>Email (their sign-in)</span><input type="email" name="email" maxlength="120" required autocomplete="off"></label>
+      <label class="field"><span>WhatsApp / phone number</span><input type="tel" name="phone" maxlength="20" placeholder="0712 345 678"><small class="muted">Optional. Used for job alerts on WhatsApp.</small></label>
       <label class="field"><span>Role</span><select name="role" required>${roleOptions('rider')}</select></label>
       <button class="btn btn-primary" type="submit">${icon('plus')} Create account</button>
       <p class="muted small">A temporary password is generated and shown once.</p>

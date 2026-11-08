@@ -230,6 +230,7 @@
     ['#locDesc', '#fName', '#fPhone', '#fTime', '#fNotes'].forEach((s) => ($(s).value = ''));
     $('#fTerms').checked = false;
     clearLocation();
+    applyMe(false);
     syncCards();
   }
 
@@ -328,7 +329,13 @@
       const out = await res.json().catch(() => ({}));
       if (!res.ok || !out.ok) throw new Error(out.error || 'Something went wrong. Please try again.');
       $('#refBox').textContent = out.ref;
-      $('#trackLink').href = '/track?ref=' + encodeURIComponent(out.ref);
+      $('#trackLink').href = me ? '/account/requests/' + encodeURIComponent(out.ref) : '/track?ref=' + encodeURIComponent(out.ref);
+      const wa = $('#waLink');
+      if (wa && data.whatsapp) {
+        const msg = 'Hello ' + (data.business || '') + ', I just sent laundry request ' + out.ref + '. My name is ' + name + '.';
+        wa.href = 'https://wa.me/' + data.whatsapp + '?text=' + encodeURIComponent(msg);
+        wa.hidden = false;
+      }
       goStep('done');
     } catch (err) {
       showError(3, err.message);
@@ -337,6 +344,45 @@
     } finally {
       state.sending = false;
     }
+  }
+
+  /* ---------- signed-in customers: pre-filled details, saved places, request again ---------- */
+  const me = data.me;
+  function applyMe(withAgain) {
+    if (!me) return;
+    $('#fName').value = me.name || '';
+    $('#fPhone').value = me.phone || '';
+    if (withAgain && me.again) {
+      state.items = {};
+      (me.again.items || []).forEach((it) => {
+        if (byId.has(it.category_id)) state.items[it.category_id] = Math.min(999, Math.max(1, it.quantity || 1));
+      });
+      $('#locDesc').value = me.again.text || '';
+      $('#fTime').value = me.again.time || '';
+    }
+  }
+  if (me) {
+    const box = $('#placesBox');
+    const sel = $('#placesSel');
+    if (me.places && me.places.length && box && sel) {
+      me.places.forEach((p, i) => {
+        const o = document.createElement('option');
+        o.value = String(i);
+        o.textContent = p.text.length > 70 ? p.text.slice(0, 67) + '…' : p.text;
+        sel.appendChild(o);
+      });
+      box.hidden = false;
+      sel.addEventListener('change', () => {
+        const p = me.places[Number(sel.value)];
+        if (p) {
+          $('#locDesc').value = p.text;
+          showError(2, '');
+        }
+      });
+    }
+    applyMe(true);
+    syncCards();
+    if (me.start) openWizard();
   }
 
   syncCards();

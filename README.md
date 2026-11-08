@@ -22,7 +22,7 @@ Laundry services website — Node.js + Express, PostgreSQL, views written as pla
 - Requests: search, filter by status, status pipeline with customer-visible notes, customer map location (Google Maps link), billing (total / paid), internal notes
 - Categories: add / edit / hide / delete, icon, colour, price and unit
 - Customers (repeat customers are merged by phone number)
-- Settings: business name, headline, contacts, hours, currency, change password
+- Settings: business name, headline, contacts, hours, currency, change password; WhatsApp link page
 
 Payments are intentionally manual for now (admin records the total and amount paid) so online payment can be added later.
 
@@ -40,6 +40,38 @@ Payments are intentionally manual for now (admin records the total and amount pa
    npm start                 # http://localhost:3000
    ```
 3. Sign in at `/admin/login` with the `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env`, then change the password under **Settings**.
+
+## WhatsApp alerts and password reset codes (Baileys, no browser)
+
+Staff job alerts and password-reset codes are sent by the server itself through **Baileys** (an unofficial WhatsApp library that needs no Chromium or browser).
+
+1. `npm install` (installs @whiskeysockets/baileys, pino and qrcode; no browser is downloaded).
+2. Deploy, sign in as the owner and open **Admin → WhatsApp**. Scan the QR code with the business phone
+   (WhatsApp → Settings → Linked devices → Link a device). The status turns to **Linked and ready**.
+3. Each staff member turns on **WhatsApp** and saves their number under **My account**. Alerts go out by role
+   (new → owner/manager, confirmed → rider, picked up → attendant, ready → rider, delivered with a balance → cashier).
+
+Hosting notes
+- The WhatsApp login is stored **in the PostgreSQL database** (table `wa_auth`, created automatically), not in files, so
+  Render restarts and redeploys do not unlink the number.
+- Needs `git` during `npm install` (one dependency is fetched from GitHub); Render has it.
+- `WHATSAPP_WEB=0` switches it off (tap-to-send wa.me links keep working, and Meta's API is used if `WHATSAPP_TOKEN` and
+  `WHATSAPP_PHONE_ID` are set). If WhatsApp is not linked the site keeps running normally.
+- Baileys is unofficial. Messages are sent one at a time, a moment apart, for staff alerts and reset codes only.
+
+## Forgot password (staff and customers)
+
+- Staff: `/admin/forgot` · Customers: `/account/forgot` (links are on both sign-in pages).
+- A 6-digit code is WhatsApped to the number saved on the account. It works for 15 minutes, allows 5 wrong tries and can be used once.
+  Staff need a number under **My account / Staff**; customers under **My account → My details**.
+- The page never reveals whether an email exists. After a reset the person is signed out everywhere.
+- If WhatsApp is not linked, the page tells the person to contact the business; the owner can still use **Staff → Reset** and
+  **Customers → Reset**. If the owner is locked out: set `ADMIN_EMAIL`/`ADMIN_PASSWORD` for a new owner with `npm run db:init`
+  on an empty database, or update the password hash directly in the database.
+
+## Phones
+- Public site and admin show a bottom navigation bar on phones (admin: first four sections your role may open + **More**).
+- Tables turn into cards on phones; every password field has a show / hide (eye) button (`public/js/password.js`).
 
 ## Folder layout
 
@@ -69,3 +101,14 @@ After copying these files over your project, run `npm install` (adds `exceljs`) 
 
 ## Notes on the Excel report
 Numbers are calculated when the file is opened (Excel, LibreOffice, Google Sheets). Previewers that do not calculate formulas may show blanks. Up to 5,000 requests, 10,000 item lines and 2,000 customers per report - pick a shorter date range for more.
+
+## Staff alerts and customer accounts
+
+**Alerts (who is told what).** New request → owner + manager; confirmed → rider; picked up → laundry attendant; ready → rider; delivered with a balance due → cashier. Edit `ROUTES` in `lib/notify.js` to change this. Each person switches channels on or off in *My account*:
+- *In the admin*: bell, sound and a pop-up while the page is open.
+- *Phone push*: works even when the page is closed. Needs HTTPS, and each person taps "Enable on this device" once. On iPhone the site must be added to the Home Screen first.
+- *WhatsApp*: today this uses tap-to-send links (the job page has "Alert the team on WhatsApp" and "WhatsApp customer" buttons; the customer's success screen has a "Message us on WhatsApp" button once a WhatsApp number is set in Settings). These links open WhatsApp with the message ready, and a person presses Send. When you connect Meta's WhatsApp Business API, set `WHATSAPP_TOKEN` and `WHATSAPP_PHONE_ID` (see `.env.example`) and staff alerts go out automatically with no other change.
+
+**Customer accounts** are optional; guest requests work exactly as before. Customers can sign up with email and password, see their orders, keep their details and earlier places, use "Request again", add an earlier guest order (reference code + phone), and delete their account. There is no email service yet, so a forgotten password is reset by staff (Customers → Customer accounts → Reset) and the temporary password is passed on by WhatsApp or phone. The Privacy Notice is editable in Settings.
+
+After updating run `npm install` (adds `web-push`) and `npm run db:init`.

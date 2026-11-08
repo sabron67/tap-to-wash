@@ -10,6 +10,7 @@ const { securityHeaders } = require('./lib/security');
 const { messagePage } = require('./views/public/track');
 const publicRoutes = require('./routes/public');
 const adminRoutes = require('./routes/admin');
+const accountRoutes = require('./routes/account');
 
 const isProd = process.env.NODE_ENV === 'production';
 const app = express();
@@ -49,6 +50,7 @@ app.use(
 );
 
 app.use('/admin', adminRoutes);
+app.use('/account', accountRoutes);
 app.use('/', publicRoutes);
 
 app.use(async (req, res) => {
@@ -69,4 +71,8 @@ app.use(async (err, req, res, next) => {
 });
 
 const port = Number(process.env.PORT) || 3000;
-app.listen(port, () => console.log(`Tap to Wash running at http://localhost:${port}`));
+app.listen(port, () => {
+  console.log(`Tap to Wash running at http://localhost:${port}`);
+  // Link WhatsApp in the background so a slow connection never delays the website.
+  setTimeout(() => require('./lib/whatsapp').start().catch((e) => console.error('WhatsApp start failed:', e.message)), 3000);
+});

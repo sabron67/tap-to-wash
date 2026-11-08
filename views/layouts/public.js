@@ -26,6 +26,7 @@ ${head(title, ctx.settings)}
 <div id="progress" aria-hidden="true"></div>
 ${body}
 <script src="/js/theme.js"></script>
+<script src="/js/password.js"></script>
 ${scripts}
 </body>
 </html>`;

@@ -9,6 +9,8 @@ const { passwordProblem } = require('../lib/password');
 const { wrap, STATUS_MAP, cleanText, cleanMultiline } = require('../lib/helpers');
 const { categoryIconName } = require('../lib/icons');
 const { can, roleOf, visibleStatuses, settableStatuses } = require('../lib/roles');
+const { ROUTES, eventFor, notifyEvent, recipientsFor, teamMessage, customerMessage, HEADLINES } = require('../lib/notify');
+const { waLink, canSend: waCanSend } = require('../lib/whatsapp');
 
 const { loginPage } = require('../views/admin/login');
 const { dashboardPage } = require('../views/admin/dashboard');
@@ -18,6 +20,8 @@ const { customersPage } = require('../views/admin/customers');
 const { settingsPage } = require('../views/admin/settings');
 const { accountPage } = require('../views/admin/account');
 const { forbiddenPage } = require('../views/admin/forbidden');
+const { forgotPage, resetPage } = require('../views/public/reset');
+const { requestCode, completeReset, TTL_MINUTES } = require('../lib/reset');
 
 const router = express.Router();
 router.use(adminNoCache);
@@ -53,9 +57,16 @@ async function buildCtx(req) {
   const f = req.session.flash;
   delete req.session.flash;
   let newCount = 0;
+  let unread = 0;
+  let lastAlert = 0;
   if (req.session.admin) {
-    const n = await pool.query(`SELECT COUNT(*)::int AS n FROM requests WHERE status = 'new'`);
+    const [n, u] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS n FROM requests WHERE status = 'new'`),
+      pool.query(`SELECT COUNT(*) FILTER (WHERE read_at IS NULL)::int AS unread, COALESCE(MAX(id), 0)::int AS last FROM notifications WHERE admin_id = $1`, [req.session.admin.id]),
+    ]);
     newCount = n.rows[0].n;
+    unread = u.rows[0].unread;
+    lastAlert = u.rows[0].last;
   }
   const role = req.session.admin ? req.session.admin.role : '';
   return {
@@ -64,6 +75,8 @@ async function buildCtx(req) {
     csrf: req.session.csrf,
     flash: f,
     newCount,
+    unread,
+    lastAlert,
     role,
     roleLabel: roleOf(role).label,
     can: (perm) => can(role, perm),
@@ -134,6 +147,57 @@ router.post(
         res.redirect(admin.mustChange ? '/admin/account' : can(a.role, 'dashboard') ? '/admin' : '/admin/requests');
       });
     });
+  })
+);
+
+// ---------- forgot / reset password (code sent by WhatsApp to the number on the staff account) ----------
+const STAFF_UNAVAILABLE = 'Automatic reset codes are not available right now (WhatsApp is not linked). Ask the owner to reset your password under Staff.';
+const STAFF_SENT = `If that email belongs to a staff account with a WhatsApp number saved, we have sent a 6-digit code. It works for ${TTL_MINUTES} minutes.`;
+
+router.get(
+  '/forgot',
+  wrap(async (req, res) => {
+    if (req.session.admin) return res.redirect('/admin');
+    res.view(forgotPage(await buildCtx(req), 'admin'));
+  })
+);
+
+router.post(
+  '/forgot',
+  loginLimit,
+  wrap(async (req, res) => {
+    const email = cleanText(req.body.email, 120).toLowerCase();
+    const ctx = await buildCtx(req);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return res.status(400).view(forgotPage(ctx, 'admin', { error: 'Please enter a valid email address.', email }));
+    const r = await requestCode('admin', email, ctx.settings.business_name);
+    await audit(req, 'password_reset_requested', `Code requested for ${email}`.slice(0, 120), { email });
+    if (!r.available) return res.view(forgotPage(ctx, 'admin', { error: STAFF_UNAVAILABLE, email }));
+    res.view(resetPage(ctx, 'admin', { info: STAFF_SENT, email }));
+  })
+);
+
+router.get(
+  '/reset',
+  wrap(async (req, res) => {
+    if (req.session.admin) return res.redirect('/admin');
+    res.view(resetPage(await buildCtx(req), 'admin', { email: cleanText(req.query.email, 120) }));
+  })
+);
+
+router.post(
+  '/reset',
+  loginLimit,
+  wrap(async (req, res) => {
+    const b = req.body;
+    const email = cleanText(b.email, 120).toLowerCase();
+    const r = await completeReset('admin', email, b.code, b.password, b.confirm);
+    if (!r.ok) {
+      await audit(req, 'password_reset_failed', 'Wrong or expired code', { email });
+      return res.status(400).view(resetPage(await buildCtx(req), 'admin', { error: r.error, email }));
+    }
+    await audit(req, 'password_reset', 'Password reset with a WhatsApp code', { id: r.user.id, email: r.user.email });
+    flash(req, 'success', 'Your password was updated. Please sign in.');
+    res.redirect('/admin/login');
   })
 );
 
@@ -280,7 +344,18 @@ router.get(
     const vis = visibleStatuses(req.session.admin.role);
     if (vis && !vis.includes(reqRes.rows[0].status)) return next(); // not one of this role's jobs
     const estimate = items.rows.reduce((sum, i) => sum + (i.price === null ? 0 : Number(i.price) * i.quantity), 0);
-    res.view(requestDetailPage(ctx, { r: reqRes.rows[0], items: items.rows, events: events.rows, estimate }));
+    const r = reqRes.rows[0];
+    const biz = ctx.settings.business_name;
+    const itemsText = items.rows.map((i) => `${i.category_name} x${i.quantity}`).join(', ');
+    const event = eventFor(r.status, r.total_amount, r.amount_paid);
+    const team = ctx.can('dispatch') && event ? await recipientsFor(event) : [];
+    const wa = {
+      customer: waLink(r.customer_phone, customerMessage(r, biz)),
+      headline: event ? HEADLINES[event] : '',
+      auto: waCanSend(),
+      team: team.map((p) => ({ name: p.name, role: p.role, phone: p.phone, link: p.phone ? waLink(p.phone, teamMessage(event, { ...r, items: itemsText }, biz)) : '' })),
+    };
+    res.view(requestDetailPage(ctx, { r, items: items.rows, events: events.rows, estimate, wa }));
   })
 );
 
@@ -303,11 +378,14 @@ router.post(
       flash(req, 'error', 'Your role cannot set that status.');
       return res.redirect(`/admin/requests/${id}`);
     }
+    const before = await pool.query('SELECT status FROM requests WHERE id = $1', [id]);
     const upd = await pool.query(
-      'UPDATE requests SET status = $1, updated_at = now() WHERE id = $2 AND ($3::text[] IS NULL OR status = ANY($3::text[])) RETURNING id',
+      'UPDATE requests SET status = $1, updated_at = now() WHERE id = $2 AND ($3::text[] IS NULL OR status = ANY($3::text[])) RETURNING id, total_amount, amount_paid',
       [status, id, vis]
     );
     if (upd.rows.length) {
+      const ev = before.rows[0] && before.rows[0].status !== status ? eventFor(status, upd.rows[0].total_amount, upd.rows[0].amount_paid) : null;
+      if (ev) notifyEvent(ev, id, req.session.admin.id, (await getSettings()).business_name); // alerts the next role; never throws
       await pool.query('INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,$2,$3,$4)', [id, status, note, req.session.admin.name]);
       await audit(req, 'request_status', `Request #${id} → ${status}`);
       flash(req, 'success', `Status updated to “${STATUS_MAP[status].label}”.`);
@@ -452,32 +530,47 @@ router.post(
 );
 
 // ---------- customers ----------
+async function customersView(req, created = null) {
+  const q = cleanText(req.query.q, 80);
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const like = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
+  const where = `($1 = '' OR c.name ILIKE $2 OR c.phone ILIKE $2 OR COALESCE(c.email, '') ILIKE $2)`;
+  const wantAccounts = can(req.session.admin.role, 'accounts');
+  const [ctx, count, rows, accounts] = await Promise.all([
+    buildCtx(req),
+    pool.query(`SELECT COUNT(*)::int AS n FROM customers c WHERE ${where}`, [q, like]),
+    pool.query(
+      `SELECT c.id, c.name, c.phone, c.created_at,
+          COUNT(r.id)::int AS requests,
+          COALESCE(SUM(r.amount_paid), 0) AS paid,
+          MAX(r.created_at) AS last_request
+         FROM customers c LEFT JOIN requests r ON r.customer_id = c.id
+        WHERE ${where}
+        GROUP BY c.id
+        ORDER BY MAX(r.created_at) DESC NULLS LAST, c.created_at DESC
+        LIMIT ${PAGE_SIZE} OFFSET $3`,
+      [q, like, (page - 1) * PAGE_SIZE]
+    ),
+    wantAccounts
+      ? pool.query(
+          `SELECT a.id, a.name, a.email, a.phone, a.is_active, a.must_change_password, a.last_login_at,
+                  (SELECT COUNT(*)::int FROM requests r WHERE r.account_id = a.id) AS orders
+             FROM accounts a
+            WHERE ($1 = '' OR a.name ILIKE $2 OR a.email ILIKE $2 OR a.phone ILIKE $2)
+            ORDER BY a.created_at DESC LIMIT 50`,
+          [q, like]
+        )
+      : { rows: [] },
+  ]);
+  const total = count.rows[0].n;
+  return customersPage(ctx, { rows: rows.rows, total, page, pages: Math.max(Math.ceil(total / PAGE_SIZE), 1), q, accounts: accounts.rows, created });
+}
+
 router.get(
   '/customers',
   need('customers'),
   wrap(async (req, res) => {
-    const q = cleanText(req.query.q, 80);
-    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const like = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
-    const where = `($1 = '' OR c.name ILIKE $2 OR c.phone ILIKE $2 OR COALESCE(c.email, '') ILIKE $2)`;
-    const [ctx, count, rows] = await Promise.all([
-      buildCtx(req),
-      pool.query(`SELECT COUNT(*)::int AS n FROM customers c WHERE ${where}`, [q, like]),
-      pool.query(
-        `SELECT c.id, c.name, c.phone, c.created_at,
-            COUNT(r.id)::int AS requests,
-            COALESCE(SUM(r.amount_paid), 0) AS paid,
-            MAX(r.created_at) AS last_request
-           FROM customers c LEFT JOIN requests r ON r.customer_id = c.id
-          WHERE ${where}
-          GROUP BY c.id
-          ORDER BY MAX(r.created_at) DESC NULLS LAST, c.created_at DESC
-          LIMIT ${PAGE_SIZE} OFFSET $3`,
-        [q, like, (page - 1) * PAGE_SIZE]
-      ),
-    ]);
-    const total = count.rows[0].n;
-    res.view(customersPage(ctx, { rows: rows.rows, total, page, pages: Math.max(Math.ceil(total / PAGE_SIZE), 1), q }));
+    res.view(await customersView(req));
   })
 );
 
@@ -535,12 +628,36 @@ router.post(
   })
 );
 
+router.post(
+  '/settings/privacy',
+  need('settings'),
+  wrap(async (req, res) => {
+    const text = cleanMultiline(req.body.privacy_text, 20000);
+    if (text.length < 50) {
+      flash(req, 'error', 'The Privacy Notice is too short.');
+      return res.redirect('/admin/settings');
+    }
+    const cur = await getSettings();
+    if (text === cur.privacy_text) {
+      flash(req, 'success', 'No changes - the notice is the same as before.');
+      return res.redirect('/admin/settings');
+    }
+    const version = (Number(cur.privacy_version) || 1) + 1;
+    await saveSettings({ privacy_text: text, privacy_version: String(version) });
+    await audit(req, 'privacy_update', `Privacy notice version ${version}`);
+    flash(req, 'success', `Privacy Notice saved as version ${version}.`);
+    res.redirect('/admin/settings');
+  })
+);
+
 // ---------- my account (every role) ----------
 router.get(
   '/account',
   wrap(async (req, res) => {
-    const { rows } = await pool.query('SELECT last_login_at FROM admins WHERE id = $1', [req.session.admin.id]);
-    res.view(accountPage(await buildCtx(req), { lastLogin: rows[0] && rows[0].last_login_at }));
+    const { rows } = await pool.query('SELECT last_login_at, phone, notify_inapp, notify_push, notify_whatsapp FROM admins WHERE id = $1', [req.session.admin.id]);
+    const role = req.session.admin.role;
+    const alerts = Object.entries(ROUTES).filter(([, roles]) => roles.includes(role)).map(([ev]) => HEADLINES[ev]);
+    res.view(accountPage(await buildCtx(req), { lastLogin: rows[0] && rows[0].last_login_at, prefs: rows[0], alerts, waMode: waCanSend() ? 'auto' : 'link' }));
   })
 );
 
@@ -575,5 +692,8 @@ router.post(
 
 require('./admin-tools')(router, { buildCtx, flash, need });
 require('./admin-staff')(router, { buildCtx, flash, need });
+require('./admin-notify')(router, { buildCtx, flash, need });
+require('./admin-accounts')(router, { flash, need, customersView });
+require('./admin-whatsapp')(router, { buildCtx, flash, need });
 
 module.exports = router;

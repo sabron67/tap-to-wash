@@ -57,7 +57,7 @@ function requestsPage(ctx, { rows, total, page, pages, status, q, tabCounts }) {
   return adminLayout(ctx, { title: 'Requests', active: 'requests', body });
 }
 
-function requestDetailPage(ctx, { r, items, events, estimate }) {
+function requestDetailPage(ctx, { r, items, events, estimate, wa }) {
   const cur = ctx.settings.currency;
   const nxt = nextStatus(r.status);
   const balance = Math.max(0, Number(r.total_amount) - Number(r.amount_paid));
@@ -90,12 +90,23 @@ function requestDetailPage(ctx, { r, items, events, estimate }) {
     </div>`}
   </section>
 
+
+  ${wa.team.length
+    ? html`<section class="glass pad">
+    <h2>Alert the team on WhatsApp</h2>
+    <p class="muted small">${wa.headline}: tap a name and WhatsApp opens with the job details ready - just press Send.${wa.auto ? ' Staff who turned on WhatsApp alerts are also messaged automatically.' : ''}</p>
+    <div class="row-gap">${wa.team.map((p) => (p.link
+      ? html`<a class="btn btn-accent btn-sm" href="${p.link}" target="_blank" rel="noopener">${icon('message-circle')} ${p.name}</a>`
+      : html`<span class="badge pay-partial" title="Add their number on the Staff page">${p.name}: no number</span>`))}</div>
+  </section>`
+    : ''}
+
   <section class="grid-2 gap">
     <div class="glass pad">
       <h2>Customer</h2>
       <p class="big-name">${r.customer_name}</p>
       <p><a class="btn btn-accent btn-sm" href="tel:${r.customer_phone}">${icon('phone')} ${r.customer_phone}</a>
-      ${r.customer_phone ? html` <a class="btn btn-ghost btn-sm" href="https://wa.me/${String(r.customer_phone).replace(/\D/g, '')}" target="_blank" rel="noopener">${icon('message-circle')} WhatsApp</a>` : ''}</p>
+      ${r.customer_phone ? html` <a class="btn btn-ghost btn-sm" href="${wa.customer}" target="_blank" rel="noopener" title="Opens WhatsApp with a message about this request's status, ready to send">${icon('message-circle')} WhatsApp customer</a>` : ''}</p>
       <h3>Location</h3>
       <p>${r.location_description}</p>
       ${r.latitude !== null

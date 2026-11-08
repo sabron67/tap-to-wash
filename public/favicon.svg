@@ -1,1 +1,134 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#2b2118"/><text x="32" y="44" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="34" fill="#fffaf0">TW</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Outer Metallic Ring Gradients -->
+    <linearGradient id="chromeOuter" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0f3f5"/>
+      <stop offset="25%" stop-color="#9aa0a6"/>
+      <stop offset="50%" stop-color="#e8eaed"/>
+      <stop offset="75%" stop-color="#5f6368"/>
+      <stop offset="100%" stop-color="#bdc1c6"/>
+    </linearGradient>
+    
+    <linearGradient id="chromeInner" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="30%" stop-color="#7f868d"/>
+      <stop offset="70%" stop-color="#d2d6dc"/>
+      <stop offset="100%" stop-color="#3c4043"/>
+    </linearGradient>
+
+    <!-- Glass/Water Backdrop Gradient -->
+    <radialGradient id="glassBackdrop" cx="50%" cy="50%" r="50%" fx="30%" fy="30%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="65%" stop-color="#e3f2fd"/>
+      <stop offset="85%" stop-color="#bad9f7"/>
+      <stop offset="100%" stop-color="#7ab3eb"/>
+    </radialGradient>
+
+    <!-- Water Swirl Gradient -->
+    <linearGradient id="waterGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0d47a1" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#1976d2" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#4fc3f7" stop-opacity="0.3"/>
+    </linearGradient>
+
+    <!-- Text Color Gradient -->
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1565c0"/>
+      <stop offset="100%" stop-color="#0a3570"/>
+    </linearGradient>
+
+    <!-- Glass Reflection Highlight -->
+    <linearGradient id="glassReflection" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="40%" stop-color="#ffffff" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Drop Shadows -->
+    <filter id="dropShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+    <filter id="innerShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feOffset dx="0" dy="3"/>
+      <feGaussianBlur stdDeviation="4" result="offset-blur"/>
+      <feComposite operator="out" in="SourceGraphic" in2="offset-blur" result="inverse"/>
+      <feFlood flood-color="black" flood-opacity="0.6" result="color"/>
+      <feComposite operator="in" in="color" in2="inverse" result="shadow"/>
+      <feComposite operator="over" in="shadow" in2="SourceGraphic"/>
+    </filter>
+  </defs>
+
+  <!-- Outer Shadow & Main Outer Chrome Rim -->
+  <circle cx="256" cy="256" r="240" fill="url(#chromeOuter)" filter="url(#dropShadow)"/>
+  
+  <!-- Outer Rim Grooves (Realism details) -->
+  <circle cx="256" cy="256" r="238" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.8"/>
+  <circle cx="256" cy="256" r="216" fill="none" stroke="#3c4043" stroke-width="1.5" opacity="0.4"/>
+
+  <!-- Inner Metallic Bezel -->
+  <circle cx="256" cy="256" r="212" fill="url(#chromeInner)"/>
+  <circle cx="256" cy="256" r="190" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.6"/>
+
+  <!-- Dark Shadow Ring behind the door glass -->
+  <circle cx="256" cy="256" r="184" fill="#202124"/>
+
+  <!-- Washer Drum Glass Window Interior -->
+  <circle cx="256" cy="256" r="176" fill="url(#glassBackdrop)"/>
+
+  <!-- Dynamic Water Wave / Swirl (Bottom & Sides) -->
+  <path d="M 82,270 
+           Q 120,330 180,310 
+           T 320,340 
+           Q 390,320 428,260 
+           A 176,176 0 0,1 82,270 Z" 
+        fill="url(#waterGrad)"/>
+        
+  <path d="M 86,290 
+           Q 140,360 220,325 
+           T 360,350 
+           Q 400,320 424,290 
+           A 176,176 0 0,1 86,290 Z" 
+        fill="#0288d1" opacity="0.25"/>
+
+  <!-- Clean, Bold Typography (Monogram "SA") -->
+  <text x="256" y="285" 
+        font-family="System-UI, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" 
+        font-weight="900" 
+        font-size="132" 
+        letter-spacing="-4"
+        text-anchor="middle" 
+        fill="url(#textGrad)"
+        filter="url(#innerShadow)">SA</text>
+
+  <!-- Soap Bubbles / Foam Detail -->
+  <!-- Bottom Left Bubbles -->
+  <circle cx="120" cy="340" r="10" fill="#ffffff" opacity="0.7"/>
+  <circle cx="123" cy="343" r="3" fill="#e3f2fd" opacity="0.4"/>
+  
+  <circle cx="142" cy="365" r="14" fill="#ffffff" opacity="0.6"/>
+  <circle cx="146" cy="369" r="4" fill="#e3f2fd" opacity="0.5"/>
+  
+  <circle cx="165" cy="348" r="7" fill="#ffffff" opacity="0.8"/>
+  <circle cx="185" cy="375" r="9" fill="#ffffff" opacity="0.5"/>
+
+  <!-- Bottom Right Bubbles -->
+  <circle cx="380" cy="330" r="12" fill="#ffffff" opacity="0.7"/>
+  <circle cx="350" cy="360" r="16" fill="#ffffff" opacity="0.6"/>
+  <circle cx="325" cy="380" r="8" fill="#ffffff" opacity="0.8"/>
+  <circle cx="300" cy="390" r="11" fill="#ffffff" opacity="0.5"/>
+  
+  <!-- Tiny floating micro-bubbles -->
+  <circle cx="230" cy="360" r="4" fill="#ffffff" opacity="0.6"/>
+  <circle cx="265" cy="385" r="5" fill="#ffffff" opacity="0.7"/>
+  <circle cx="110" cy="305" r="5" fill="#ffffff" opacity="0.5"/>
+  <circle cx="405" cy="285" r="6" fill="#ffffff" opacity="0.5"/>
+
+  <!-- Realistic Glass Curved Reflection Highlight (Top Half) -->
+  <path d="M 90,210 
+           A 172,172 0 0,1 422,210 
+           A 176,176 0 0,0 90,210 Z" 
+        fill="url(#glassReflection)"/>
+
+  <!-- Tiny Sharp Glint on Chrome Rim -->
+  <ellipse cx="140" cy="95" rx="35" ry="12" transform="rotate(-40 140 95)" fill="#ffffff" opacity="0.5" filter="blur(2px)"/>
+</svg>

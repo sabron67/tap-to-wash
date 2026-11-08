@@ -7,6 +7,9 @@ const { wrap, phoneKey, validPhone, genRef, cleanText, cleanMultiline } = requir
 const { homePage } = require('../views/public/home');
 const { trackPage } = require('../views/public/track');
 const { termsPage } = require('../views/public/terms');
+const { privacyPage } = require('../views/public/privacy');
+const { notifyEvent } = require('../lib/notify');
+const { toIntl, validWaNumber } = require('../lib/whatsapp');
 const { SLOTS, mediaVersions } = require('../lib/media');
 
 const router = express.Router();
@@ -17,22 +20,61 @@ const trackLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, message: 'Too 
 router.get(
   '/',
   wrap(async (req, res) => {
-    const [settings, media, cats] = await Promise.all([
+    const acc = req.session.account;
+    const again = parseInt(req.query.again, 10);
+    const [settings, media, cats, mine] = await Promise.all([
       getSettings(),
       mediaVersions(),
       pool.query(
         `SELECT id, name, description, icon, color, price, unit
            FROM categories WHERE is_active ORDER BY sort_order, name`
       ),
+      acc ? pool.query('SELECT name, phone FROM accounts WHERE id = $1 AND is_active', [acc.id]) : { rows: [] },
     ]);
-    res.view(homePage({ settings, media }, cats.rows));
+    // Signed-in customers get their details pre-filled, a list of earlier places, and "request again".
+    let personal = null;
+    if (acc && mine.rows.length) {
+      const [places, prev] = await Promise.all([
+        pool.query(
+          `SELECT * FROM (
+             SELECT DISTINCT ON (location_description) location_description, latitude, longitude, created_at
+               FROM requests WHERE account_id = $1 ORDER BY location_description, created_at DESC
+           ) t ORDER BY created_at DESC LIMIT 5`,
+          [acc.id]
+        ),
+        Number.isInteger(again)
+          ? pool.query(
+              `SELECT r.location_description, r.latitude, r.longitude, r.preferred_time,
+                      (SELECT json_agg(json_build_object('category_id', i.category_id, 'quantity', i.quantity)) FROM request_items i WHERE i.request_id = r.id AND i.category_id IS NOT NULL) AS items
+                 FROM requests r WHERE r.id = $1 AND r.account_id = $2`,
+              [again, acc.id]
+            )
+          : { rows: [] },
+      ]);
+      personal = {
+        name: mine.rows[0].name,
+        phone: mine.rows[0].phone,
+        places: places.rows.map((p) => ({ text: p.location_description, lat: p.latitude, lng: p.longitude })),
+        again: prev.rows[0] ? { items: prev.rows[0].items || [], text: prev.rows[0].location_description, lat: prev.rows[0].latitude, lng: prev.rows[0].longitude, time: prev.rows[0].preferred_time } : null,
+        start: req.query.start === '1' || !!prev.rows[0],
+      };
+    }
+    const wa = validWaNumber(settings.whatsapp) ? toIntl(settings.whatsapp) : '';
+    res.view(homePage({ settings, media, account: acc, personal, whatsapp: wa }, cats.rows));
+  })
+);
+
+router.get(
+  '/privacy',
+  wrap(async (req, res) => {
+    res.view(privacyPage({ settings: await getSettings(), account: req.session.account }));
   })
 );
 
 router.get(
   '/terms',
   wrap(async (req, res) => {
-    res.view(termsPage({ settings: await getSettings() }));
+    res.view(termsPage({ settings: await getSettings(), account: req.session.account }));
   })
 );
 
@@ -124,9 +166,9 @@ router.post(
         await client.query('SAVEPOINT ref_try');
         try {
           const ins = await client.query(
-            `INSERT INTO requests (ref_code, customer_id, location_description, notes, latitude, longitude, location_accuracy, preferred_time, terms_version, terms_accepted_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now()) RETURNING id`,
-            [candidate, cust.rows[0].id, locationDescription, notes, lat, lng, accuracy, preferredTime, Number(settings.terms_version) || 1]
+            `INSERT INTO requests (ref_code, customer_id, location_description, notes, latitude, longitude, location_accuracy, preferred_time, terms_version, terms_accepted_at, account_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now(), (SELECT id FROM accounts WHERE id = $10 AND is_active)) RETURNING id`,
+            [candidate, cust.rows[0].id, locationDescription, notes, lat, lng, accuracy, preferredTime, Number(settings.terms_version) || 1, req.session.account ? req.session.account.id : null]
           );
           requestId = ins.rows[0].id;
           ref = candidate;
@@ -149,6 +191,7 @@ router.post(
       await client.query(`INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,'new','Request received','customer')`, [requestId]);
 
       await client.query('COMMIT');
+      notifyEvent('new', requestId, null, settings.business_name); // alerts staff; never throws, not awaited
       res.json({ ok: true, ref });
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
@@ -164,7 +207,7 @@ router.get(
   trackLimit,
   wrap(async (req, res) => {
     const settings = await getSettings();
-    const ctx = { settings };
+    const ctx = { settings, account: req.session.account };
     const ref = cleanText(req.query.ref, 20).toUpperCase();
     const phone = cleanText(req.query.phone, 20);
 

@@ -4,8 +4,9 @@ const { publicLayout } = require('../layouts/public');
 const { themeSwitch } = require('../partials/theme');
 const { icon, svg, categoryIconName } = require('../../lib/icons');
 const { mediaUrl } = require('../../lib/media');
+const { publicTabbar } = require('../partials/tabbar');
 
-function nav(s) {
+function nav(s, account) {
   return html`<header class="nav">
     <a class="brand" href="/"><span>${s.business_name}</span></a>
     <nav class="nav-links" aria-label="Main">
@@ -13,6 +14,7 @@ function nav(s) {
       <a href="#how">How it works</a>
       <a href="/track">Track order</a>
       <a href="#contact">Contact</a>
+      ${account ? html`<a href="/account">My account</a>` : html`<a href="/account/login">Sign in</a>`}
     </nav>
     ${themeSwitch()}
     <button class="btn btn-primary btn-sm" type="button" data-open-wizard>Tap to wash</button>
@@ -41,7 +43,7 @@ function contactBlock(s) {
   return items.length ? html`<ul class="contact-list">${items}</ul>` : html`<p class="muted">Contact details will appear here soon.</p>`;
 }
 
-function wizard() {
+function wizard(signedIn) {
   return html`<div class="modal" id="wizard" hidden>
     <div class="modal-backdrop" data-close></div>
     <div class="modal-card glass-strong" role="dialog" aria-modal="true" aria-labelledby="wizTitle">
@@ -70,6 +72,10 @@ function wizard() {
           <iframe id="mapFrame" title="Your location on the map" loading="lazy"></iframe>
           <button type="button" class="link-btn" id="locClear">Remove shared location</button>
         </div>
+        <label class="field" id="placesBox" hidden>
+          <span>Use a saved place</span>
+          <select id="placesSel"><option value="">Choose an earlier place…</option></select>
+        </label>
         <label class="field">
           <span>Describe where you are <em>*</em></span>
           <textarea id="locDesc" rows="3" maxlength="500" placeholder="e.g. Blue gate opposite the pharmacy, Block B, 3rd floor, door 12"></textarea>
@@ -84,6 +90,7 @@ function wizard() {
         </div>
         <label class="field"><span>Preferred pick-up time</span><input id="fTime" type="text" maxlength="80" placeholder="e.g. Tomorrow morning, after 4 PM"></label>
         <label class="field"><span>Anything we should know?</span><textarea id="fNotes" rows="2" maxlength="1000" placeholder="Stains, delicate fabrics, special care…"></textarea></label>
+        ${signedIn ? '' : html`<p class="muted small guest-hint">Ordering as a guest. <a class="link" href="/account/login?next=/">Sign in</a> or <a class="link" href="/account/signup">create an account</a> to save your details.</p>`}
         <input type="text" id="fWebsite" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
         <div class="summary" id="summary"></div>
         <label class="check"><input type="checkbox" id="fTerms"><span>I have read and accept the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a>. <em>*</em></span></label>
@@ -95,8 +102,10 @@ function wizard() {
         <h3>Request received!</h3>
         <p class="muted">Keep your reference code. We will call you shortly to confirm pick-up.</p>
         <div class="ref-box" id="refBox">—</div>
+        ${signedIn ? '' : html`<p class="muted small" id="acctHint">Want your orders and details saved? <a class="link" href="/account/signup">Create a free account</a> - or keep ordering as a guest.</p>`}
         <div class="success-actions">
           <a class="btn btn-primary" id="trackLink" href="/track">Track my order</a>
+          <a class="btn btn-accent" id="waLink" href="#" target="_blank" rel="noopener" hidden>${icon('message-circle')} Message us on WhatsApp</a>
           <button type="button" class="btn btn-ghost" data-close>Close</button>
         </div>
       </section>
@@ -126,6 +135,9 @@ function homePage(ctx, categories) {
     categories: data,
     currency: s.currency,
     termsVersion: Number(s.terms_version) || 1,
+    business: s.business_name,
+    whatsapp: ctx.whatsapp || '',
+    me: ctx.personal || null,
     ui: {
       pin: svg('map-pin'),
       refresh: svg('refresh-cw'),
@@ -139,7 +151,8 @@ function homePage(ctx, categories) {
   }).replace(/</g, '\\u003c');
 
   const body = html`
-  ${nav(s)}
+  ${nav(s, ctx.account)}
+  ${publicTabbar(ctx, 'home', true)}
 
   <section class="hero" style="${raw(img('hero'))}" aria-label="Welcome">
     <div class="hero-img" role="img" aria-label="Washing machines in a laundry room"></div>
@@ -211,7 +224,7 @@ function homePage(ctx, categories) {
             <p class="muted" style="margin-top:.8rem">${s.tagline}</p>
           </div>
           <div><h4>Contact</h4>${contactBlock(s)}</div>
-          <div><h4>Quick links</h4><ul class="contact-list"><li><a href="/track">Track my order</a></li><li><a href="#categories">Our services</a></li><li><a href="/terms">Terms of Service</a></li><li><a href="/admin">Staff login</a></li></ul></div>
+          <div><h4>Quick links</h4><ul class="contact-list"><li><a href="/track">Track my order</a></li><li><a href="#categories">Our services</a></li><li><a href="/terms">Terms of Service</a></li><li><a href="/privacy">Privacy Notice</a></li><li>${ctx.account ? html`<a href="/account">My account</a>` : html`<a href="/account/login">Customer sign in</a>`}</li></ul></div>
         </div>
         <p class="copy">© ${new Date().getFullYear()} ${s.business_name}. All rights reserved.</p>
       </div>
@@ -223,7 +236,7 @@ function homePage(ctx, categories) {
     <button class="btn btn-primary btn-sm" type="button" data-open-wizard>Tap to wash</button>
   </div>
 
-  ${wizard()}
+  ${wizard(!!ctx.account)}
   <script type="application/json" id="app-data">${raw(json)}</script>`;
 
   return publicLayout(ctx, { body, scripts: raw('<script src="/js/app.js"></script><script src="/js/scroll.js"></script>'), bodyClass: 'public' });

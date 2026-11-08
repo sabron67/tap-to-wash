@@ -2,18 +2,13 @@ const { html } = require('../../lib/html');
 const { fmtDate, STATUS_MAP } = require('../../lib/helpers');
 const { publicLayout } = require('../layouts/public');
 const { timeline } = require('../partials/ui');
-const { themeSwitch } = require('../partials/theme');
+const { pubNav } = require('../partials/pubnav');
 const { icon } = require('../../lib/icons');
 
 function trackPage(ctx, { ref = '', error = '', result = null }) {
   const s = ctx.settings;
   const body = html`
-  <header class="nav scrolled">
-    <a class="brand" href="/"><span>${s.business_name}</span></a>
-    <nav class="nav-links"><a href="/#categories">Services</a><a href="/track">Track order</a><a href="/terms">Terms</a></nav>
-    ${themeSwitch()}
-    <a class="btn btn-primary btn-sm" href="/">Tap to wash</a>
-  </header>
+  ${pubNav(ctx, 'track')}
 
   <main class="container narrow section" style="padding-top:calc(var(--nav-h) + 2.5rem)">
     <div class="section-head">
