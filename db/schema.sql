@@ -184,3 +184,126 @@ CREATE TABLE IF NOT EXISTS password_resets (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS password_resets_lookup_idx ON password_resets(kind, user_id, created_at DESC);
+
+-- ---------- laundry operations suite ----------
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS pickup_scheduled_at TIMESTAMPTZ;
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS delivery_scheduled_at TIMESTAMPTZ;
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS rider_admin_id INTEGER REFERENCES admins(id) ON DELETE SET NULL;
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS branch_id INTEGER;
+
+CREATE TABLE IF NOT EXISTS branches (
+  id SERIAL PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', address TEXT NOT NULL DEFAULT '', is_active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'requests_branch_fk') THEN
+    ALTER TABLE requests ADD CONSTRAINT requests_branch_fk FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS laundry_items (
+  id BIGSERIAL PRIMARY KEY, request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  item_name TEXT NOT NULL, tag_code TEXT NOT NULL UNIQUE, condition_in TEXT NOT NULL DEFAULT 'Good',
+  process_status TEXT NOT NULL DEFAULT 'received', notes TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS laundry_items_request_idx ON laundry_items(request_id, id);
+
+CREATE TABLE IF NOT EXISTS quality_inspections (
+  id BIGSERIAL PRIMARY KEY, request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  checked_by INTEGER REFERENCES admins(id) ON DELETE SET NULL, stain_check BOOLEAN NOT NULL DEFAULT FALSE,
+  count_check BOOLEAN NOT NULL DEFAULT FALSE, damage_check BOOLEAN NOT NULL DEFAULT FALSE,
+  packaging_check BOOLEAN NOT NULL DEFAULT FALSE, passed BOOLEAN NOT NULL DEFAULT FALSE,
+  notes TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS laundry_machines (
+  id SERIAL PRIMARY KEY, name TEXT NOT NULL, machine_type TEXT NOT NULL DEFAULT 'Washer', capacity_kg NUMERIC(8,2),
+  status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available','running','maintenance','inactive')),
+  last_service DATE, notes TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS laundry_batches (
+  id BIGSERIAL PRIMARY KEY, batch_code TEXT NOT NULL UNIQUE, machine_id INTEGER REFERENCES laundry_machines(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','washing','completed','cancelled')),
+  cycle TEXT NOT NULL DEFAULT '', started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ, notes TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS laundry_batch_items (
+  batch_id BIGINT NOT NULL REFERENCES laundry_batches(id) ON DELETE CASCADE,
+  laundry_item_id BIGINT NOT NULL REFERENCES laundry_items(id) ON DELETE CASCADE,
+  PRIMARY KEY(batch_id, laundry_item_id)
+);
+
+CREATE TABLE IF NOT EXISTS expenses (
+  id BIGSERIAL PRIMARY KEY, category TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', amount NUMERIC(12,2) NOT NULL CHECK(amount >= 0),
+  spent_on DATE NOT NULL DEFAULT CURRENT_DATE, recorded_by INTEGER REFERENCES admins(id) ON DELETE SET NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS inventory_items (
+  id SERIAL PRIMARY KEY, name TEXT NOT NULL, unit TEXT NOT NULL DEFAULT 'pcs', quantity NUMERIC(12,2) NOT NULL DEFAULT 0,
+  reorder_level NUMERIC(12,2) NOT NULL DEFAULT 0, unit_cost NUMERIC(12,2) NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS inventory_movements (
+  id BIGSERIAL PRIMARY KEY, inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  quantity_change NUMERIC(12,2) NOT NULL, reason TEXT NOT NULL DEFAULT '', recorded_by INTEGER REFERENCES admins(id) ON DELETE SET NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS customer_complaints (
+  id BIGSERIAL PRIMARY KEY, request_id INTEGER REFERENCES requests(id) ON DELETE SET NULL,
+  customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL, subject TEXT NOT NULL, details TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','investigating','resolved','closed')),
+  resolution TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS discounts (
+  id SERIAL PRIMARY KEY, code TEXT NOT NULL UNIQUE, description TEXT NOT NULL DEFAULT '', discount_type TEXT NOT NULL CHECK(discount_type IN ('percent','fixed')),
+  value NUMERIC(12,2) NOT NULL CHECK(value > 0), min_orders INTEGER NOT NULL DEFAULT 1, starts_at DATE, ends_at DATE,
+  max_uses INTEGER, uses INTEGER NOT NULL DEFAULT 0, is_active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id BIGSERIAL PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  package_name TEXT NOT NULL, price NUMERIC(12,2) NOT NULL CHECK(price >= 0), frequency TEXT NOT NULL DEFAULT 'monthly',
+  starts_on DATE NOT NULL DEFAULT CURRENT_DATE, ends_on DATE, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','expired','cancelled')),
+  notes TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS refunds (
+  id BIGSERIAL PRIMARY KEY, request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  amount NUMERIC(12,2) NOT NULL CHECK(amount > 0), reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','paid')),
+  recorded_by INTEGER REFERENCES admins(id) ON DELETE SET NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS customer_loyalty (
+  customer_id INTEGER PRIMARY KEY REFERENCES customers(id) ON DELETE CASCADE, points INTEGER NOT NULL DEFAULT 0 CHECK(points >= 0), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS loyalty_ledger (
+  id BIGSERIAL PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  request_id INTEGER UNIQUE REFERENCES requests(id) ON DELETE SET NULL, points INTEGER NOT NULL, reason TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS expenses_date_idx ON expenses(spent_on DESC);
+CREATE INDEX IF NOT EXISTS complaints_status_idx ON customer_complaints(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS subscriptions_customer_idx ON subscriptions(customer_id, status);
+
+CREATE OR REPLACE FUNCTION award_laundry_loyalty_points() RETURNS trigger AS $$
+DECLARE earned INTEGER; inserted_count INTEGER;
+BEGIN
+  IF NEW.status = 'delivered' AND OLD.status IS DISTINCT FROM 'delivered' THEN
+    earned := GREATEST(1, FLOOR(COALESCE(NEW.total_amount,0) / 100)::INTEGER);
+    INSERT INTO loyalty_ledger(customer_id, request_id, points, reason)
+      VALUES (NEW.customer_id, NEW.id, earned, 'Points earned for delivered laundry order')
+      ON CONFLICT(request_id) DO NOTHING;
+    GET DIAGNOSTICS inserted_count = ROW_COUNT;
+    IF inserted_count > 0 THEN
+      INSERT INTO customer_loyalty(customer_id, points, updated_at)
+        VALUES (NEW.customer_id, earned, now())
+        ON CONFLICT(customer_id) DO UPDATE SET points = customer_loyalty.points + EXCLUDED.points, updated_at = now();
+    END IF;
+  END IF;
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS requests_loyalty_award ON requests;
+CREATE TRIGGER requests_loyalty_award AFTER UPDATE OF status ON requests
+FOR EACH ROW EXECUTE FUNCTION award_laundry_loyalty_points();
+
+CREATE TABLE IF NOT EXISTS customer_reviews (
+  id BIGSERIAL PRIMARY KEY, request_id INTEGER NOT NULL UNIQUE REFERENCES requests(id) ON DELETE CASCADE,
+  customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5), comment TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS customer_reviews_created_idx ON customer_reviews(created_at DESC);
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS subtotal_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS discount_code TEXT NOT NULL DEFAULT '';
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS dispatch_stage TEXT NOT NULL DEFAULT 'unassigned';

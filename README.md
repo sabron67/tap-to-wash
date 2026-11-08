@@ -26,6 +26,31 @@ Laundry services website — Node.js + Express, PostgreSQL, views written as pla
 
 Payments are intentionally manual for now (admin records the total and amount paid) so online payment can be added later.
 
+## Operations centre (added)
+
+The admin navigation now includes **Operations** for the day-to-day laundry workflow:
+
+- **Garment tracking:** register individual garments against a request, capture their condition on arrival, assign unique tags, and update received / washing / drying / ironing / packed / returned stages.
+- **Order QR codes and receipts:** print an order QR that opens the secure tracking lookup, and print or save a branded order receipt as PDF from the request page. Customers still need their phone number to view order details.
+- **Pickup and delivery:** assign a rider, pickup and delivery date/time, branch and dispatch stage. Pickup/delivery status changes are added to the request history.
+- **Quality control:** record stain, count, damage and packaging checks and whether the order passed inspection.
+- **Machines and batches:** register washers, dryers and ironing stations; monitor availability/maintenance; create wash batches, attach tracked garments and update batch progress.
+- **Expenses and stock:** record operating expenses, add supply items, adjust stock with a reason and identify low-stock items. Export expenses, inventory, reviews and complaints as CSV.
+- **Customer care:** customers can submit a rating or complaint from the order tracking page; staff can update complaint status and record refund requests and their approval/payment status.
+- **Retention and growth:** delivered orders automatically earn one loyalty point per KSh 100 (minimum one point); view customer balances, create discount codes and record weekly/fortnightly/monthly customer packages.
+- **Branches:** create outlets and assign orders to a branch. The current admin view is centralised; branch-specific staff access and per-branch reporting are not yet separated.
+- **Dashboard:** includes overdue scheduled deliveries, monthly operating expenses and machines in maintenance.
+
+Discount codes are applied by staff in the request billing form. The code must be active and within its date/use limits; percentage or fixed discounts are deducted from the entered subtotal. Subscriptions are currently recorded and managed by staff; recurring automatic billing is not included.
+
+All new database objects and columns are created by the existing repeat-safe schema migration. On an existing installation, deploy the updated project and run `npm run db:init` once before restarting the app.
+
+## Database backups
+
+The project includes `npm run db:backup`. It requires PostgreSQL's `pg_dump` utility to be installed on the server and `DATABASE_URL` to be configured. It creates a private custom-format dump in `backups/` and removes dumps older than 14 days by default. Configure `BACKUP_DIR` and `BACKUP_KEEP_DAYS` to change those defaults. Keep the backup directory outside public web roots and restrict server access because dumps contain customer information.
+
+For scheduled backups, run `npm run db:backup` from the project directory using the host's scheduler (for example, a daily cron job). To restore a dump into a prepared database, use `pg_restore --clean --if-exists --no-owner --no-acl --dbname=YOUR_DATABASE backup-file.dump`. Test restores on a separate database before relying on backups.
+
 ## Setup
 
 1. Install Node 18+ and PostgreSQL, then create a database:

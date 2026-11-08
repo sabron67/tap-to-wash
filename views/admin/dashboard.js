@@ -22,6 +22,9 @@ function dashboardPage(ctx, d) {
     ${stat('users', 'Customers', d.customers, 'violet', '/admin/customers')}
     ${stat('wallet', 'Collected this month', money(d.collected, cur), 'pink', '/admin/requests')}
     ${stat('receipt', 'Outstanding balance', money(d.outstanding, cur), 'red', '/admin/requests')}
+    ${stat('truck', 'Overdue deliveries', d.operations.overdue, 'red', '/admin/operations#dispatch')}
+    ${stat('wallet', 'Expenses this month', money(d.operations.expenses, cur), 'pink', '/admin/operations#finance')}
+    ${stat('settings', 'Machines in maintenance', d.operations.machines_maintenance, 'amber', '/admin/operations#machines')}
   </section>
 
   <section class="grid-main">

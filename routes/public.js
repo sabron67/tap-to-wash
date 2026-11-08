@@ -234,7 +234,7 @@ router.get(
     if (!ref || !validPhone(phone)) return res.view(trackPage(ctx, { ref, error: 'Enter both your reference code and phone number.' }));
 
     const found = await pool.query(
-      `SELECT r.id, r.ref_code, r.status, c.phone_key
+      `SELECT r.id, r.ref_code, r.status, r.pickup_scheduled_at, r.delivery_scheduled_at, r.dispatch_stage, c.phone_key
          FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1`,
       [ref]
     );
@@ -243,11 +243,39 @@ router.get(
     }
 
     const r = found.rows[0];
-    const [items, events] = await Promise.all([
+    const [items, events, garments] = await Promise.all([
       pool.query('SELECT category_name, quantity FROM request_items WHERE request_id = $1 ORDER BY id', [r.id]),
       pool.query('SELECT status, note, created_at FROM request_events WHERE request_id = $1 ORDER BY created_at DESC, id DESC', [r.id]),
+      pool.query('SELECT item_name,tag_code,process_status FROM laundry_items WHERE request_id=$1 ORDER BY id',[r.id]),
     ]);
-    res.view(trackPage(ctx, { ref, result: { ref_code: r.ref_code, status: r.status, items: items.rows, events: events.rows } }));
+    res.view(trackPage(ctx, { ref, info: req.query.feedback === 'sent' ? 'Thank you. Your feedback has been received.' : '', result: { ref_code: r.ref_code, status: r.status, items: items.rows, events: events.rows, garments: garments.rows, pickup_scheduled_at:r.pickup_scheduled_at, delivery_scheduled_at:r.delivery_scheduled_at, dispatch_stage:r.dispatch_stage } }));
+  })
+);
+
+router.post(
+  '/track/feedback',
+  trackLimit,
+  wrap(async (req, res) => {
+    const ref = cleanText(req.body.ref, 20).toUpperCase();
+    const phone = cleanText(req.body.phone, 20);
+    const kind = cleanText(req.body.kind, 20);
+    const rating = Number(req.body.rating);
+    const comment = cleanMultiline(req.body.comment, 1500);
+    const found = await pool.query(`SELECT r.id,r.customer_id,c.phone_key FROM requests r JOIN customers c ON c.id=r.customer_id WHERE r.ref_code=$1`, [ref]);
+    if (!found.rows.length || !validPhone(phone) || found.rows[0].phone_key !== phoneKey(phone)) {
+      const settings = await getSettings();
+      return res.status(400).view(trackPage({settings,account:req.session.account},{ref,error:'We could not verify that order. Check the reference code and phone number.'}));
+    }
+    if (!['review','complaint'].includes(kind) || !Number.isInteger(rating) || rating<1 || rating>5 || (!comment.trim() && kind==='complaint')) {
+      const settings = await getSettings();
+      return res.status(400).view(trackPage({settings,account:req.session.account},{ref,error:'Please provide a valid rating and, for a complaint, describe the issue.'}));
+    }
+    if (kind === 'review') {
+      await pool.query(`INSERT INTO customer_reviews(request_id,customer_id,rating,comment) VALUES($1,$2,$3,$4) ON CONFLICT(request_id) DO UPDATE SET rating=EXCLUDED.rating,comment=EXCLUDED.comment,created_at=now()`,[found.rows[0].id,found.rows[0].customer_id,rating,comment]);
+    } else {
+      await pool.query(`INSERT INTO customer_complaints(request_id,customer_id,subject,details) VALUES($1,$2,$3,$4)`,[found.rows[0].id,found.rows[0].customer_id,'Customer complaint',`Rating: ${rating}/5\n${comment}`]);
+    }
+    res.redirect(`/track?ref=${encodeURIComponent(ref)}&phone=${encodeURIComponent(phone)}&feedback=sent`);
   })
 );
 

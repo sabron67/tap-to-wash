@@ -4,3 +4,6 @@ node_modules/
 .DS_Store
 .wwebjs_auth/
 .wwebjs_cache/
+
+# Database backups contain customer information
+backups/

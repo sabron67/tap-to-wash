@@ -242,7 +242,7 @@ router.get(
   '/',
   (req, res, next) => (can(req.session.admin.role, 'dashboard') ? next() : res.redirect('/admin/requests')),
   wrap(async (req, res) => {
-    const [ctx, counts, customers, money, week, recent] = await Promise.all([
+    const [ctx, counts, customers, money, week, recent, operations] = await Promise.all([
       buildCtx(req),
       pool.query(`SELECT
           COUNT(*) FILTER (WHERE status = 'new')::int AS new,
@@ -265,6 +265,10 @@ router.get(
           (SELECT string_agg(i.category_name || ' ×' || i.quantity, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items
         FROM requests r JOIN customers c ON c.id = r.customer_id
         ORDER BY r.created_at DESC LIMIT 8`),
+      pool.query(`SELECT
+        (SELECT COUNT(*)::int FROM requests WHERE status NOT IN ('delivered','cancelled') AND delivery_scheduled_at < now()) AS overdue,
+        (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE date_trunc('month',spent_on::timestamp)=date_trunc('month',CURRENT_DATE::timestamp)) AS expenses,
+        (SELECT COUNT(*)::int FROM laundry_machines WHERE status='maintenance') AS machines_maintenance`),
     ]);
     res.view(
       dashboardPage(ctx, {
@@ -274,6 +278,7 @@ router.get(
         outstanding: money.rows[0].outstanding,
         week: week.rows,
         recent: recent.rows,
+        operations: operations.rows[0],
       })
     );
   })
@@ -370,6 +375,10 @@ router.post(
       return res.redirect('/admin/requests');
     }
     const note = cleanText(req.body.note, 200);
+    if (status === 'ready') {
+      const qc = await pool.query('SELECT passed FROM quality_inspections WHERE request_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1',[id]);
+      if (!qc.rows.length || !qc.rows[0].passed) { flash(req,'error','Complete and pass the quality inspection in Operations before marking this order ready.'); return res.redirect(`/admin/requests/${id}`); }
+    }
     const role = req.session.admin.role;
     const settable = settableStatuses(role);
     const vis = visibleStatuses(role);
@@ -399,14 +408,29 @@ router.post(
   need('billing'),
   wrap(async (req, res) => {
     const id = parseInt(req.params.id, 10);
-    const total = Number(req.body.total_amount);
+    const subtotal = Number(req.body.total_amount);
     const paid = Number(req.body.amount_paid);
-    if (!Number.isInteger(id) || !Number.isFinite(total) || !Number.isFinite(paid) || total < 0 || paid < 0) {
+    const code = cleanText(req.body.discount_code,40).toUpperCase();
+    if (!Number.isInteger(id) || !Number.isFinite(subtotal) || !Number.isFinite(paid) || subtotal < 0 || paid < 0) {
       flash(req, 'error', 'Please enter valid amounts (0 or more).');
       return res.redirect(`/admin/requests/${id}`);
     }
-    await pool.query('UPDATE requests SET total_amount = $1, amount_paid = $2, updated_at = now() WHERE id = $3', [total, paid, id]);
-    await audit(req, 'request_billing', `Request #${id}: total ${total}, paid ${paid}`);
+    let discount = 0;
+    if (code) {
+      const found = await pool.query(`SELECT * FROM discounts WHERE code=$1 AND is_active AND (starts_at IS NULL OR starts_at<=CURRENT_DATE) AND (ends_at IS NULL OR ends_at>=CURRENT_DATE) AND (max_uses IS NULL OR uses<max_uses)`,[code]);
+      const request = await pool.query('SELECT customer_id,discount_code FROM requests WHERE id=$1',[id]);
+      const previousOrders = request.rows.length ? await pool.query(`SELECT COUNT(*)::int AS n FROM requests WHERE customer_id=$1 AND id<>$2 AND status<>'cancelled'`,[request.rows[0].customer_id,id]) : {rows:[{n:0}]};
+      if (!found.rows.length || previousOrders.rows[0].n + 1 < Number(found.rows[0].min_orders)) {
+        flash(req,'error','That discount code is invalid, expired, exhausted or the customer does not meet its minimum-order requirement.');
+        return res.redirect(`/admin/requests/${id}`);
+      }
+      const d=found.rows[0]; discount=d.discount_type==='percent' ? subtotal*Number(d.value)/100 : Number(d.value);
+      discount=Math.min(subtotal,Math.max(0,discount));
+      if (request.rows[0].discount_code !== code) await pool.query('UPDATE discounts SET uses=uses+1 WHERE id=$1',[d.id]);
+    }
+    const total=Math.max(0,subtotal-discount);
+    await pool.query('UPDATE requests SET subtotal_amount=$1,discount_code=$2,discount_amount=$3,total_amount=$4,amount_paid=$5,updated_at=now() WHERE id=$6',[subtotal,code,discount,total,paid,id]);
+    await audit(req, 'request_billing', `Request #${id}: subtotal ${subtotal}, discount ${discount}, total ${total}, paid ${paid}`);
     flash(req, 'success', 'Billing saved.');
     res.redirect(`/admin/requests/${id}`);
   })
@@ -695,5 +719,6 @@ require('./admin-staff')(router, { buildCtx, flash, need });
 require('./admin-notify')(router, { buildCtx, flash, need });
 require('./admin-accounts')(router, { flash, need, customersView });
 require('./admin-whatsapp')(router, { buildCtx, flash, need });
+require('./admin-operations')(router, { buildCtx, flash, need });
 
 module.exports = router;
