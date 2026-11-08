@@ -128,6 +128,46 @@
     });
   });
 
+  // Site icon (favicon): crop to a square, resize to 512 x 512, upload as PNG (keeps transparency)
+  var favBtn = document.getElementById('faviconUpload');
+  var favInput = document.getElementById('faviconInput');
+  var favErr = document.getElementById('faviconErr');
+  if (favBtn && favInput) {
+    var favShow = function (msg) { favErr.textContent = msg || ''; favErr.classList.toggle('show', !!msg); };
+    favBtn.addEventListener('click', function () {
+      favShow('');
+      var file = favInput.files && favInput.files[0];
+      if (!file) return favShow('Choose a picture first.');
+      if (!/^image\//.test(file.type)) return favShow('That file is not a picture.');
+      var reader = new FileReader();
+      reader.onerror = function () { favShow('That picture could not be read.'); };
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var w = img.naturalWidth || img.width || 512, h = img.naturalHeight || img.height || 512;
+          var side = Math.min(w, h), size = 512;
+          var canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          var c = canvas.getContext('2d');
+          c.imageSmoothingQuality = 'high';
+          c.drawImage(img, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
+          canvas.toBlob(function (blob) {
+            if (!blob) return favShow('Could not prepare that picture.');
+            favBtn.disabled = true;
+            fetch('/admin/settings/favicon', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/png', 'X-CSRF-Token': tokenEl ? tokenEl.value : '' }, body: blob })
+              .then(function (r) { return r.json().catch(function () { return {}; }); })
+              .then(function (out) { if (out.ok) window.location.reload(); else { favBtn.disabled = false; favShow(out.error || 'Upload failed.'); } })
+              .catch(function () { favBtn.disabled = false; favShow('Upload failed. Check your connection.'); });
+          }, 'image/png');
+        };
+        img.onerror = function () { favShow('That picture could not be read.'); };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   /* ---------- job alerts: bell, pop-ups, sound, phone push ---------- */
   function csrf() {
     var el = document.querySelector('input[name="_csrf"]');

@@ -33,6 +33,7 @@ function whatsappPage(ctx, { status, myPhone }) {
     </div>
     <div class="row-gap">
       <form method="post" action="/admin/whatsapp/restart" class="inline">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon('refresh-cw')} Restart connection</button></form>
+      <form method="post" action="/admin/whatsapp/repair" class="inline" data-confirm="Reset the WhatsApp encryption sessions? You do not need to scan the QR code again.">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon('shield-check')} Fix “Waiting for this message”</button></form>
       <form method="post" action="/admin/whatsapp/logout" class="inline" data-confirm="Unlink WhatsApp? Automatic alerts and reset codes stop until you scan a new QR code.">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon('log-out')} Unlink</button></form>
     </div>`}
   </section>

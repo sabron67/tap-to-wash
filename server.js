@@ -63,7 +63,7 @@ app.use(async (err, req, res, next) => {
   const clientErr = err && err.status >= 400 && err.status < 500;
   if (!clientErr) console.error(err);
   if (res.headersSent) return;
-  if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/admin/photos')) {
+  if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/admin/photos') || req.originalUrl.startsWith('/admin/settings/favicon')) {
     return res.status(clientErr ? err.status : 500).json({ ok: false, error: clientErr ? 'That request could not be processed (too large or malformed).' : 'Something went wrong. Please try again.' });
   }
   const settings = await getSettings().catch(() => ({ business_name: 'Tap to Wash', tagline: '' }));

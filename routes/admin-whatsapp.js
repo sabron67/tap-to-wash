@@ -31,6 +31,18 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     })
   );
 
+  // Fixes "Waiting for this message" without scanning a new QR code: forget the saved encryption sessions and reconnect.
+  router.post(
+    '/whatsapp/repair',
+    need('settings'),
+    wrap(async (req, res) => {
+      wa.repair().catch(() => {});
+      await audit(req, 'whatsapp_repair', 'WhatsApp encryption sessions reset');
+      flash(req, 'success', 'Repairing the WhatsApp connection. Wait a few seconds, then send a test message.');
+      res.redirect('/admin/whatsapp');
+    })
+  );
+
   router.post(
     '/whatsapp/logout',
     need('settings'),

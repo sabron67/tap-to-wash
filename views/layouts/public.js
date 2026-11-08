@@ -9,7 +9,8 @@ function head(title, settings, description) {
 <meta name="theme-color" content="#fbf9f4" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#fbf9f4" data-dynamic>
 <script src="/js/boot.js"></script>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/site-icon${settings.icon_v ? `?v=${settings.icon_v}` : ''}">
+${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${settings.icon_v}">` : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">

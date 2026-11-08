@@ -172,6 +172,45 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     })
   );
 
+  /* ---------- site icon (favicon), kept in the database ---------- */
+  const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const PNG_END = Buffer.from([0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]);
+
+  router.post(
+    '/settings/favicon',
+    need('settings'),
+    express.raw({ type: 'image/png', limit: '1mb' }),
+    wrap(async (req, res) => {
+      const buf = req.body;
+      if (!Buffer.isBuffer(buf) || buf.length < 100) return res.status(400).json({ ok: false, error: 'No image received.' });
+      // Only a real PNG file: correct signature and ending, and a square picture (the browser prepares a 512 x 512 one).
+      if (!buf.subarray(0, 8).equals(PNG_SIG) || !buf.subarray(buf.length - 12).equals(PNG_END)) {
+        return res.status(400).json({ ok: false, error: 'Only PNG pictures are accepted here. Choose the file again.' });
+      }
+      const w = buf.readUInt32BE(16);
+      const h = buf.readUInt32BE(20);
+      if (w !== h || w < 32 || w > 1024) return res.status(400).json({ ok: false, error: 'The icon must be a square picture.' });
+      await pool.query(
+        `INSERT INTO media (slot, mime, data, updated_at) VALUES ('favicon', 'image/png', $1, now())
+         ON CONFLICT (slot) DO UPDATE SET mime = EXCLUDED.mime, data = EXCLUDED.data, updated_at = now()`,
+        [buf]
+      );
+      await audit(req, 'favicon_upload', `${w}x${h} (${Math.round(buf.length / 1024)} KB)`);
+      res.json({ ok: true });
+    })
+  );
+
+  router.post(
+    '/settings/favicon/reset',
+    need('settings'),
+    wrap(async (req, res) => {
+      await pool.query(`DELETE FROM media WHERE slot = 'favicon'`);
+      await audit(req, 'favicon_reset', 'Back to the built-in icon');
+      flash(req, 'success', 'Site icon reset to the built-in icon.');
+      res.redirect('/admin/settings');
+    })
+  );
+
   /* ---------- activity log ---------- */
   router.get(
     '/activity',

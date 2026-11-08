@@ -13,8 +13,8 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(d.title || 'Tap to Wash', {
       body: d.body || '',
       tag: d.tag || undefined,
-      icon: '/favicon.svg',
-      badge: '/favicon.svg',
+      icon: '/site-icon',
+      badge: '/site-icon',
       data: { url: d.url || '/admin/notifications' },
     })
   );

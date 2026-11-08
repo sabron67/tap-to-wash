@@ -98,6 +98,25 @@ router.get(
   })
 );
 
+// Site icon (favicon): the PNG the admin uploaded in Settings (stored in PostgreSQL), otherwise the built-in public/favicon.svg.
+// /favicon.ico and /apple-touch-icon.png are asked for by browsers and phones without reading the page, so they serve the same icon.
+async function siteIcon(req, res) {
+  const { rows } = await pool.query(`SELECT mime, data, updated_at FROM media WHERE slot = 'favicon'`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  if (!rows.length) {
+    if (req.path !== '/site-icon') return res.status(404).end();
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.sendFile(path.join(__dirname, '..', 'public', 'favicon.svg'));
+  }
+  const etag = `"favicon-${Math.floor(new Date(rows[0].updated_at).getTime() / 1000)}"`;
+  res.setHeader('ETag', etag);
+  // URLs with ?v=<version> never change, so they can be cached for a year; bare URLs are re-checked hourly.
+  res.setHeader('Cache-Control', req.query.v ? 'public, max-age=31536000, immutable' : 'public, max-age=3600');
+  if (req.headers['if-none-match'] === etag) return res.status(304).end();
+  res.type(rows[0].mime).send(rows[0].data);
+}
+router.get(['/site-icon', '/favicon.ico', '/apple-touch-icon.png'], wrap(siteIcon));
+
 // Customer taps to wash -> this creates the request.
 router.post(
   '/api/requests',
