@@ -60,8 +60,21 @@ router.get(
       };
     }
     const wa = validWaNumber(settings.whatsapp) ? toIntl(settings.whatsapp) : '';
-    const branches = settings.branches_enabled === '1' ? (await pool.query('SELECT id, name, address FROM branches WHERE is_active ORDER BY name')).rows : [];
-    res.view(homePage({ settings, media, account: acc, personal, whatsapp: wa, branches }, cats.rows));
+    const branches = settings.branches_enabled === '1' ? (await pool.query('SELECT id, name, address, phone FROM branches WHERE is_active ORDER BY name')).rows : [];
+    // Home screen extras: the signed-in customer's latest order ("Recent laundry") and the shop's average review rating.
+    const [recentQ, ratingQ] = await Promise.all([
+      acc
+        ? pool.query(
+            `SELECT r.ref_code, r.status, r.created_at,
+                    (SELECT string_agg(i.category_name, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items
+               FROM requests r WHERE r.account_id = $1 ORDER BY r.created_at DESC LIMIT 1`,
+            [acc.id]
+          )
+        : { rows: [] },
+      pool.query('SELECT ROUND(AVG(rating)::numeric, 1) AS avg, COUNT(*)::int AS n FROM customer_reviews').catch(() => ({ rows: [] })),
+    ]);
+    const rating = ratingQ.rows[0] && ratingQ.rows[0].n > 0 ? { avg: Number(ratingQ.rows[0].avg), count: ratingQ.rows[0].n } : null;
+    res.view(homePage({ settings, media, account: acc, personal, whatsapp: wa, branches, recent: recentQ.rows[0] || null, rating }, cats.rows));
   })
 );
 

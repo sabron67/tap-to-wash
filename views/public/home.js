@@ -1,5 +1,5 @@
 const { html, raw } = require('../../lib/html');
-const { money } = require('../../lib/helpers');
+const { money, STATUS_MAP } = require('../../lib/helpers');
 const { publicLayout } = require('../layouts/public');
 const { themeSwitch } = require('../partials/theme');
 const { icon, svg, categoryIconName } = require('../../lib/icons');
@@ -22,12 +22,59 @@ function nav(s, account) {
 }
 
 function categoryCard(c, currency) {
-  const price = c.price !== null && c.price !== undefined ? `From ${money(c.price, currency)} / ${c.unit}` : 'Price on request';
-  return html`<article class="cat-card glass" data-id="${c.id}" style="--c:${c.color}" tabindex="0" role="button" aria-pressed="false" aria-label="Select ${c.name}">
-    <span class="cat-icon">${icon(categoryIconName(c.icon))}</span>
-    <h3>${c.name}</h3>
-    <p>${c.description}</p>
-    <div class="cat-foot"><span class="price">${price}</span><span class="cat-check" aria-hidden="true">${icon('plus')}</span></div>
+  const price = c.price !== null && c.price !== undefined ? `Start from ${money(c.price, currency)} / ${c.unit}` : 'Price on request';
+  return html`<article class="cat-card svc-card" data-id="${c.id}" data-name="${String(c.name).toLowerCase()}" style="--c:${c.color}" tabindex="0" role="button" aria-pressed="false" aria-label="Select ${c.name}">
+    <div class="svc-pic"><span class="cat-icon">${icon(categoryIconName(c.icon))}</span></div>
+    <div class="svc-body">
+      <h3>${c.name}</h3>
+      <p>${c.description}</p>
+      <div class="cat-foot"><span class="svc-price">${price}</span><span class="cat-check" aria-hidden="true">${icon('plus')}</span></div>
+    </div>
+  </article>`;
+}
+
+// Order progress shown on the "Recent laundry" card: four steps mapped from the real order statuses.
+const PROGRESS = [
+  { label: 'Confirmed' },
+  { label: 'Picked up' },
+  { label: 'Washing' },
+  { label: 'Delivery' },
+];
+const DONE_COUNT = { new: 0, confirmed: 1, picked_up: 2, washing: 2, ready: 3, delivered: 4 };
+
+function recentCard(recent, s) {
+  if (!recent) {
+    return html`<div class="recent-card recent-empty">
+      <div class="recent-top"><div><h3>No laundry in progress</h3><p>Tap to wash and we will come to you.</p></div></div>
+      <div class="recent-actions"><button class="btn btn-primary btn-sm" type="button" data-open-wizard>Tap to wash</button><a class="btn btn-light btn-sm" href="/track">Track an order</a></div>
+    </div>`;
+  }
+  const st = STATUS_MAP[recent.status] || { label: recent.status };
+  const cancelled = recent.status === 'cancelled';
+  const done = DONE_COUNT[recent.status] ?? 0;
+  const when = new Date(recent.created_at).toLocaleString('en-KE', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Africa/Nairobi' });
+  return html`<a class="recent-card" href="/track?ref=${recent.ref_code}" aria-label="Track order ${recent.ref_code}">
+    <div class="recent-top">
+      <div><h3>${recent.ref_code}</h3><p>${when}${recent.items ? ` · ${recent.items}` : ''}</p></div>
+      <span class="recent-pill">${st.label}</span>
+    </div>
+    ${cancelled
+      ? ''
+      : html`<ol class="recent-steps">${PROGRESS.map((p, i) => html`<li class="${i < done ? 'done' : i === done && recent.status !== 'delivered' ? 'now' : ''}"><span class="dot">${i < done ? icon('check') : ''}</span>${p.label}</li>`)}</ol>`}
+  </a>`;
+}
+
+function branchCard(b, rating, imgStyle) {
+  return html`<article class="branch-card">
+    <div class="branch-pic" style="${raw(imgStyle)}" role="img" aria-label="${b.name} branch"><span class="branch-tag">${icon('store')} Branch</span></div>
+    <div class="branch-body">
+      <h3>${b.name}</h3>
+      <p class="branch-meta">${icon('map-pin')} ${b.address || 'Address coming soon'}</p>
+      <div class="branch-foot">
+        ${rating ? html`<span class="rate">${icon('star')} ${rating.avg.toFixed(1)} <small>(${rating.count})</small></span>` : html`<span></span>`}
+        ${b.phone ? html`<a class="btn btn-ghost btn-sm" href="tel:${b.phone}">${icon('phone')} Call</a>` : ''}
+      </div>
+    </div>
   </article>`;
 }
 
@@ -130,6 +177,7 @@ function homePage(ctx, categories) {
   const s = ctx.settings;
   const mv = ctx.media || {};
   const img = (slot) => `--img:url(${mediaUrl(slot, mv)})`;
+  const firstName = String((ctx.personal && ctx.personal.name) || '').trim().split(/\s+/)[0] || 'Guest';
   const data = categories.map((c) => ({
     id: c.id,
     name: c.name,
@@ -165,40 +213,56 @@ function homePage(ctx, categories) {
   ${nav(s, ctx.account)}
   ${publicTabbar(ctx, 'home', true)}
 
-  <section class="hero" style="${raw(img('hero'))}" aria-label="Welcome">
-    <div class="hero-img" role="img" aria-label="Washing machines in a laundry room"></div>
-    <div class="hero-inner container">
-      <div class="hero-panel">
-        <span class="pill">${icon('droplets')} Pick-up &amp; delivery laundry</span>
-        <h1>${s.tagline}</h1>
-        <p class="lead">${s.about}</p>
-        <div class="hero-actions">
-          <button class="btn btn-primary tap-btn" type="button" id="tapScene" data-open-wizard>Tap to wash</button>
-          <a class="btn btn-ghost btn-lg" href="#categories">See our services</a>
+  <header class="home-head">
+    <div class="container">
+      <div class="home-top">
+        <div class="home-who">
+          <p class="home-hi">Welcome, <b>${firstName}</b></p>
+          <p class="home-loc">${icon('map-pin')} <span>${s.address || s.business_name}</span></p>
         </div>
-        <ul class="hero-points">
-          <li>${icon('zap')} Fast turnaround</li>
-          <li>${icon('truck')} We come to you</li>
-          <li>${icon('sparkles')} Fresh &amp; folded</li>
-        </ul>
+        <div class="home-tools">
+          <span class="home-theme">${themeSwitch()}</span>
+        ${ctx.account
+          ? html`<a class="home-avatar" href="/account" aria-label="My account" title="My account"><span>${firstName.charAt(0).toUpperCase()}</span>${ctx.recent && ctx.recent.status !== 'delivered' && ctx.recent.status !== 'cancelled' ? html`<i class="dot" aria-hidden="true"></i>` : ''}</a>`
+          : html`<a class="home-login" href="/account/login">${icon('user-round')}<span>Sign in</span></a>`}
+        </div>
+      </div>
+      <label class="home-search">
+        ${icon('search')}
+        <input id="svcSearch" type="search" placeholder="Search laundry services" autocomplete="off" aria-label="Search laundry services" aria-controls="catGrid">
+      </label>
+      <div class="home-banner" style="${raw(img('hero'))}" role="img" aria-label="Washing machines in a laundry room">
+        <div class="home-banner-txt"><b>${s.tagline}</b><span>${icon('truck')} We come to you</span></div>
       </div>
     </div>
-    <a class="scroll-cue" href="#categories" aria-label="Scroll to services">${icon('chevron-down')}</a>
-  </section>
+  </header>
 
-  <main class="sheet">
-    <section class="band has-img" id="categories" style="${raw(img('services'))}">
+  <main class="sheet home-sheet">
+    <section class="home-sec" id="recent">
       <div class="container">
-        <div class="section-head on-img rv">
-          <span class="pill">Step 1</span>
-          <h2>What would you like washed?</h2>
-          <p class="muted">Select one or more services, then tap to wash.</p>
-        </div>
-        ${categories.length
-          ? html`<div class="cat-grid" id="catGrid" data-stagger>${categories.map((c) => categoryCard(c, s.currency))}</div>`
-          : html`<div class="empty glass rv"><div class="big">${icon('shopping-basket')}</div><p>Our services are being set up. Please check back soon!</p></div>`}
+        <div class="sec-row"><h2>Recent laundry</h2><a href="${ctx.account ? '/account' : '/track'}">See all ${icon('chevron-right')}</a></div>
+        ${recentCard(ctx.recent, s)}
       </div>
     </section>
+
+    <section class="home-sec" id="categories">
+      <div class="container">
+        <div class="sec-row"><h2>Our services</h2><span class="sec-hint">Tap to select</span></div>
+        ${categories.length
+          ? html`<div class="svc-rail" id="catGrid">${categories.map((c) => categoryCard(c, s.currency))}</div><p class="muted small svc-none" id="svcNone" hidden>No service matches your search.</p>`
+          : html`<div class="empty glass"><div class="big">${icon('shopping-basket')}</div><p>Our services are being set up. Please check back soon!</p></div>`}
+        <button class="btn btn-primary btn-block tap-btn home-tap" type="button" data-open-wizard>Tap to wash</button>
+      </div>
+    </section>
+
+    ${(ctx.branches || []).length
+      ? html`<section class="home-sec" id="branches">
+      <div class="container">
+        <div class="sec-row"><h2>Our branches</h2></div>
+        <div class="svc-rail branch-rail">${ctx.branches.map((b) => branchCard(b, ctx.rating, img('hero')))}</div>
+      </div>
+    </section>`
+      : ''}
 
     <section class="band has-img alt" id="how" style="${raw(img('how'))}">
       <div class="container">
@@ -250,7 +314,7 @@ function homePage(ctx, categories) {
   ${wizard(!!ctx.account, ctx.branches || [])}
   <script type="application/json" id="app-data">${raw(json)}</script>`;
 
-  return publicLayout(ctx, { body, scripts: raw('<script src="/js/app.js"></script><script src="/js/scroll.js"></script>'), bodyClass: 'public' });
+  return publicLayout(ctx, { body, scripts: raw('<script src="/js/app.js"></script><script src="/js/home.js"></script><script src="/js/scroll.js"></script>'), bodyClass: 'public home' });
 }
 
 module.exports = { homePage };
