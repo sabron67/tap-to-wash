@@ -9,6 +9,7 @@ const { passwordProblem } = require('../lib/password');
 const { wrap, STATUS_MAP, cleanText, cleanMultiline } = require('../lib/helpers');
 const { categoryIconName } = require('../lib/icons');
 const { can, roleOf, visibleStatuses, settableStatuses } = require('../lib/roles');
+const { pickupBlocker, GATED_TARGETS } = require('../lib/bill');
 const { ROUTES, eventFor, notifyEvent, recipientsFor, teamMessage, customerMessage, HEADLINES } = require('../lib/notify');
 const { waLink, canSend: waCanSend } = require('../lib/whatsapp');
 
@@ -89,7 +90,7 @@ async function buildCtx(req) {
 router.get(
   '/login',
   wrap(async (req, res) => {
-    if (req.session.admin) return res.redirect('/admin');
+    if (req.session.admin) return res.redirect(can(req.session.admin.role, 'dashboard') ? '/admin' : '/admin/requests');
     res.view(loginPage(await buildCtx(req)));
   })
 );
@@ -157,7 +158,7 @@ const STAFF_SENT = `We have sent a 6-digit code to the WhatsApp number saved on 
 router.get(
   '/forgot',
   wrap(async (req, res) => {
-    if (req.session.admin) return res.redirect('/admin');
+    if (req.session.admin) return res.redirect(can(req.session.admin.role, 'dashboard') ? '/admin' : '/admin/requests');
     res.view(forgotPage(await buildCtx(req), 'admin'));
   })
 );
@@ -180,7 +181,7 @@ router.post(
 router.get(
   '/reset',
   wrap(async (req, res) => {
-    if (req.session.admin) return res.redirect('/admin');
+    if (req.session.admin) return res.redirect(can(req.session.admin.role, 'dashboard') ? '/admin' : '/admin/requests');
     res.view(resetPage(await buildCtx(req), 'admin', { email: cleanText(req.query.email, 120) }));
   })
 );
@@ -241,7 +242,7 @@ const need = (perm) =>
 // ---------- dashboard ----------
 router.get(
   '/',
-  (req, res, next) => (can(req.session.admin.role, 'dashboard') ? next() : res.redirect('/admin/requests')),
+  need('dashboard'),
   wrap(async (req, res) => {
     const [ctx, counts, customers, money, week, recent, operations] = await Promise.all([
       buildCtx(req),
@@ -268,8 +269,7 @@ router.get(
         ORDER BY r.created_at DESC LIMIT 8`),
       pool.query(`SELECT
         (SELECT COUNT(*)::int FROM requests WHERE status NOT IN ('delivered','cancelled') AND delivery_scheduled_at < now()) AS overdue,
-        (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE date_trunc('month',spent_on::timestamp)=date_trunc('month',CURRENT_DATE::timestamp)) AS expenses,
-        (SELECT COUNT(*)::int FROM laundry_machines WHERE status='maintenance') AS machines_maintenance`),
+        (SELECT COALESCE(SUM(amount),0) FROM expenses WHERE date_trunc('month',spent_on::timestamp)=date_trunc('month',CURRENT_DATE::timestamp)) AS expenses`),
     ]);
     res.view(
       dashboardPage(ctx, {
@@ -331,7 +331,7 @@ router.get(
   wrap(async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return next();
-    const [ctx, reqRes, items, events] = await Promise.all([
+    const [ctx, reqRes, items, payments, events] = await Promise.all([
       buildCtx(req),
       pool.query(
         `SELECT r.*, c.name AS customer_name, c.phone AS customer_phone, b.name AS branch_name
@@ -339,11 +339,12 @@ router.get(
         [id]
       ),
       pool.query(
-        `SELECT i.category_name, i.quantity, cat.price
+        `SELECT i.id, i.category_name, i.quantity, i.unit, i.rate, i.measured_qty, i.line_total, cat.unit AS cat_unit, cat.price
            FROM request_items i LEFT JOIN categories cat ON cat.id = i.category_id
           WHERE i.request_id = $1 ORDER BY i.id`,
         [id]
       ),
+      pool.query('SELECT id, amount, method, reference, recorded_by, reconciled, created_at FROM payments WHERE request_id = $1 ORDER BY id', [id]),
       pool.query('SELECT status, note, created_by, created_at FROM request_events WHERE request_id = $1 ORDER BY created_at DESC, id DESC', [id]),
     ]);
     if (!reqRes.rows.length) return next();
@@ -353,15 +354,17 @@ router.get(
     const r = reqRes.rows[0];
     const biz = ctx.settings.business_name;
     const itemsText = items.rows.map((i) => `${i.category_name} x${i.quantity}`).join(', ');
+    const base = (process.env.BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    const trackLink = `${base}/track?ref=${encodeURIComponent(r.ref_code)}&phone=${encodeURIComponent(r.customer_phone)}`;
     const event = eventFor(r.status, r.total_amount, r.amount_paid);
     const team = ctx.can('dispatch') && event ? await recipientsFor(event) : [];
     const wa = {
-      customer: waLink(r.customer_phone, customerMessage(r, biz)),
+      customer: waLink(r.customer_phone, customerMessage(r, biz, trackLink)),
       headline: event ? HEADLINES[event] : '',
       auto: waCanSend(),
       team: team.map((p) => ({ name: p.name, role: p.role, phone: p.phone, link: p.phone ? waLink(p.phone, teamMessage(event, { ...r, items: itemsText }, biz)) : '' })),
     };
-    res.view(requestDetailPage(ctx, { r, items: items.rows, events: events.rows, estimate, wa }));
+    res.view(requestDetailPage(ctx, { r, items: items.rows, payments: payments.rows, events: events.rows, estimate, wa }));
   })
 );
 
@@ -388,7 +391,15 @@ router.post(
       flash(req, 'error', 'Your role cannot set that status.');
       return res.redirect(`/admin/requests/${id}`);
     }
-    const before = await pool.query('SELECT status FROM requests WHERE id = $1', [id]);
+    const before = await pool.query('SELECT status, bill_status, total_amount, amount_paid, pay_later FROM requests WHERE id = $1', [id]);
+    // Leaving New / Confirmed for pick-up or later needs a weighed, customer-confirmed and paid (or pay-later) bill.
+    if (before.rows.length && GATED_TARGETS.includes(status) && ['new', 'confirmed'].includes(before.rows[0].status)) {
+      const why = pickupBlocker(before.rows[0]);
+      if (why) {
+        flash(req, 'error', why);
+        return res.redirect(`/admin/requests/${id}`);
+      }
+    }
     const upd = await pool.query(
       'UPDATE requests SET status = $1, updated_at = now() WHERE id = $2 AND ($3::text[] IS NULL OR status = ANY($3::text[])) RETURNING id, total_amount, amount_paid',
       [status, id, vis]
@@ -412,6 +423,11 @@ router.post(
     const subtotal = Number(req.body.total_amount);
     const paid = Number(req.body.amount_paid);
     const code = cleanText(req.body.discount_code,40).toUpperCase();
+    const bs = Number.isInteger(id) ? await pool.query('SELECT bill_status FROM requests WHERE id = $1', [id]) : { rows: [] };
+    if (!bs.rows.length || bs.rows[0].bill_status !== 'legacy') {
+      flash(req, 'error', 'Prices now come from the weighed bill. Use the Bill section on this request.');
+      return res.redirect(`/admin/requests/${id}`);
+    }
     if (!Number.isInteger(id) || !Number.isFinite(subtotal) || !Number.isFinite(paid) || subtotal < 0 || paid < 0) {
       flash(req, 'error', 'Please enter valid amounts (0 or more).');
       return res.redirect(`/admin/requests/${id}`);
@@ -442,7 +458,17 @@ router.post(
   need('notes'),
   wrap(async (req, res) => {
     const id = parseInt(req.params.id, 10);
-    await pool.query('UPDATE requests SET admin_notes = $1, updated_at = now() WHERE id = $2', [cleanMultiline(req.body.admin_notes, 2000), id]);
+    if (!Number.isInteger(id)) return res.redirect('/admin/requests');
+    const vis = visibleStatuses(req.session.admin.role); // null = every status
+    const upd = await pool.query(
+      'UPDATE requests SET admin_notes = $1, updated_at = now() WHERE id = $2 AND ($3::text[] IS NULL OR status = ANY($3::text[])) RETURNING id',
+      [cleanMultiline(req.body.admin_notes, 2000), id, vis]
+    );
+    if (!upd.rows.length) {
+      await audit(req, 'access_denied', `Notes on request #${id}`);
+      flash(req, 'error', 'That request is not one of your jobs.');
+      return res.redirect('/admin/requests');
+    }
     flash(req, 'success', 'Notes saved.');
     res.redirect(`/admin/requests/${id}`);
   })
@@ -733,5 +759,6 @@ require('./admin-notify')(router, { buildCtx, flash, need });
 require('./admin-accounts')(router, { flash, need, customersView });
 require('./admin-whatsapp')(router, { buildCtx, flash, need });
 require('./admin-operations')(router, { buildCtx, flash, need });
+require('./admin-billing')(router, { flash, need });
 
 module.exports = router;

@@ -1,9 +1,42 @@
 const { html } = require('../../lib/html');
-const { fmtDate, STATUS_MAP } = require('../../lib/helpers');
+const { fmtDate, STATUS_MAP, money } = require('../../lib/helpers');
 const { publicLayout } = require('../layouts/public');
 const { timeline } = require('../partials/ui');
 const { pubNav } = require('../partials/pubnav');
 const { icon } = require('../../lib/icons');
+
+// The bill the customer reviews after their laundry is weighed or counted.
+function billCard(ctx, result) {
+  const b = result.bill;
+  const cur = ctx.settings.currency;
+  const qty = (n) => Number(n).toLocaleString('en-KE', { maximumFractionDigits: 2 });
+  const balance = Math.max(0, Number(b.total) - Number(b.paid));
+  const hidden = html`<input type="hidden" name="ref" value="${result.ref_code}"><input type="hidden" name="phone" value="${result.phone || ''}"><input type="hidden" name="version" value="${b.version}">`;
+  return html`<section class="glass pad bill-card" id="bill">
+    <h3>Your bill</h3>
+    <p class="muted small">${b.status === 'awaiting_confirm' ? 'We weighed or counted your laundry. Please check the bill and confirm it.' : b.status === 'confirmed' ? 'You confirmed this bill.' : 'You queried this bill. We will check it and send you a new one.'}</p>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Service</th><th>Measured</th><th>Rate</th><th>Amount</th></tr></thead><tbody>
+      ${b.lines.map((l) => html`<tr><td data-label="Service">${l.category_name}</td><td data-label="Measured">${qty(l.measured_qty)} ${l.unit || 'item'}</td><td data-label="Rate">${money(l.rate, cur)}</td><td data-label="Amount">${money(l.line_total, cur)}</td></tr>`)}
+    </tbody></table></div>
+    <div class="bill-totals">
+      <div><span>Subtotal</span><strong>${money(b.subtotal, cur)}</strong></div>
+      ${Number(b.discount) > 0 ? html`<div><span>Discount (${b.discount_code})</span><strong>− ${money(b.discount, cur)}</strong></div>` : ''}
+      <div class="hl"><span>Total</span><strong>${money(b.total, cur)}</strong></div>
+      ${b.status === 'confirmed' ? html`<div><span>Paid</span><strong>${money(b.paid, cur)}</strong></div><div class="${balance > 0 ? 'due' : ''}"><span>Balance</span><strong>${money(balance, cur)}</strong></div>` : ''}
+    </div>
+    ${b.status === 'awaiting_confirm'
+      ? html`<div class="bill-actions">
+        <form method="post" action="/track/bill">${hidden}<input type="hidden" name="action" value="confirm"><button class="btn btn-primary" type="submit">${icon('circle-check')} Confirm this bill</button></form>
+        <details><summary class="btn btn-ghost">Something looks wrong</summary>
+          <form method="post" action="/track/bill" class="stack">${hidden}<input type="hidden" name="action" value="dispute">
+            <label class="field"><span>What should we check?</span><textarea name="comment" rows="2" maxlength="300" placeholder="e.g. I also gave two bedsheets"></textarea></label>
+            <button class="btn btn-ghost" type="submit">Send to the team</button></form>
+        </details>
+      </div>`
+      : ''}
+    ${b.status === 'confirmed' && balance > 0 ? html`<p class="muted small">${b.pay_later ? 'You can pay on delivery.' : 'Pay the rider in cash or by M-Pesa. Your rider will take your laundry once payment is received.'}</p>` : ''}
+  </section>`;
+}
 
 function trackPage(ctx, { ref = '', error = '', result = null, info = '' }) {
   const s = ctx.settings;
@@ -35,6 +68,7 @@ function trackPage(ctx, { ref = '', error = '', result = null, info = '' }) {
           </div>
           ${timeline(result.status)}
           ${result.receipt_href ? html`<p><a class="btn btn-primary" href="${result.receipt_href}">${icon('receipt')} View receipt</a></p>` : ''}
+          ${result.bill ? billCard(ctx, result) : ''}
           <h3>Items</h3>
           <ul class="plain-list">${result.items.map((i) => html`<li>${i.category_name} <strong>× ${i.quantity}</strong></li>`)}</ul>
           ${result.pickup_scheduled_at || result.delivery_scheduled_at || result.dispatch_stage ? html`<h3>Collection and delivery</h3><p class="muted small">${result.dispatch_stage ? `Dispatch: ${result.dispatch_stage} · ` : ''}${result.pickup_scheduled_at ? `Pickup scheduled: ${fmtDate(result.pickup_scheduled_at)}` : ''}${result.delivery_scheduled_at ? ` · Delivery scheduled: ${fmtDate(result.delivery_scheduled_at)}` : ''}</p>` : ''}

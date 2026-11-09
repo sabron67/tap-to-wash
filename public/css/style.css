@@ -870,7 +870,7 @@ button, a, input, select, summary, .cat-card, .pick { touch-action: manipulation
 .home-hi { font-size: 1.1rem; letter-spacing: .01em; }
 .home-search { box-shadow: 0 2px 6px rgba(40, 20, 8, .12); border-color: transparent; }
 .home-banner { height: clamp(170px, 30vw, 300px); border: 0; border-radius: 20px; box-shadow: 0 10px 24px rgba(40, 20, 8, .28); }
-.home-banner-txt { left: 50%; right: auto; transform: translateX(-50%); align-items: center; text-align: center; border: 0; box-shadow: 0 4px 12px rgba(40, 20, 8, .2); border-radius: 14px; padding: .7rem 1rem; }
+.home-banner-txt { border: 0; box-shadow: 0 4px 12px rgba(40, 20, 8, .2); border-radius: 14px; padding: .7rem 1rem; }
 .home-banner-txt b { font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 1.08rem; letter-spacing: -.005em; }
 .home-sheet { margin-top: -2.4rem; padding-top: 1.7rem; border-radius: 26px 26px 0 0; }
 .home-sec { padding-bottom: 1.9rem; }
@@ -944,3 +944,63 @@ button, a, input, select, summary, .cat-card, .pick { touch-action: manipulation
 .svc-band::before { opacity: .3; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .svc-band::before { opacity: .14; } }
 :root[data-theme='dark'] .svc-band::before { opacity: .14; }
+
+/* ---------- admin menu drawer on phones: the menu list scrolls, Sign out stays pinned and reachable ---------- */
+@media (max-width: 860px) {
+  .sidebar { top: .8rem; bottom: auto; height: calc(100vh - 1.6rem); height: calc(100dvh - 1.6rem); max-height: calc(100dvh - 1.6rem); overflow: hidden; gap: .8rem; padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom)); }
+  .sidebar .side-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding-right: 2px; }
+  .sidebar .side-foot { flex: none; margin-top: 0; padding-top: .8rem; border-top: 1px solid var(--line); }
+  .sidebar .side-foot .btn { min-height: 44px; }
+  body.menu-open { overflow: hidden; }
+}
+/* very short screens (phone on its side): scroll the whole drawer instead */
+@media (max-width: 860px) and (max-height: 520px) {
+  .sidebar { overflow-y: auto; overscroll-behavior: contain; }
+  .sidebar .side-nav { flex: none; overflow: visible; }
+}
+@media (max-width: 860px) { .sidebar .brand { flex: none; } }
+
+/* centering: banner tagline, section headings, first section under the header */
+.home-banner-txt { left: 50%; right: auto; bottom: .9rem; transform: translateX(-50%); align-items: center; text-align: center; width: max-content; max-width: calc(100% - 1.4rem); }
+.home-banner-txt span { justify-content: center; }
+.svc-band .sec-row.on-bg { margin-inline: auto; justify-content: center; text-align: center; }
+#branches .sec-row { justify-content: center; text-align: center; }
+.home-sheet > .svc-band:first-child { margin-top: -1.7rem; padding-top: 2.6rem; border-top: 0; border-radius: 26px 26px 0 0; }
+@media (min-width: 721px) { .home-sheet > .svc-band:first-child { margin-top: -2.8rem; border-radius: 32px 32px 0 0; padding-top: 3.4rem; } }
+@media (max-width: 720px) {
+  .home .footer-grid { text-align: center; justify-items: center; }
+  .home .footer .contact-list li { justify-content: center; }
+}
+
+/* ---------- Weigh -> bill -> confirm -> payment ---------- */
+.bill-panel .bill-steps { list-style: none; padding: 0; margin: 0 0 .8rem; display: flex; gap: .5rem; flex-wrap: wrap; }
+.bill-steps li { display: flex; align-items: center; gap: .5rem; padding: .45rem .8rem; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); font-size: .85rem; color: var(--muted); }
+.bill-steps li span { display: inline-flex; width: 1.4rem; height: 1.4rem; border-radius: 50%; align-items: center; justify-content: center; background: var(--line); color: var(--text); font-size: .75rem; font-weight: 700; }
+.bill-steps li.done { color: var(--text); border-color: var(--ok); }
+.bill-steps li.done span { background: var(--ok); color: #fff; }
+.bill-ok, .bill-wait { display: flex; align-items: center; gap: .5rem; margin: .3rem 0 1rem; font-weight: 600; }
+.bill-ok { color: var(--ok); }
+.bill-wait { color: var(--muted); font-weight: 500; }
+.bill-form { margin-top: 1rem; padding-top: .5rem; border-top: 1px dashed var(--line); }
+.bill-lines { display: grid; gap: .6rem; margin: .6rem 0 1rem; }
+.bill-line { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem .9rem; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.bill-line > span:first-child { display: grid; gap: .1rem; }
+.bill-input { display: inline-flex; align-items: center; gap: .4rem; }
+.bill-input input { width: 6.5rem; text-align: right; font-size: 1.15rem; font-weight: 600; }
+.bill-input em { font-style: normal; color: var(--muted); font-size: .85rem; min-width: 2.2rem; }
+.bill-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .6rem; margin: 1rem 0; }
+.bill-totals > div { padding: .7rem .9rem; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); display: grid; gap: .15rem; }
+.bill-totals span { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.bill-totals strong { font-size: 1.15rem; }
+.bill-totals .hl { background: var(--accent); border-color: var(--accent); color: #fff; }
+.bill-totals .hl span { color: inherit; opacity: .85; }
+.bill-totals .due strong { color: #c0392b; }
+.bill-inline { margin-top: .8rem; display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.bill-inline input { flex: 1 1 14rem; }
+.bill-reopen { margin-top: 1rem; }
+.bill-reopen summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+@media (max-width: 720px) { .bill-line { flex-direction: column; align-items: stretch; } .bill-input { justify-content: space-between; } .bill-input input { width: 100%; } }
+
+/* customer bill card on the tracking page */
+.bill-card { border: 2px solid var(--accent); }
+.bill-card .bill-actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: 1rem; }

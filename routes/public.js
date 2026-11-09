@@ -267,7 +267,8 @@ router.get(
     if (!ref || !validPhone(phone)) return res.view(trackPage(ctx, { ref, error: 'Enter both your reference code and phone number.' }));
 
     const found = await pool.query(
-      `SELECT r.id, r.ref_code, r.status, r.pickup_scheduled_at, r.delivery_scheduled_at, r.dispatch_stage, c.phone_key
+      `SELECT r.id, r.ref_code, r.status, r.pickup_scheduled_at, r.delivery_scheduled_at, r.dispatch_stage, c.phone_key,
+            r.bill_status, r.bill_version, r.subtotal_amount, r.discount_code, r.discount_amount, r.total_amount, r.amount_paid, r.pay_later
          FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1`,
       [ref]
     );
@@ -277,10 +278,62 @@ router.get(
 
     const r = found.rows[0];
     const [items, events] = await Promise.all([
-      pool.query('SELECT category_name, quantity FROM request_items WHERE request_id = $1 ORDER BY id', [r.id]),
+      pool.query('SELECT category_name, quantity, unit, measured_qty, rate, line_total FROM request_items WHERE request_id = $1 ORDER BY id', [r.id]),
       pool.query('SELECT status, note, created_at FROM request_events WHERE request_id = $1 ORDER BY created_at DESC, id DESC', [r.id]),
     ]);
-    res.view(trackPage(ctx, { ref, info: req.query.feedback === 'sent' ? 'Thank you. Your feedback has been received.' : '', result: { ref_code: r.ref_code, status: r.status, items: items.rows, events: events.rows, pickup_scheduled_at:r.pickup_scheduled_at, delivery_scheduled_at:r.delivery_scheduled_at, dispatch_stage:r.dispatch_stage } }));
+    // The bill is shown to the customer once the laundry has been weighed and priced.
+    const billed = ['awaiting_confirm', 'confirmed', 'disputed'].includes(r.bill_status) && items.rows.length && items.rows.every((i) => i.measured_qty !== null && i.line_total !== null);
+    const bill = billed
+      ? {
+          status: r.bill_status,
+          version: r.bill_version,
+          lines: items.rows,
+          subtotal: r.subtotal_amount,
+          discount_code: r.discount_code,
+          discount: r.discount_amount,
+          total: r.total_amount,
+          paid: r.amount_paid,
+          pay_later: r.pay_later,
+        }
+      : null;
+    const infoMsg = req.query.bill === 'confirmed' ? 'Thank you. Your bill is confirmed.' : req.query.bill === 'queried' ? 'Thank you. We have noted your question and will check the bill with you.' : req.query.bill === 'stale' ? 'Your bill was updated while you were looking at it. Please review it again.' : req.query.feedback === 'sent' ? 'Thank you. Your feedback has been received.' : '';
+    res.view(trackPage(ctx, { ref, info: infoMsg, result: { ref_code: r.ref_code, status: r.status, items: items.rows, events: events.rows, pickup_scheduled_at:r.pickup_scheduled_at, delivery_scheduled_at:r.delivery_scheduled_at, dispatch_stage:r.dispatch_stage, bill, phone } }));
+  })
+);
+
+// Customer confirms or queries the bill that the rider's weighing produced.
+router.post(
+  '/track/bill',
+  trackLimit,
+  wrap(async (req, res) => {
+    const ref = cleanText(req.body.ref, 20).toUpperCase();
+    const phone = cleanText(req.body.phone, 20);
+    const action = req.body.action === 'dispute' ? 'dispute' : req.body.action === 'confirm' ? 'confirm' : '';
+    const found = await pool.query(`SELECT r.id, r.status, r.bill_status, r.bill_version, c.phone_key, c.name FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1`, [ref]);
+    if (!found.rows.length || !validPhone(phone) || found.rows[0].phone_key !== phoneKey(phone) || !action) {
+      const settings = await getSettings();
+      return res.status(400).view(trackPage({ settings, account: req.session.account, accountPhone: await savedPhone(req) }, { ref, error: 'We could not verify that order. Check the reference code and phone number.' }));
+    }
+    const r = found.rows[0];
+    const back = (flag) => res.redirect(`/track?ref=${encodeURIComponent(ref)}&phone=${encodeURIComponent(phone)}&bill=${flag}`);
+    if (r.bill_status !== 'awaiting_confirm' || Number(req.body.version) !== r.bill_version) return back('stale');
+    const business = (await getSettings()).business_name;
+    if (action === 'confirm') {
+      const upd = await pool.query(
+        "UPDATE requests SET bill_status='confirmed', bill_confirmed_at=now(), bill_confirmed_by='Customer', updated_at=now() WHERE id=$1 AND bill_status='awaiting_confirm' AND bill_version=$2 RETURNING id",
+        [r.id, r.bill_version]
+      );
+      if (!upd.rows.length) return back('stale');
+      await pool.query('INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,$2,$3,$4)', [r.id, r.status, 'Bill confirmed by the customer.', 'Customer']);
+      notifyEvent('bill_confirmed', r.id, null, business);
+      return back('confirmed');
+    }
+    const comment = cleanText(req.body.comment, 300);
+    const upd = await pool.query("UPDATE requests SET bill_status='disputed', updated_at=now() WHERE id=$1 AND bill_status='awaiting_confirm' AND bill_version=$2 RETURNING id", [r.id, r.bill_version]);
+    if (!upd.rows.length) return back('stale');
+    await pool.query('INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,$2,$3,$4)', [r.id, r.status, comment ? `Customer queried the bill: ${comment}` : 'Customer queried the bill.', 'Customer']);
+    notifyEvent('bill_disputed', r.id, null, business);
+    return back('queried');
   })
 );
 

@@ -18,6 +18,7 @@ function receiptPage(ctx, { request, items, backHref, backLabel }) {
   const back = backHref || `/admin/requests/${request.id}`;
 
   const priced = (i) => i.price != null && Number(i.price) > 0;
+  const weighed = (i) => i.measured_qty != null && i.line_total != null;
   return html`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="robots" content="noindex,nofollow"><title>Receipt ${request.ref_code}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/receipt.css"></head><body class="rc-solo"><div class="rc">
   <header class="rc-banner">
     <div class="rc-brand"><span class="rc-mark">${icon('washing-machine')}</span><div><b>${s.business_name}</b>${s.address ? html`<small>${s.address}</small>` : ''}${s.phone || s.email ? html`<small>${[s.phone, s.email].filter(Boolean).join(' · ')}</small>` : ''}</div></div>
@@ -34,7 +35,7 @@ function receiptPage(ctx, { request, items, backHref, backLabel }) {
       : html`<div class="rc-chips" aria-label="Order progress">${FLOW.map((k, i) => html`<span class="rc-chip ${i < idx ? 'done' : i === idx ? 'now' : ''}">${i < idx ? icon('check') : i === idx ? icon(STATUS_MAP[k].icon) : ''} ${STATUS_MAP[k].label}</span>`)}</div>`}
 
     <h2 class="rc-h">Order items <small>${items.length} ${items.length === 1 ? 'service' : 'services'}</small></h2>
-    <ul class="rc-rows">${items.map((i) => html`<li class="rc-row"><span class="rc-thumb">${icon(i.icon && has(i.icon) ? i.icon : 'shopping-basket')}</span><div class="rc-nm"><b>${i.category_name}</b>${priced(i) ? html`<small>${money(i.price, cur)} per ${i.unit || 'item'}</small>` : ''}</div><span class="rc-qty">× ${i.quantity}</span>${priced(i) ? html`<span class="rc-lt">${money(Number(i.price) * Number(i.quantity), cur)}</span>` : ''}</li>`)}</ul>
+    <ul class="rc-rows">${items.map((i) => html`<li class="rc-row"><span class="rc-thumb">${icon(i.icon && has(i.icon) ? i.icon : 'shopping-basket')}</span>${weighed(i) ? html`<div class="rc-nm"><b>${i.category_name}</b><small>${money(i.rate, cur)} per ${i.line_unit || i.unit || 'item'}</small></div><span class="rc-qty">${Number(i.measured_qty).toLocaleString('en-KE', { maximumFractionDigits: 2 })} ${i.line_unit || i.unit || 'item'}</span><span class="rc-lt">${money(i.line_total, cur)}</span>` : html`<div class="rc-nm"><b>${i.category_name}</b>${priced(i) ? html`<small>${money(i.price, cur)} per ${i.unit || 'item'}</small>` : ''}</div><span class="rc-qty">× ${i.quantity}</span>${priced(i) ? html`<span class="rc-lt">${money(Number(i.price) * Number(i.quantity), cur)}</span>` : ''}`}</li>`)}</ul>
 
     <h2 class="rc-h">Customer and delivery</h2>
     <div class="rc-info">

@@ -49,6 +49,19 @@ Removed as unnecessary: garment-level tracking, machines and wash batches, custo
 
 After updating run `npm install` (adds `compression`) and `npm run db:init` once.
 
+## Weigh, bill, confirm and pay (stage 1)
+
+Payment now happens at pick-up, after the laundry is measured. Payments are recorded by hand (cash, or the M-Pesa code from the customer's SMS); automatic M-Pesa STK Push can be added later on the same flow.
+
+1. **Rider weighs or counts** each service on the request page (kg for weighed services such as `kg`, whole counts for `item`, `pair` and so on). The rider never sees prices. The app prices the lines from the category rate (snapshotted on the order), applies any discount code and creates the bill.
+2. **Customer confirms** on the tracking page (`/track`, reference code + phone). They see weights, rates and the total, and can **Confirm** or flag a problem. The rider is told to collect. A cashier or manager can **confirm on the customer's behalf** (with the reason recorded).
+3. **Payment is recorded** (cash, or a 10-character M-Pesa code that can only be used once) by the rider, cashier or manager. The cashier or manager later marks each payment **received**.
+4. **Pick-up is gated:** "Picked up" (and later statuses) is refused until the order is weighed, confirmed and paid, or a manager has approved **pay later**.
+
+Other rules: only a manager or owner can **re-open** a confirmed bill to weigh again (earlier payments stay on the order); a service with no price puts the bill in "needs price" and alerts the manager; manual billing is only used for orders that were already under way when this was switched on (marked `legacy`, never blocked). New permissions in `lib/roles.js`: `weigh`, `collect`, `billadmin`. New alert events in `lib/notify.js`: `bill_confirmed` (rider), `bill_disputed` and `bill_needs_price` (manager).
+
+After updating run `npm run db:init` (adds columns and the `payments` table; safe to repeat).
+
 ## Database backups
 
 The project includes `npm run db:backup`. It requires PostgreSQL's `pg_dump` utility to be installed on the server and `DATABASE_URL` to be configured. It creates a private custom-format dump in `backups/` and removes dumps older than 14 days by default. Configure `BACKUP_DIR` and `BACKUP_KEEP_DAYS` to change those defaults. Keep the backup directory outside public web roots and restrict server access because dumps contain customer information.

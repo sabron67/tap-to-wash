@@ -3,6 +3,7 @@ const { STATUSES, STATUS_MAP, FLOW, nextStatus, money, fmtDate, mapsLink } = req
 const { adminLayout } = require('../layouts/admin');
 const { csrfField, statusBadge, paymentBadge, timeline, pager } = require('../partials/ui');
 const { icon } = require('../../lib/icons');
+const { billPanel } = require('./bill');
 
 function requestsPage(ctx, { rows, total, page, pages, status, q, tabCounts }) {
   const cur = ctx.settings.currency;
@@ -57,7 +58,7 @@ function requestsPage(ctx, { rows, total, page, pages, status, q, tabCounts }) {
   return adminLayout(ctx, { title: 'Requests', active: 'requests', body });
 }
 
-function requestDetailPage(ctx, { r, items, events, estimate, wa }) {
+function requestDetailPage(ctx, { r, items, payments = [], events, estimate, wa }) {
   const cur = ctx.settings.currency;
   const nxt = nextStatus(r.status);
   const balance = Math.max(0, Number(r.total_amount) - Number(r.amount_paid));
@@ -90,6 +91,8 @@ function requestDetailPage(ctx, { r, items, events, estimate, wa }) {
     </div>`}
   </section>
 
+
+  ${billPanel(ctx, { r, items, payments, wa })}
 
   ${wa.team.length
     ? html`<section class="glass pad">
@@ -124,7 +127,7 @@ function requestDetailPage(ctx, { r, items, events, estimate, wa }) {
       <h2>Items to wash</h2>
       <ul class="plain-list large">${items.map((i) => html`<li>${i.category_name} <strong>× ${i.quantity}</strong></li>`)}</ul>
 
-      ${ctx.can('billing') ? html`<h2>Billing</h2>
+      ${ctx.can('billing') && r.bill_status === 'legacy' ? html`<h2>Billing</h2>
       <form method="post" action="/admin/requests/${r.id}/billing" class="stack">
         ${csrfField(ctx)}
         <div class="grid-2">

@@ -253,3 +253,37 @@ ALTER TABLE requests ADD COLUMN IF NOT EXISTS subtotal_amount NUMERIC(12,2) NOT 
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS discount_code TEXT NOT NULL DEFAULT '';
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
 ALTER TABLE requests ADD COLUMN IF NOT EXISTS dispatch_stage TEXT NOT NULL DEFAULT 'unassigned';
+
+-- ---------- Weigh -> bill -> customer confirms -> payment (stage 1) ----------
+-- Quantities measured by the rider. request_items.quantity stays the customer's estimate / order count.
+ALTER TABLE request_items ADD COLUMN IF NOT EXISTS unit         TEXT;
+ALTER TABLE request_items ADD COLUMN IF NOT EXISTS rate         NUMERIC(12,2);
+ALTER TABLE request_items ADD COLUMN IF NOT EXISTS measured_qty NUMERIC(10,2);
+ALTER TABLE request_items ADD COLUMN IF NOT EXISTS line_total   NUMERIC(12,2);
+
+-- bill_status: none | needs_price | awaiting_confirm | confirmed | disputed | legacy
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS bill_status       TEXT        NOT NULL DEFAULT 'none';
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS bill_version      INTEGER     NOT NULL DEFAULT 0;
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS bill_confirmed_at TIMESTAMPTZ;
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS bill_confirmed_by TEXT        NOT NULL DEFAULT '';
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS weighed_by        TEXT        NOT NULL DEFAULT '';
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS weighed_at        TIMESTAMPTZ;
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS pay_later         BOOLEAN     NOT NULL DEFAULT FALSE;
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS pay_later_by      TEXT        NOT NULL DEFAULT '';
+
+-- Orders that were already past pick-up before this feature existed are never blocked by it.
+UPDATE requests SET bill_status = 'legacy' WHERE bill_status = 'none' AND status NOT IN ('new', 'confirmed');
+
+CREATE TABLE IF NOT EXISTS payments (
+  id          SERIAL PRIMARY KEY,
+  request_id  INTEGER       NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  amount      NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  method      TEXT          NOT NULL CHECK (method IN ('cash', 'mpesa')),
+  reference   TEXT          NOT NULL DEFAULT '',
+  recorded_by TEXT          NOT NULL DEFAULT '',
+  reconciled  BOOLEAN       NOT NULL DEFAULT FALSE,
+  created_at  TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS payments_request_idx ON payments(request_id);
+-- The same M-Pesa confirmation code can never be counted twice.
+CREATE UNIQUE INDEX IF NOT EXISTS payments_mpesa_ref_uq ON payments(reference) WHERE method = 'mpesa';

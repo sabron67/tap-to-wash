@@ -310,7 +310,7 @@ router.get(
       [ref, req.acc.id]
     );
     if (!rows.length) return next();
-    const items = await pool.query('SELECT i.category_name, i.quantity, c.icon, c.price, c.unit FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 ORDER BY i.id', [rows[0].id]);
+    const items = await pool.query('SELECT i.category_name, i.quantity, i.measured_qty, i.rate, i.line_total, i.unit AS line_unit, c.icon, c.price, c.unit FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 ORDER BY i.id', [rows[0].id]);
     const ctx = await pubCtx(req);
     res.view(receiptPage(ctx, { request: rows[0], items: items.rows, backHref: `/account/requests/${ref}`, backLabel: 'Back' }));
   })

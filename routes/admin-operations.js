@@ -1,6 +1,7 @@
 const { pool } = require('../config/db');
 const { wrap, cleanText, cleanMultiline } = require('../lib/helpers');
 const { audit } = require('../lib/audit');
+const { visibleStatuses } = require('../lib/roles');
 const { operationsPage } = require('../views/admin/operations');
 const { notifyEvent } = require('../lib/notify');
 const { getSettings } = require('../lib/settings');
@@ -87,9 +88,11 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     const [ctx, request, items] = await Promise.all([
       buildCtx(req),
       pool.query(`SELECT r.*, c.name AS customer_name, c.phone AS customer_phone FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.id = $1`, [id]),
-      pool.query('SELECT i.category_name, i.quantity, c.icon, c.price, c.unit FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 ORDER BY i.id', [id]),
+      pool.query('SELECT i.category_name, i.quantity, i.measured_qty, i.rate, i.line_total, i.unit AS line_unit, c.icon, c.price, c.unit FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 ORDER BY i.id', [id]),
     ]);
     if (!request.rows.length) return res.sendStatus(404);
+    const vis = visibleStatuses(req.session.admin.role); // null = every status
+    if (vis && !vis.includes(request.rows[0].status)) return res.sendStatus(404);
     res.view(receiptPage(ctx, { request: request.rows[0], items: items.rows, backHref: `/admin/requests/${id}`, backLabel: 'Back' }));
   }));
 
