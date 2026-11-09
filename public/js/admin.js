@@ -9,6 +9,7 @@
     if (!sidebar) return;
     sidebar.classList.toggle('open', open);
     if (scrim) scrim.classList.toggle('show', open);
+    document.body.classList.toggle('menu-open', open);
   }
   if (menuBtn && sidebar) {
     menuBtn.addEventListener('click', function () {

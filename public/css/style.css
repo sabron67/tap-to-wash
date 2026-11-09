@@ -971,6 +971,7 @@ button, a, input, select, summary, .cat-card, .pick { touch-action: manipulation
   .home .footer-grid { text-align: center; justify-items: center; }
   .home .footer .contact-list li { justify-content: center; }
 }
+<<<<<<< HEAD
 
 /* ---------- Weigh -> bill -> confirm -> payment ---------- */
 .bill-panel .bill-steps { list-style: none; padding: 0; margin: 0 0 .8rem; display: flex; gap: .5rem; flex-wrap: wrap; }
@@ -1004,3 +1005,5 @@ button, a, input, select, summary, .cat-card, .pick { touch-action: manipulation
 /* customer bill card on the tracking page */
 .bill-card { border: 2px solid var(--accent); }
 .bill-card .bill-actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: 1rem; }
+=======
+>>>>>>> 273f702c2677caab470a690dd58998475f6a7611
