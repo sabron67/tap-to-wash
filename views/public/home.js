@@ -99,15 +99,22 @@ function wizard(signedIn, branches = []) {
       </section>
 
       <section class="wiz-pane success" data-pane="done" hidden>
-        <div class="success-burst">${icon('circle-check')}</div>
-        <h3>Request received!</h3>
-        <p class="muted">Keep your reference code. We will call you shortly to confirm pick-up.</p>
-        <div class="ref-box" id="refBox">—</div>
-        ${signedIn ? '' : html`<p class="muted small" id="acctHint">Want your orders and details saved? <a class="link" href="/account/signup">Create a free account</a> - or keep ordering as a guest.</p>`}
-        <div class="success-actions">
-          <a class="btn btn-primary" id="trackLink" href="/track">Track my order</a>
-          <a class="btn btn-accent" id="waLink" href="#" target="_blank" rel="noopener" hidden>${icon('message-circle')} Message us on WhatsApp</a>
-          <button type="button" class="btn btn-ghost" data-close>Close</button>
+        <div class="rc rc-embed">
+          <header class="rc-banner">
+            <div class="rc-brand"><span class="rc-mark">${icon('circle-check')}</span><div><b>Request received!</b><small>Keep your reference code</small></div></div>
+            <span class="rc-ref" id="refBox">—</span>
+          </header>
+          <div class="rc-sheet">
+            <div class="rc-grab" aria-hidden="true"></div>
+            <div id="rcBody"></div>
+            <p class="rc-thanks"><b>We will call you shortly</b>Our rider confirms pick-up by phone.</p>
+            ${signedIn ? '' : html`<p class="rc-hint" id="acctHint">Want your orders and details saved? <a class="link" href="/account/signup">Create a free account</a> - or keep ordering as a guest.</p>`}
+            <div class="rc-actions">
+              <a class="btn btn-primary" id="trackLink" href="/track">${icon('clock')} Track my order</a>
+              <a class="btn btn-accent" id="waLink" href="#" target="_blank" rel="noopener" hidden>${icon('message-circle')} Message us on WhatsApp</a>
+              <button type="button" class="btn btn-ghost" data-close>Close</button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -148,6 +155,9 @@ function homePage(ctx, categories) {
       plus: svg('plus'),
       minus: svg('minus'),
       arrow: svg('arrow-right'),
+      clock: svg('clock'),
+      user: svg('user-round'),
+      phone: svg('phone'),
     },
   }).replace(/</g, '\\u003c');
 

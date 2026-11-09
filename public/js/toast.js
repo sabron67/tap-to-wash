@@ -1,0 +1,48 @@
+// Turns server messages (.flash) into floating toasts: icon, close button, timer bar, auto-dismiss.
+// Errors stay a little longer. Hover or focus pauses the timer. Works without JS too (the message just shows in place).
+(function () {
+  var ICONS = {
+    success: '<path d="M20 6 9 17l-5-5"/>',
+    error: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
+    warn: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>'
+  };
+  var TITLES = { success: 'Done', error: 'Please check', warn: 'Heads up' };
+  var svg = function (d) {
+    return '<svg class="ic" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  };
+
+  function build(el) {
+    if (el.getAttribute('data-toast')) return;
+    el.setAttribute('data-toast', '1');
+    var type = el.classList.contains('error') ? 'error' : el.classList.contains('warn') ? 'warn' : 'success';
+    var msg = el.textContent.trim();
+    var ms = type === 'error' ? 9000 : 6000;
+    el.classList.add('toast-card');
+    el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    el.innerHTML =
+      '<span class="tc-icon">' + svg(ICONS[type]) + '</span>' +
+      '<div class="tc-body"><strong></strong><span></span></div>' +
+      '<button type="button" class="tc-close" aria-label="Dismiss message">' + svg('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>') + '</button>' +
+      '<i class="tc-bar" style="animation-duration:' + ms + 'ms"></i>';
+    el.querySelector('strong').textContent = TITLES[type];
+    el.querySelector('.tc-body span').textContent = msg;
+
+    var timer;
+    var close = function () {
+      clearTimeout(timer);
+      el.classList.add('hide');
+      setTimeout(function () { el.remove(); }, 400);
+    };
+    var start = function () { clearTimeout(timer); el.classList.remove('paused'); timer = setTimeout(close, ms); };
+    var pause = function () { clearTimeout(timer); el.classList.add('paused'); };
+    el.querySelector('.tc-close').addEventListener('click', close);
+    el.addEventListener('mouseenter', pause);
+    el.addEventListener('mouseleave', start);
+    el.addEventListener('focusin', pause);
+    el.addEventListener('focusout', start);
+    start();
+  }
+
+  function init() { document.querySelectorAll('.flash').forEach(build); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();

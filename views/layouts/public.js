@@ -14,7 +14,9 @@ ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.pn
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/style.css">`;
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/receipt.css">
+<script src="/js/toast.js" defer></script>`;
 }
 
 function publicLayout(ctx, { title = '', body, scripts = '', bodyClass = '' }) {

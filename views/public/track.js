@@ -20,7 +20,7 @@ function trackPage(ctx, { ref = '', error = '', result = null, info = '' }) {
     <form class="glass pad" method="get" action="/track">
       <div class="grid-2">
         <label class="field"><span>Reference code</span><input name="ref" value="${ref}" placeholder="TTW-XXXXXX" maxlength="20" required autocapitalize="characters"></label>
-        <label class="field"><span>Phone number</span><input name="phone" type="tel" placeholder="0712 345 678" maxlength="20" required></label>
+        <label class="field"><span>Phone number</span><input name="phone" type="tel" placeholder="0712 345 678" maxlength="20" value="${ctx.accountPhone || ''}" autocomplete="tel" required></label>
       </div>
       <button class="btn btn-primary" type="submit">Check status</button>
       ${error ? html`<p class="err show">${error}</p>` : ''}
@@ -34,12 +34,13 @@ function trackPage(ctx, { ref = '', error = '', result = null, info = '' }) {
             <div class="result-status" style="--bc:${STATUS_MAP[result.status].color}">${STATUS_MAP[result.status].icon} ${STATUS_MAP[result.status].label}</div>
           </div>
           ${timeline(result.status)}
+          ${result.receipt_href ? html`<p><a class="btn btn-primary" href="${result.receipt_href}">${icon('receipt')} View receipt</a></p>` : ''}
           <h3>Items</h3>
           <ul class="plain-list">${result.items.map((i) => html`<li>${i.category_name} <strong>× ${i.quantity}</strong></li>`)}</ul>
           ${result.pickup_scheduled_at || result.delivery_scheduled_at || result.dispatch_stage ? html`<h3>Collection and delivery</h3><p class="muted small">${result.dispatch_stage ? `Dispatch: ${result.dispatch_stage} · ` : ''}${result.pickup_scheduled_at ? `Pickup scheduled: ${fmtDate(result.pickup_scheduled_at)}` : ''}${result.delivery_scheduled_at ? ` · Delivery scheduled: ${fmtDate(result.delivery_scheduled_at)}` : ''}</p>` : ''}
           <h3>Updates</h3>
           <ul class="events">${result.events.map((e) => html`<li><span class="ev-dot"></span><div><strong>${STATUS_MAP[e.status] ? STATUS_MAP[e.status].label : e.status}</strong><span class="muted small"> · ${fmtDate(e.created_at)}</span>${e.note ? html`<p class="muted small">${e.note}</p>` : ''}</div></li>`)}</ul>
-          <form class="glass pad feedback-form" method="post" action="/track/feedback"><h3>Feedback and support</h3><input type="hidden" name="ref" value="${result.ref_code}"><label class="field"><span>Phone number used for this order</span><input name="phone" type="tel" required></label><label class="field"><span>Feedback type</span><select name="kind"><option value="review">Rate my laundry service</option><option value="complaint">Report a problem</option></select></label><label class="field"><span>Rating (1–5)</span><select name="rating"><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Poor</option><option value="1">1 - Very poor</option></select></label><label class="field"><span>Comment / issue details</span><textarea name="comment" rows="3" maxlength="1500"></textarea></label><button class="btn btn-primary" type="submit">Send feedback</button></form>
+          <form class="glass pad feedback-form" method="post" action="/track/feedback"><h3>Feedback and support</h3><input type="hidden" name="ref" value="${result.ref_code}"><label class="field"><span>Phone number used for this order</span><input name="phone" type="tel" value="${ctx.accountPhone || ''}" autocomplete="tel" required></label><label class="field"><span>Feedback type</span><select name="kind"><option value="review">Rate my laundry service</option><option value="complaint">Report a problem</option></select></label><label class="field"><span>Rating (1–5)</span><select name="rating"><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Poor</option><option value="1">1 - Very poor</option></select></label><label class="field"><span>Comment / issue details</span><textarea name="comment" rows="3" maxlength="1500"></textarea></label><button class="btn btn-primary" type="submit">Send feedback</button></form>
         </section>`
       : ''}
   </main>`;

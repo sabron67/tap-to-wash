@@ -21,7 +21,7 @@ const { settingsPage } = require('../views/admin/settings');
 const { accountPage } = require('../views/admin/account');
 const { forbiddenPage } = require('../views/admin/forbidden');
 const { forgotPage, resetPage } = require('../views/public/reset');
-const { requestCode, completeReset, TTL_MINUTES } = require('../lib/reset');
+const { requestCode, completeReset, problemMessage, TTL_MINUTES } = require('../lib/reset');
 
 const router = express.Router();
 router.use(adminNoCache);
@@ -152,7 +152,7 @@ router.post(
 
 // ---------- forgot / reset password (code sent by WhatsApp to the number on the staff account) ----------
 const STAFF_UNAVAILABLE = 'Automatic reset codes are not available right now (WhatsApp is not linked). Ask the owner to reset your password under Staff.';
-const STAFF_SENT = `If that email belongs to a staff account with a WhatsApp number saved, we have sent a 6-digit code. It works for ${TTL_MINUTES} minutes.`;
+const STAFF_SENT = `We have sent a 6-digit code to the WhatsApp number saved on your staff account. It works for ${TTL_MINUTES} minutes.`;
 
 router.get(
   '/forgot',
@@ -171,6 +171,7 @@ router.post(
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return res.status(400).view(forgotPage(ctx, 'admin', { error: 'Please enter a valid email address.', email }));
     const r = await requestCode('admin', email, ctx.settings.business_name);
     await audit(req, 'password_reset_requested', `Code requested for ${email}`.slice(0, 120), { email });
+    if (r.problem) return res.status(r.problem === 'wait' ? 429 : 400).view(forgotPage(ctx, 'admin', { error: problemMessage(r.problem, 'admin'), email }));
     if (!r.available) return res.view(forgotPage(ctx, 'admin', { error: STAFF_UNAVAILABLE, email }));
     res.view(resetPage(ctx, 'admin', { info: STAFF_SENT, email }));
   })

@@ -295,6 +295,44 @@
     );
   });
 
+
+  /* ---------- "Request received" receipt ---------- */
+  function renderReceipt(name, phone) {
+    const box = $('#rcBody');
+    if (!box) return;
+    let total = 0;
+    let hasPrice = false;
+    let count = 0;
+    const rows = selectedIds().map((id) => {
+      const c = byId.get(id);
+      const q = state.items[id];
+      count += q;
+      const priced = c.price !== null;
+      if (priced) { total += c.price * q; hasPrice = true; }
+      return '<li class="rc-row"><span class="rc-thumb">' + c.icon + '</span><div class="rc-nm"><b>' + esc(c.name) + '</b>' +
+        (priced ? '<small>' + money(c.price) + ' per ' + esc(c.unit) + '</small>' : '<small>Price on request</small>') + '</div>' +
+        '<span class="rc-qty">× ' + q + '</span>' + (priced ? '<span class="rc-lt">' + money(c.price * q) + '</span>' : '') + '</li>';
+    });
+    const when = new Date().toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
+    const loc = ($('#locDesc').value || '').trim();
+    const pref = ($('#fTime').value || '').trim();
+    const info = (ico, label, val) => '<div>' + ico + '<span><small>' + label + '</small><b>' + esc(val) + '</b></span></div>';
+    const steps = ['New', 'Confirmed', 'Picked up', 'Washing', 'Ready', 'Delivered'];
+    box.innerHTML =
+      '<div class="rc-title"><h2 style="margin:0;font-size:1.28rem">Order receipt</h2><span class="rc-badge">Received</span></div>' +
+      '<p class="rc-sub"><span>' + ui.clock + ' ' + esc(when) + '</span><span>' + count + (count === 1 ? ' item' : ' items') + '</span></p>' +
+      '<div class="rc-chips" aria-label="Order progress">' + steps.map((t, i) => '<span class="rc-chip' + (i === 0 ? ' now' : '') + '">' + esc(t) + '</span>').join('') + '</div>' +
+      '<h3 class="rc-h">Order items <small>' + rows.length + (rows.length === 1 ? ' service' : ' services') + '</small></h3><ul class="rc-rows">' + rows.join('') + '</ul>' +
+      '<h3 class="rc-h">Your details</h3><div class="rc-info">' +
+      info(ui.user, 'Name', name) + info(ui.phone, 'Phone', phone) + info(ui.pin, 'Pick-up location' + (state.lat !== null ? ' (shared on map)' : ''), loc || 'Shared location') +
+      (pref ? info(ui.clock, 'Preferred pick-up time', pref) : '') + '</div>' +
+      '<section class="rc-total" aria-label="Estimate">' +
+      (hasPrice
+        ? '<div class="rc-big" style="border-top:0;margin-top:0;padding-top:0"><span>Estimated total</span><strong>' + money(total) + '</strong></div><p class="rc-note">Final price is confirmed after weighing or inspection.</p>'
+        : '<div class="rc-big" style="border-top:0;margin-top:0;padding-top:0"><span>Price</span><strong>To be confirmed</strong></div><p class="rc-note">We will confirm the price after weighing or inspection.</p>') +
+      '<div class="rc-tags"><span class="rc-tag solid">Received</span><span class="rc-tag">Awaiting confirmation</span></div></section>';
+  }
+
   /* ---------- submit ---------- */
   async function submit() {
     if (state.sending) return;
@@ -331,6 +369,7 @@
       const out = await res.json().catch(() => ({}));
       if (!res.ok || !out.ok) throw new Error(out.error || 'Something went wrong. Please try again.');
       $('#refBox').textContent = out.ref;
+      renderReceipt(name, phone);
       $('#trackLink').href = me ? '/account/requests/' + encodeURIComponent(out.ref) : '/track?ref=' + encodeURIComponent(out.ref);
       const wa = $('#waLink');
       if (wa && data.whatsapp) {

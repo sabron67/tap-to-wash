@@ -87,10 +87,10 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     const [ctx, request, items] = await Promise.all([
       buildCtx(req),
       pool.query(`SELECT r.*, c.name AS customer_name, c.phone AS customer_phone FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.id = $1`, [id]),
-      pool.query('SELECT category_name, quantity FROM request_items WHERE request_id = $1 ORDER BY id', [id]),
+      pool.query('SELECT i.category_name, i.quantity, c.icon, c.price, c.unit FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 ORDER BY i.id', [id]),
     ]);
     if (!request.rows.length) return res.sendStatus(404);
-    res.view(receiptPage(ctx, { request: request.rows[0], items: items.rows }));
+    res.view(receiptPage(ctx, { request: request.rows[0], items: items.rows, backHref: `/admin/requests/${id}`, backLabel: 'Back' }));
   }));
 
   // ---------- dispatch ----------

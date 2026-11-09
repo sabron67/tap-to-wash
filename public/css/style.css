@@ -308,11 +308,44 @@ textarea { resize: vertical; }
 .topbar-date { margin-left: auto; font-size: .85rem; color: var(--muted); }
 .menu-btn { display: none; }
 .content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.2rem; align-content: start; }
-.flash { padding: .9rem 1.2rem; border-radius: 12px; font-weight: 500; border: 1px solid; transition: opacity .5s, transform .5s; background: var(--surface); }
+.flash { padding: .9rem 1.2rem; border-radius: 12px; font-weight: 500; border: 1px solid; background: var(--surface); }
 .flash.success { background: color-mix(in srgb, var(--ok) 16%, var(--surface)); border-color: var(--ok); }
 .flash.error { background: var(--err-bg); border-color: var(--err-line); color: var(--err-text); }
 .flash.warn { background: color-mix(in srgb, #b58900 16%, var(--surface)); border-color: #b58900; }
-.flash.hide { opacity: 0; transform: translateY(-8px); pointer-events: none; }
+
+/* Toast cards (built by /js/toast.js): flat surface, icon chip, close button, timer bar. Meaning is carried by icon + title, not colour alone. */
+.flash.toast-card {
+  --tc: var(--ok);
+  position: fixed; z-index: 120; top: calc(.9rem + env(safe-area-inset-top)); right: 1rem; left: auto;
+  width: min(24rem, calc(100vw - 2rem)); margin: 0; padding: .85rem .9rem .95rem;
+  display: flex; align-items: flex-start; gap: .75rem; overflow: hidden; text-align: left; font-weight: 400;
+  background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 18px;
+  box-shadow: var(--shadow-up); animation: tc-in .4s var(--ease) both; transition: opacity .35s var(--ease), transform .35s var(--ease);
+}
+.flash.toast-card.error { --tc: var(--err-line); background: var(--surface); color: var(--text); border-color: var(--line); }
+.flash.toast-card.warn { --tc: #b58900; background: var(--surface); border-color: var(--line); }
+.flash.toast-card.success { background: var(--surface); border-color: var(--line); }
+.tc-icon { flex: none; width: 2.4rem; height: 2.4rem; border-radius: 50%; display: grid; place-items: center; color: var(--tc); background: color-mix(in srgb, var(--tc) 16%, var(--surface)); border: 1.5px solid var(--tc); }
+.tc-icon .ic { width: 1.2rem; height: 1.2rem; }
+.tc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; padding-top: .05rem; }
+.tc-body strong { font-size: .92rem; line-height: 1.3; }
+.tc-body span { font-size: .86rem; line-height: 1.45; color: var(--muted); overflow-wrap: anywhere; }
+.tc-close { flex: none; width: 2rem; height: 2rem; margin: -.2rem -.2rem 0 0; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.tc-close:hover { background: var(--surface-2); color: var(--text); }
+.tc-close:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.tc-bar { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: var(--tc); transform-origin: left; animation: tc-run linear forwards; }
+.flash.toast-card.paused .tc-bar { animation-play-state: paused; }
+.flash.hide { opacity: 0; transform: translateY(-10px) scale(.98); pointer-events: none; }
+@keyframes tc-in { from { opacity: 0; transform: translateY(-14px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes tc-run { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (max-width: 560px) { .flash.toast-card { right: 50%; transform: translateX(50%); } .flash.toast-card.hide { transform: translateX(50%) translateY(-10px); } @keyframes tc-in { from { opacity: 0; transform: translateX(50%) translateY(-14px); } to { opacity: 1; transform: translateX(50%); } } }
+@media (prefers-reduced-motion: reduce) { .flash.toast-card, .tc-bar { animation: none; } }
+
+/* Inline messages (forms): same icon-chip look, so errors read well without colour */
+.err.show, .notice { display: flex; align-items: flex-start; gap: .6rem; }
+.err.show::before, .notice::before { content: "!"; flex: none; width: 1.45rem; height: 1.45rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: .85rem; line-height: 1; border: 1.5px solid currentColor; margin-top: .05rem; }
+.notice::before { content: "i"; font-style: italic; font-family: Georgia, serif; }
+.err.show { padding: .7rem .9rem; border-radius: 14px; line-height: 1.45; }
 .notice { padding: 1rem 1.2rem; border-radius: 12px; border: 1px solid #b58900; background: color-mix(in srgb, #b58900 14%, var(--surface)); }
 
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.1rem; }

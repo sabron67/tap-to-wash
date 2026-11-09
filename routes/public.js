@@ -233,14 +233,22 @@ router.post(
   })
 );
 
+// A signed-in customer does not have to type their phone number again.
+const savedPhone = async (req) => {
+  const a = req.session.account;
+  if (!a) return '';
+  const { rows } = await pool.query('SELECT phone FROM accounts WHERE id = $1 AND is_active', [a.id]);
+  return rows[0] && rows[0].phone ? rows[0].phone : '';
+};
+
 router.get(
   '/track',
   trackLimit,
   wrap(async (req, res) => {
     const settings = await getSettings();
-    const ctx = { settings, account: req.session.account };
     const ref = cleanText(req.query.ref, 20).toUpperCase();
     const phone = cleanText(req.query.phone, 20);
+    const ctx = { settings, account: req.session.account, accountPhone: phone || (await savedPhone(req)) };
 
     if (!ref && !phone) return res.view(trackPage(ctx, {}));
     if (!ref || !validPhone(phone)) return res.view(trackPage(ctx, { ref, error: 'Enter both your reference code and phone number.' }));
@@ -275,11 +283,11 @@ router.post(
     const found = await pool.query(`SELECT r.id,r.customer_id,c.phone_key FROM requests r JOIN customers c ON c.id=r.customer_id WHERE r.ref_code=$1`, [ref]);
     if (!found.rows.length || !validPhone(phone) || found.rows[0].phone_key !== phoneKey(phone)) {
       const settings = await getSettings();
-      return res.status(400).view(trackPage({settings,account:req.session.account},{ref,error:'We could not verify that order. Check the reference code and phone number.'}));
+      return res.status(400).view(trackPage({settings,account:req.session.account,accountPhone:await savedPhone(req)},{ref,error:'We could not verify that order. Check the reference code and phone number.'}));
     }
     if (!['review','complaint'].includes(kind) || !Number.isInteger(rating) || rating<1 || rating>5 || (!comment.trim() && kind==='complaint')) {
       const settings = await getSettings();
-      return res.status(400).view(trackPage({settings,account:req.session.account},{ref,error:'Please provide a valid rating and, for a complaint, describe the issue.'}));
+      return res.status(400).view(trackPage({settings,account:req.session.account,accountPhone:await savedPhone(req)},{ref,error:'Please provide a valid rating and, for a complaint, describe the issue.'}));
     }
     if (kind === 'review') {
       await pool.query(`INSERT INTO customer_reviews(request_id,customer_id,rating,comment) VALUES($1,$2,$3,$4) ON CONFLICT(request_id) DO UPDATE SET rating=EXCLUDED.rating,comment=EXCLUDED.comment,created_at=now()`,[found.rows[0].id,found.rows[0].customer_id,rating,comment]);

@@ -9,8 +9,9 @@ const { passwordProblem } = require('../lib/password');
 const { wrap, phoneKey, validPhone, cleanText } = require('../lib/helpers');
 const { authPage, accountPage } = require('../views/public/account');
 const { trackPage } = require('../views/public/track');
+const { receiptPage } = require('../views/admin/receipt');
 const { forgotPage, resetPage } = require('../views/public/reset');
-const { requestCode, completeReset, TTL_MINUTES } = require('../lib/reset');
+const { requestCode, completeReset, problemMessage, TTL_MINUTES } = require('../lib/reset');
 
 const router = express.Router();
 const MAX_FAILS = 5;
@@ -133,7 +134,7 @@ router.post(
 
 // ---------- forgot / reset password (code sent by WhatsApp) ----------
 const UNAVAILABLE = 'Automatic reset codes are not available right now. Please contact us on WhatsApp or by phone and we will reset your password for you.';
-const SENT = `If that email has an account with a WhatsApp number saved, we have sent a 6-digit code. It works for ${TTL_MINUTES} minutes.`;
+const SENT = `We have sent a 6-digit code to the WhatsApp number saved on your account. It works for ${TTL_MINUTES} minutes.`;
 
 router.get(
   '/forgot',
@@ -151,6 +152,7 @@ router.post(
     const ctx = await pubCtx(req);
     if (!EMAIL_RE.test(email)) return res.status(400).view(forgotPage(ctx, 'customer', { error: 'Please enter a valid email address.', email }));
     const r = await requestCode('customer', email, ctx.settings.business_name);
+    if (r.problem) return res.status(r.problem === 'wait' ? 429 : 400).view(forgotPage(ctx, 'customer', { error: problemMessage(r.problem, 'customer'), email }));
     if (!r.available) return res.view(forgotPage(ctx, 'customer', { error: UNAVAILABLE, email }));
     res.view(resetPage(ctx, 'customer', { info: SENT, email }));
   })
@@ -294,8 +296,23 @@ router.get(
       pool.query('SELECT category_name, quantity FROM request_items WHERE request_id = $1 ORDER BY id', [r.id]),
       pool.query('SELECT status, note, created_at FROM request_events WHERE request_id = $1 ORDER BY created_at DESC, id DESC', [r.id]),
     ]);
+    const ctx = { ...(await pubCtx(req)), accountPhone: req.acc.phone || '' };
+    res.view(trackPage(ctx, { ref, result: { ref_code: r.ref_code, status: r.status, items: items.rows, events: events.rows, receipt_href: `/account/requests/${r.ref_code}/receipt` } }));
+  })
+);
+
+router.get(
+  '/requests/:ref/receipt',
+  wrap(async (req, res, next) => {
+    const ref = cleanText(req.params.ref, 20).toUpperCase();
+    const { rows } = await pool.query(
+      'SELECT r.*, c.name AS customer_name, c.phone AS customer_phone FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1 AND r.account_id = $2',
+      [ref, req.acc.id]
+    );
+    if (!rows.length) return next();
+    const items = await pool.query('SELECT i.category_name, i.quantity, c.icon, c.price, c.unit FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 ORDER BY i.id', [rows[0].id]);
     const ctx = await pubCtx(req);
-    res.view(trackPage(ctx, { ref, result: { ref_code: r.ref_code, status: r.status, items: items.rows, events: events.rows } }));
+    res.view(receiptPage(ctx, { request: rows[0], items: items.rows, backHref: `/account/requests/${ref}`, backLabel: 'Back' }));
   })
 );
 

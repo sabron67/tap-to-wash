@@ -6,7 +6,7 @@ const { csrfField, statusBadge } = require('../partials/ui');
 const { icon } = require('../../lib/icons');
 
 const msgBlock = (ctx) =>
-  ctx.flash ? (ctx.flash.type === 'error' ? html`<p class="err show">${ctx.flash.msg}</p>` : html`<div class="notice">${ctx.flash.msg}</div>`) : '';
+  ctx.flash ? html`<div class="flash ${ctx.flash.type === 'error' ? 'error' : 'success'}" role="status">${ctx.flash.msg}</div>` : '';
 
 const shell = (ctx, title, active, inner) =>
   publicLayout(ctx, {
@@ -37,7 +37,7 @@ function authPage(ctx, { mode = 'login', error = '', values = {}, next = '' }) {
          <label class="check"><input type="checkbox" name="accept" value="1" required><span>I accept the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and have read the <a href="/privacy" target="_blank" rel="noopener">Privacy Notice</a>. <em>*</em></span></label>`
       : html`<label class="check"><input type="checkbox" name="remember" value="1"><span>Keep me signed in on this device</span></label>`}
     ${error ? html`<p class="err show" role="alert">${error}</p>` : ''}
-    ${!signup && ctx.flash && ctx.flash.type === 'success' ? html`<div class="notice">${ctx.flash.msg}</div>` : ''}
+    ${!signup && ctx.flash && ctx.flash.type === 'success' ? html`<div class="flash success" role="status">${ctx.flash.msg}</div>` : ''}
     ${signup ? '' : html`<p class="forgot-row"><a class="link" href="/account/forgot">Forgot password?</a></p>`}
     <button class="btn btn-primary btn-block" type="submit">${signup ? 'Create account' : 'Sign in'}</button>
     <p class="muted small center">${signup ? html`Already have an account? <a class="link" href="/account/login">Sign in</a>` : html`New here? <a class="link" href="/account/signup">Create an account</a>`}<br>

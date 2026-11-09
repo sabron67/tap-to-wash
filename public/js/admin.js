@@ -78,13 +78,7 @@
     });
   });
 
-  // Auto-dismiss flash messages
-  var flash = document.querySelector('.flash');
-  if (flash) {
-    setTimeout(function () {
-      flash.classList.add('hide');
-    }, 5000);
-  }
+  // Flash messages are shown as toasts by /js/toast.js
 
   // Background photos: resize in the browser, then upload as JPEG
   var tokenEl = document.getElementById('csrfToken');

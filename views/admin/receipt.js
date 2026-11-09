@@ -1,11 +1,61 @@
-const { html } = require('../../lib/html');
-const { money, fmtDate } = require('../../lib/helpers');
+const { html, raw } = require('../../lib/html');
+const { money, fmtDate, STATUS_MAP, FLOW } = require('../../lib/helpers');
+const { icon, has } = require('../../lib/icons');
 
-function receiptPage(ctx,{request,items}){
-  const cur=ctx.settings.currency;
-  const balance=Math.max(0,Number(request.total_amount)-Number(request.amount_paid));
-  return html`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Receipt ${request.ref_code}</title><style>
-  *{box-sizing:border-box}body{margin:0;padding:28px;background:#f5f2ec;color:#28231e;font:15px/1.5 Arial,sans-serif}.receipt{max-width:720px;margin:0 auto;background:#fff;padding:36px;border:1px solid #ddd}.top{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #29231e;padding-bottom:20px}.muted{color:#746d65}.meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:22px 0}.meta p{margin:3px 0}table{width:100%;border-collapse:collapse;margin:24px 0}th,td{text-align:left;padding:11px 8px;border-bottom:1px solid #e7e2da}th:last-child,td:last-child{text-align:right}.totals{margin-left:auto;max-width:280px}.totals p{display:flex;justify-content:space-between;margin:8px 0}.grand{font-size:1.15rem;font-weight:bold;border-top:2px solid #29231e;padding-top:12px}.actions{max-width:720px;margin:18px auto;display:flex;gap:10px}.actions a,.actions button{border:1px solid #bbb;background:#fff;color:#222;padding:10px 16px;border-radius:8px;text-decoration:none;cursor:pointer}@media print{body{padding:0;background:#fff}.receipt{border:0;max-width:none;padding:12mm}.actions{display:none}}@media(max-width:560px){body{padding:10px}.receipt{padding:18px}.top{display:block}.meta{grid-template-columns:1fr}}
-  </style></head><body><main class="receipt"><header class="top"><div><h1>${ctx.settings.business_name}</h1><p class="muted">${ctx.settings.address||''}</p><p class="muted">${ctx.settings.phone||''} ${ctx.settings.email||''}</p></div><div><h2>LAUNDRY RECEIPT</h2><strong>${request.ref_code}</strong><p class="muted">${fmtDate(request.created_at)}</p></div></header><section class="meta"><div><strong>Customer</strong><p>${request.customer_name}</p><p>${request.customer_phone}</p></div><div><strong>Order details</strong><p>${request.location_description}</p><p>Status: ${request.status}</p></div></section><table><thead><tr><th>Service / item</th><th>Quantity</th></tr></thead><tbody>${items.map(i=>html`<tr><td>${i.category_name}</td><td>${i.quantity}</td></tr>`)}</tbody></table><section class="totals"><p><span>Subtotal</span><strong>${money(request.subtotal_amount||request.total_amount,cur)}</strong></p>${Number(request.discount_amount)>0?html`<p><span>Discount (${request.discount_code})</span><strong>− ${money(request.discount_amount,cur)}</strong></p>`:''}<p><span>Total</span><strong>${money(request.total_amount,cur)}</strong></p><p><span>Paid</span><strong>${money(request.amount_paid,cur)}</strong></p><p class="grand"><span>Balance</span><span>${money(balance,cur)}</span></p></section><footer><p>Thank you for choosing ${ctx.settings.business_name}.</p><p class="muted">This receipt is a record of the laundry order and amounts entered in the system.</p></footer></main><div class="actions"><button onclick="window.print()">Print / Save as PDF</button><a href="/admin/requests/${request.id}">Back to order</a></div></body></html>`;
+// Customer receipt, laid out like a mobile app screen:
+// banner -> rounded sheet -> title + status -> progress chips -> order items -> total card -> action buttons.
+// Colours are the site's existing warm-white / clay palette (light values from public/css/style.css).
+function receiptPage(ctx, { request, items, backHref, backLabel }) {
+  const s = ctx.settings;
+  const cur = s.currency;
+  const total = Number(request.total_amount) || 0;
+  const paid = Number(request.amount_paid) || 0;
+  const balance = Math.max(0, total - paid);
+  const st = STATUS_MAP[request.status] || { label: request.status };
+  const idx = FLOW.indexOf(request.status);
+  const qtyCount = items.reduce((n, i) => n + (Number(i.quantity) || 0), 0);
+  const payLabel = total <= 0 ? 'Not priced' : paid >= total ? 'Paid' : paid > 0 ? 'Part paid' : 'Unpaid';
+  const back = backHref || `/admin/requests/${request.id}`;
+
+  const priced = (i) => i.price != null && Number(i.price) > 0;
+  return html`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="robots" content="noindex,nofollow"><title>Receipt ${request.ref_code}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/receipt.css"></head><body class="rc-solo"><div class="rc">
+  <header class="rc-banner">
+    <div class="rc-brand"><span class="rc-mark">${icon('washing-machine')}</span><div><b>${s.business_name}</b>${s.address ? html`<small>${s.address}</small>` : ''}${s.phone || s.email ? html`<small>${[s.phone, s.email].filter(Boolean).join(' · ')}</small>` : ''}</div></div>
+    <span class="rc-ref">${request.ref_code}</span>
+  </header>
+
+  <main class="rc-sheet">
+    <div class="rc-grab" aria-hidden="true"></div>
+    <div class="rc-title"><h1>Laundry receipt</h1><span class="rc-badge">${payLabel}</span></div>
+    <p class="rc-sub"><span>${icon('clock')} ${fmtDate(request.created_at)}</span><span>${icon('shopping-basket')} ${qtyCount} ${qtyCount === 1 ? 'item' : 'items'}</span></p>
+
+    ${request.status === 'cancelled'
+      ? html`<div class="rc-chips"><span class="rc-chip now">${icon('circle-x')} Cancelled</span></div>`
+      : html`<div class="rc-chips" aria-label="Order progress">${FLOW.map((k, i) => html`<span class="rc-chip ${i < idx ? 'done' : i === idx ? 'now' : ''}">${i < idx ? icon('check') : i === idx ? icon(STATUS_MAP[k].icon) : ''} ${STATUS_MAP[k].label}</span>`)}</div>`}
+
+    <h2 class="rc-h">Order items <small>${items.length} ${items.length === 1 ? 'service' : 'services'}</small></h2>
+    <ul class="rc-rows">${items.map((i) => html`<li class="rc-row"><span class="rc-thumb">${icon(i.icon && has(i.icon) ? i.icon : 'shopping-basket')}</span><div class="rc-nm"><b>${i.category_name}</b>${priced(i) ? html`<small>${money(i.price, cur)} per ${i.unit || 'item'}</small>` : ''}</div><span class="rc-qty">× ${i.quantity}</span>${priced(i) ? html`<span class="rc-lt">${money(Number(i.price) * Number(i.quantity), cur)}</span>` : ''}</li>`)}</ul>
+
+    <h2 class="rc-h">Customer and delivery</h2>
+    <div class="rc-info">
+      <div>${icon('user-round')}<span><small>Customer</small><b>${request.customer_name}</b></span></div>
+      <div>${icon('phone')}<span><small>Phone</small><b>${request.customer_phone}</b></span></div>
+      <div>${icon('map-pin')}<span><small>Pick-up and delivery</small><b>${request.location_description}</b></span></div>
+    </div>
+
+    <section class="rc-total" aria-label="Payment summary">
+      <div class="rc-line"><span>Subtotal</span><strong>${money(request.subtotal_amount || request.total_amount, cur)}</strong></div>
+      ${Number(request.discount_amount) > 0 ? html`<div class="rc-line"><span>Discount (${request.discount_code})</span><strong>− ${money(request.discount_amount, cur)}</strong></div>` : ''}
+      <div class="rc-line"><span>Total</span><strong>${money(total, cur)}</strong></div>
+      <div class="rc-line"><span>Paid</span><strong>${money(paid, cur)}</strong></div>
+      <div class="rc-big"><span>Balance due</span><strong>${money(balance, cur)}</strong></div>
+      <div class="rc-tags"><span class="rc-tag solid">${st.label}</span><span class="rc-tag">${payLabel}</span></div>
+    </section>
+
+    <p class="rc-thanks"><b>Thank you for choosing ${s.business_name}.</b>This receipt is a record of the laundry order and amounts entered in the system.</p>
+  </main>
+
+  <nav class="rc-actions"><a class="rc-btn ghost" href="${back}">${icon('arrow-left')} ${backLabel || 'Back'}</a><button class="rc-btn primary" type="button" data-print>${icon('download')} Save as PDF / Print</button></nav>
+  </div><script src="/js/receipt.js"></script></body></html>`;
 }
-module.exports={receiptPage};
+module.exports = { receiptPage };
