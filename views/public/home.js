@@ -238,16 +238,18 @@ function homePage(ctx, categories) {
   </header>
 
   <main class="sheet home-sheet">
-    <section class="home-sec" id="recent">
+    ${ctx.recent
+      ? html`<section class="home-sec" id="recent">
       <div class="container">
-        <div class="sec-row"><h2>Recent laundry</h2><a href="${ctx.account ? '/account' : '/track'}">See all ${icon('chevron-right')}</a></div>
+        <div class="sec-row"><h2>Recent laundry</h2><a href="/account">See all ${icon('chevron-right')}</a></div>
         ${recentCard(ctx.recent, s)}
       </div>
-    </section>
+    </section>`
+      : ''}
 
-    <section class="home-sec" id="categories">
+    <section class="home-sec svc-band" id="categories" style="${raw(img('hero'))}">
       <div class="container">
-        <div class="sec-row"><h2>Our services</h2><span class="sec-hint">Tap to select</span></div>
+        <div class="sec-row on-bg"><h2>Our services</h2><span class="sec-hint">Tap to select</span></div>
         ${categories.length
           ? html`<div class="svc-rail" id="catGrid">${categories.map((c) => categoryCard(c, s.currency))}</div><p class="muted small svc-none" id="svcNone" hidden>No service matches your search.</p>`
           : html`<div class="empty glass"><div class="big">${icon('shopping-basket')}</div><p>Our services are being set up. Please check back soon!</p></div>`}
@@ -267,7 +269,6 @@ function homePage(ctx, categories) {
     <section class="band has-img alt" id="how" style="${raw(img('how'))}">
       <div class="container">
         <div class="section-head on-img rv">
-          <span class="pill">Simple</span>
           <h2>How it works</h2>
         </div>
         <div class="steps-grid" data-stagger>
@@ -275,18 +276,6 @@ function homePage(ctx, categories) {
           <div class="step glass"><span class="step-no">2</span><div class="step-ico">${icon('map-pin')}</div><h3>Share location</h3><p>Send where you are with a short description.</p></div>
           <div class="step glass"><span class="step-no">3</span><div class="step-ico">${icon('truck')}</div><h3>We collect</h3><p>Our rider confirms by phone and picks up.</p></div>
           <div class="step glass"><span class="step-no">4</span><div class="step-ico">${icon('sparkles')}</div><h3>Fresh delivery</h3><p>Washed, dried and folded, back at your door.</p></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="band has-img" style="${raw(img('cta'))}">
-      <div class="container">
-        <div class="cta glass-strong rv">
-          <div>
-            <h2>Ready for fresh clothes?</h2>
-            <p>It takes less than a minute to place a request.</p>
-          </div>
-          <button class="btn btn-primary btn-lg tap-btn" type="button" data-open-wizard>Tap to wash</button>
         </div>
       </div>
     </section>
@@ -299,9 +288,9 @@ function homePage(ctx, categories) {
             <p class="muted" style="margin-top:.8rem">${s.tagline}</p>
           </div>
           <div><h4>Contact</h4>${contactBlock(s)}</div>
-          <div><h4>Quick links</h4><ul class="contact-list"><li><a href="/track">Track my order</a></li><li><a href="#categories">Our services</a></li><li><a href="/terms">Terms of Service</a></li><li><a href="/privacy">Privacy Notice</a></li><li>${ctx.account ? html`<a href="/account">My account</a>` : html`<a href="/account/login">Customer sign in</a>`}</li></ul></div>
+
         </div>
-        <p class="copy">© ${new Date().getFullYear()} ${s.business_name}. All rights reserved.</p>
+        <p class="copy"><a href="/terms">Terms of Service</a> · <a href="/privacy">Privacy Notice</a><br>© ${new Date().getFullYear()} ${s.business_name}. All rights reserved.</p>
       </div>
     </footer>
   </main>

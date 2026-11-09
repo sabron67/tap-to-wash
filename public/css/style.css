@@ -870,7 +870,7 @@ button, a, input, select, summary, .cat-card, .pick { touch-action: manipulation
 .home-hi { font-size: 1.1rem; letter-spacing: .01em; }
 .home-search { box-shadow: 0 2px 6px rgba(40, 20, 8, .12); border-color: transparent; }
 .home-banner { height: clamp(170px, 30vw, 300px); border: 0; border-radius: 20px; box-shadow: 0 10px 24px rgba(40, 20, 8, .28); }
-.home-banner-txt { border: 0; box-shadow: 0 4px 12px rgba(40, 20, 8, .2); border-radius: 14px; padding: .7rem 1rem; }
+.home-banner-txt { left: 50%; right: auto; transform: translateX(-50%); align-items: center; text-align: center; border: 0; box-shadow: 0 4px 12px rgba(40, 20, 8, .2); border-radius: 14px; padding: .7rem 1rem; }
 .home-banner-txt b { font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 1.08rem; letter-spacing: -.005em; }
 .home-sheet { margin-top: -2.4rem; padding-top: 1.7rem; border-radius: 26px 26px 0 0; }
 .home-sec { padding-bottom: 1.9rem; }
@@ -924,3 +924,23 @@ button, a, input, select, summary, .cat-card, .pick { touch-action: manipulation
   .home-login { height: 40px; padding: 0 .8rem 0 .65rem; font-size: .82rem; }
   .home-avatar { width: 40px; height: 40px; }
 }
+
+/* Our services: the "Top of the home page" picture as a soft backdrop (same admin photo) */
+.svc-band { position: relative; isolation: isolate; padding: 1.6rem 0 1.4rem; margin-bottom: 1.6rem; overflow: hidden; background: var(--bg-alt); border-block: 1px solid var(--line); }
+.svc-band::before { content: ''; position: absolute; inset: 0; z-index: -1; background: var(--img) center 58% / cover no-repeat; opacity: var(--img-op); }
+.svc-band .sec-row.on-bg { width: fit-content; max-width: 100%; gap: 1.2rem; padding: .55rem 1rem; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.svc-band .svc-rail { padding-top: 6px; }
+.svc-band .home-tap { margin-top: .2rem; }
+@media (max-width: 720px) { .svc-band { margin-inline: 0; } }
+
+/* footer: two columns + legal row; services 3 per row on wide screens */
+.home .footer-grid { grid-template-columns: 1.2fr 1.4fr; }
+.copy a { text-decoration: none; opacity: .9; }
+.copy a:hover { text-decoration: underline; }
+@media (max-width: 720px) { .home .footer-grid { grid-template-columns: 1fr; } }
+@media (min-width: 721px) { .svc-rail:not(.branch-rail) > * { flex: 0 0 calc((100% - 1.8rem) / 3); } }
+/* readability over the photo backdrop */
+.svc-rail .cat-card.svc-card, .branch-card { background: var(--surface); }
+.svc-band::before { opacity: .3; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .svc-band::before { opacity: .14; } }
+:root[data-theme='dark'] .svc-band::before { opacity: .14; }
