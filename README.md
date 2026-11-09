@@ -26,24 +26,28 @@ Laundry services website — Node.js + Express, PostgreSQL, views written as pla
 
 Payments are intentionally manual for now (admin records the total and amount paid) so online payment can be added later.
 
-## Operations centre (added)
+## Operations centre
 
-The admin navigation now includes **Operations** for the day-to-day laundry workflow:
+**Admin → Operations** holds the day-to-day tools:
 
-- **Garment tracking:** register individual garments against a request, capture their condition on arrival, assign unique tags, and update received / washing / drying / ironing / packed / returned stages.
-- **Order QR codes and receipts:** print an order QR that opens the secure tracking lookup, and print or save a branded order receipt as PDF from the request page. Customers still need their phone number to view order details.
-- **Pickup and delivery:** assign a rider, pickup and delivery date/time, branch and dispatch stage. Pickup/delivery status changes are added to the request history.
-- **Quality control:** record stain, count, damage and packaging checks and whether the order passed inspection.
-- **Machines and batches:** register washers, dryers and ironing stations; monitor availability/maintenance; create wash batches, attach tracked garments and update batch progress.
-- **Expenses and stock:** record operating expenses, add supply items, adjust stock with a reason and identify low-stock items. Export expenses, inventory, reviews and complaints as CSV.
-- **Customer care:** customers can submit a rating or complaint from the order tracking page; staff can update complaint status and record refund requests and their approval/payment status.
-- **Retention and growth:** delivered orders automatically earn one loyalty point per KSh 100 (minimum one point); view customer balances, create discount codes and record weekly/fortnightly/monthly customer packages.
-- **Branches:** create outlets and assign orders to a branch. The current admin view is centralised; branch-specific staff access and per-branch reporting are not yet separated.
-- **Dashboard:** includes overdue scheduled deliveries, monthly operating expenses and machines in maintenance.
+- **Pickup and delivery:** assign a rider, pickup and delivery slots and a dispatch stage. Pickup/delivery changes are added to the request history.
+- **Quality control:** record stain, count, damage and packaging checks and whether the order passed.
+- **Expenses and stock:** record operating costs, add supplies, adjust stock with a reason, see low-stock alerts. CSV exports for expenses, inventory, reviews and complaints.
+- **Customer care:** log and follow up complaints, record refunds and read customer reviews (customers rate or complain from the tracking page).
+- **Discount codes:** percentage or fixed codes with expiry and use limits, switched on/off from the list. Staff apply a code in the billing form of a request.
+- **Receipts:** print or save a receipt as PDF from any request page.
 
-Discount codes are applied by staff in the request billing form. The code must be active and within its date/use limits; percentage or fixed discounts are deducted from the entered subtotal. Subscriptions are currently recorded and managed by staff; recurring automatic billing is not included.
+Removed as unnecessary: garment-level tracking, machines and wash batches, customer packages (subscriptions) and loyalty points. Existing data in those old tables is left untouched; the points trigger is dropped so nothing new is awarded.
 
-All new database objects and columns are created by the existing repeat-safe schema migration. On an existing installation, deploy the updated project and run `npm run db:init` once before restarting the app.
+### Multiple branches (on/off switch)
+
+**Admin → Settings → Multiple branches** switches multi-branch mode on or off (owner only).
+
+- **Off (default):** single outlet. No branch pickers or branch columns anywhere.
+- **On:** a **Branches** section appears in Operations (add branches, switch each one Active/Off). Customers see a "Nearest branch" choice when they tap to wash, staff can assign a branch in the dispatch form, and the branch shows on the request page.
+- Switching off keeps all branches and past assignments; they simply stop being used.
+
+After updating run `npm install` (adds `compression`) and `npm run db:init` once.
 
 ## Database backups
 

@@ -333,8 +333,8 @@ router.get(
     const [ctx, reqRes, items, events] = await Promise.all([
       buildCtx(req),
       pool.query(
-        `SELECT r.*, c.name AS customer_name, c.phone AS customer_phone
-           FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.id = $1`,
+        `SELECT r.*, c.name AS customer_name, c.phone AS customer_phone, b.name AS branch_name
+           FROM requests r JOIN customers c ON c.id = r.customer_id LEFT JOIN branches b ON b.id = r.branch_id WHERE r.id = $1`,
         [id]
       ),
       pool.query(
@@ -627,6 +627,18 @@ router.post(
     await audit(req, 'settings_save', 'Business details');
     flash(req, 'success', 'Settings saved.');
     res.redirect('/admin/settings');
+  })
+);
+
+router.post(
+  '/settings/branches',
+  need('settings'),
+  wrap(async (req, res) => {
+    const on = req.body.enabled === '1';
+    await saveSettings({ branches_enabled: on ? '1' : '0' });
+    await audit(req, 'branches_toggle', on ? 'Multiple branches switched on' : 'Multiple branches switched off');
+    flash(req, 'success', on ? 'Multiple branches is on. Add your branches under Operations.' : 'Multiple branches is off.');
+    res.redirect('/admin/settings#branchCard');
   })
 );
 

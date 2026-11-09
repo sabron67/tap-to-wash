@@ -70,7 +70,7 @@ function requestDetailPage(ctx, { r, items, events, estimate, wa }) {
       <div>
         <span class="muted small">Reference</span>
         <div class="ref-box sm">${r.ref_code}</div>
-        <div class="muted small">Received ${fmtDate(r.created_at)}</div>
+        <div class="muted small">Received ${fmtDate(r.created_at)}${ctx.settings.branches_enabled === '1' && r.branch_name ? html` · Branch: <strong>${r.branch_name}</strong>` : ''}</div>
       </div>
       <div class="detail-badges">${statusBadge(r.status)} ${ctx.can('billing') ? paymentBadge(r.total_amount, r.amount_paid) : ''} <a class="btn btn-ghost btn-sm" href="/admin/requests/${r.id}/receipt">Receipt</a></div>
     </div>

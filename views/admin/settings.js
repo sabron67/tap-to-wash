@@ -28,6 +28,21 @@ function settingsPage(ctx) {
       <button class="btn btn-primary" type="submit">Save settings</button>
     </form>
 
+  <section class="glass pad" id="branchCard">
+    <form class="switch-row" method="post" action="/admin/settings/branches">
+      ${csrfField(ctx)}
+      <div class="switch-text">
+        <h2>Multiple branches</h2>
+        <p class="muted small">Switch on to add more branches. Customers can then pick their nearest branch when they tap to wash, and staff can assign every request to a branch. Switch off to run as a single outlet - your branches and past assignments are kept.</p>
+      </div>
+      <input type="hidden" name="enabled" value="${s.branches_enabled === '1' ? '0' : '1'}">
+      <button type="submit" class="switch ${s.branches_enabled === '1' ? 'on' : ''}" role="switch" aria-checked="${s.branches_enabled === '1' ? 'true' : 'false'}" aria-label="Multiple branches">
+        <span class="switch-knob"></span><span class="switch-txt">${s.branches_enabled === '1' ? 'On' : 'Off'}</span>
+      </button>
+    </form>
+    ${s.branches_enabled === '1' ? html`<p class="small" style="margin:.8rem 0 0"><a class="link" href="/admin/operations#branches">Manage branches</a></p>` : ''}
+  </section>
+
   <section class="glass pad stack" id="faviconCard">
     <h2>Site icon (favicon)</h2>
     <p class="muted small">The small picture shown in the browser tab, bookmarks, the phone home screen and phone alerts. Choose a square logo or picture (PNG, JPG, WebP or SVG). It is resized to 512 × 512 in your browser and saved in the database. Browsers can keep an old icon for a while - refresh the page if the tab still shows the old one.</p>

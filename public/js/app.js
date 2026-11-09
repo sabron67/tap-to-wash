@@ -228,6 +228,7 @@
     state.lat = state.lng = state.acc = null;
     state.step = 1;
     ['#locDesc', '#fName', '#fPhone', '#fTime', '#fNotes'].forEach((s) => ($(s).value = ''));
+    if ($('#fBranch')) $('#fBranch').value = '';
     $('#fTerms').checked = false;
     clearLocation();
     applyMe(false);
@@ -317,6 +318,7 @@
           location_description: $('#locDesc').value,
           notes: $('#fNotes').value,
           preferred_time: $('#fTime').value,
+          branch_id: $('#fBranch') ? $('#fBranch').value : '',
           latitude: state.lat,
           longitude: state.lng,
           accuracy: state.acc,

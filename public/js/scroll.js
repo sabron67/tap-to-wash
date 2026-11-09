@@ -34,19 +34,22 @@
     Object.keys(map).forEach(function (id) { so.observe(document.getElementById(id)); });
   }
 
-  // ---- scroll-linked: progress bar, nav state, hero parallax/fade, band parallax ----
+  // ---- scroll-linked: progress bar, nav state, hero parallax/fade (kept light: no layout reads per frame) ----
   var bar = document.getElementById('progress');
   var nav = document.querySelector('.nav');
   var hero = document.querySelector('.hero');
   var heroInner = hero && hero.querySelector('.hero-inner');
-  var bands = $$('.band.has-img');
   var ticking = false;
+  var max = 1;
+  function measure() { max = Math.max(doc.scrollHeight - window.innerHeight, 1); }
+  measure();
+  window.addEventListener('load', measure);
+  if ('ResizeObserver' in window) new ResizeObserver(measure).observe(document.body);
 
   function frame() {
     ticking = false;
     var y = window.pageYOffset || doc.scrollTop;
     var vh = window.innerHeight;
-    var max = Math.max(doc.scrollHeight - vh, 1);
     if (bar) bar.style.transform = 'scaleX(' + Math.min(y / max, 1) + ')';
     if (nav) nav.classList.toggle('scrolled', y > 8);
     if (reduce || window.innerWidth <= 720) return;
@@ -58,14 +61,9 @@
         heroInner.style.transform = 'translate3d(0,' + (-k * 40).toFixed(1) + 'px,0)';
       }
     }
-    bands.forEach(function (b) {
-      var r = b.getBoundingClientRect();
-      if (r.bottom < 0 || r.top > vh) return;
-      b.style.setProperty('--py', (((r.top + r.height / 2) - vh / 2) * -0.06).toFixed(1) + 'px');
-    });
   }
   function onScroll() { if (!ticking) { ticking = true; window.requestAnimationFrame(frame); } }
   window.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('resize', onScroll);
+  window.addEventListener('resize', function () { measure(); onScroll(); });
   frame();
 })();

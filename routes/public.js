@@ -60,7 +60,8 @@ router.get(
       };
     }
     const wa = validWaNumber(settings.whatsapp) ? toIntl(settings.whatsapp) : '';
-    res.view(homePage({ settings, media, account: acc, personal, whatsapp: wa }, cats.rows));
+    const branches = settings.branches_enabled === '1' ? (await pool.query('SELECT id, name, address FROM branches WHERE is_active ORDER BY name')).rows : [];
+    res.view(homePage({ settings, media, account: acc, personal, whatsapp: wa, branches }, cats.rows));
   })
 );
 
@@ -164,6 +165,17 @@ router.post(
     }
     if (wanted.size === 0) return fail('Please choose at least one thing to wash.');
 
+    // Branch: only used when the owner has switched multi-branch mode on and the branch is active.
+    let branchId = null;
+    if (settings.branches_enabled === '1') {
+      const bid = parseInt(b.branch_id, 10);
+      if (Number.isInteger(bid)) {
+        const ok = await pool.query('SELECT id FROM branches WHERE id = $1 AND is_active', [bid]);
+        if (!ok.rowCount) return fail('That branch is not available. Please choose another one.');
+        branchId = bid;
+      }
+    }
+
     const cats = await pool.query('SELECT id, name FROM categories WHERE is_active AND id = ANY($1::int[])', [[...wanted.keys()]]);
     if (cats.rows.length === 0) return fail('Those categories are no longer available. Please refresh the page.');
 
@@ -185,9 +197,9 @@ router.post(
         await client.query('SAVEPOINT ref_try');
         try {
           const ins = await client.query(
-            `INSERT INTO requests (ref_code, customer_id, location_description, notes, latitude, longitude, location_accuracy, preferred_time, terms_version, terms_accepted_at, account_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now(), (SELECT id FROM accounts WHERE id = $10 AND is_active)) RETURNING id`,
-            [candidate, cust.rows[0].id, locationDescription, notes, lat, lng, accuracy, preferredTime, Number(settings.terms_version) || 1, req.session.account ? req.session.account.id : null]
+            `INSERT INTO requests (ref_code, customer_id, location_description, notes, latitude, longitude, location_accuracy, preferred_time, terms_version, terms_accepted_at, account_id, branch_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now(), (SELECT id FROM accounts WHERE id = $10 AND is_active), $11) RETURNING id`,
+            [candidate, cust.rows[0].id, locationDescription, notes, lat, lng, accuracy, preferredTime, Number(settings.terms_version) || 1, req.session.account ? req.session.account.id : null, branchId]
           );
           requestId = ins.rows[0].id;
           ref = candidate;
@@ -243,12 +255,11 @@ router.get(
     }
 
     const r = found.rows[0];
-    const [items, events, garments] = await Promise.all([
+    const [items, events] = await Promise.all([
       pool.query('SELECT category_name, quantity FROM request_items WHERE request_id = $1 ORDER BY id', [r.id]),
       pool.query('SELECT status, note, created_at FROM request_events WHERE request_id = $1 ORDER BY created_at DESC, id DESC', [r.id]),
-      pool.query('SELECT item_name,tag_code,process_status FROM laundry_items WHERE request_id=$1 ORDER BY id',[r.id]),
     ]);
-    res.view(trackPage(ctx, { ref, info: req.query.feedback === 'sent' ? 'Thank you. Your feedback has been received.' : '', result: { ref_code: r.ref_code, status: r.status, items: items.rows, events: events.rows, garments: garments.rows, pickup_scheduled_at:r.pickup_scheduled_at, delivery_scheduled_at:r.delivery_scheduled_at, dispatch_stage:r.dispatch_stage } }));
+    res.view(trackPage(ctx, { ref, info: req.query.feedback === 'sent' ? 'Thank you. Your feedback has been received.' : '', result: { ref_code: r.ref_code, status: r.status, items: items.rows, events: events.rows, pickup_scheduled_at:r.pickup_scheduled_at, delivery_scheduled_at:r.delivery_scheduled_at, dispatch_stage:r.dispatch_stage } }));
   })
 );
 

@@ -43,7 +43,7 @@ function contactBlock(s) {
   return items.length ? html`<ul class="contact-list">${items}</ul>` : html`<p class="muted">Contact details will appear here soon.</p>`;
 }
 
-function wizard(signedIn) {
+function wizard(signedIn, branches = []) {
   return html`<div class="modal" id="wizard" hidden>
     <div class="modal-backdrop" data-close></div>
     <div class="modal-card glass-strong" role="dialog" aria-modal="true" aria-labelledby="wizTitle">
@@ -88,6 +88,7 @@ function wizard(signedIn) {
           <label class="field"><span>Your name <em>*</em></span><input id="fName" type="text" maxlength="80" autocomplete="name" placeholder="Jane Wanjiku"></label>
           <label class="field"><span>Phone number <em>*</em></span><input id="fPhone" type="tel" maxlength="20" autocomplete="tel" inputmode="tel" placeholder="0712 345 678"></label>
         </div>
+        ${branches.length ? html`<label class="field"><span>Nearest branch</span><select id="fBranch"><option value="">Any branch</option>${branches.map((b) => html`<option value="${b.id}">${b.name}${b.address ? ' - ' + b.address : ''}</option>`)}</select></label>` : ''}
         <label class="field"><span>Preferred pick-up time</span><input id="fTime" type="text" maxlength="80" placeholder="e.g. Tomorrow morning, after 4 PM"></label>
         <label class="field"><span>Anything we should know?</span><textarea id="fNotes" rows="2" maxlength="1000" placeholder="Stains, delicate fabrics, special care…"></textarea></label>
         ${signedIn ? '' : html`<p class="muted small guest-hint">Ordering as a guest. <a class="link" href="/account/login?next=/">Sign in</a> or <a class="link" href="/account/signup">create an account</a> to save your details.</p>`}
@@ -236,7 +237,7 @@ function homePage(ctx, categories) {
     <button class="btn btn-primary btn-sm" type="button" data-open-wizard>Tap to wash</button>
   </div>
 
-  ${wizard(!!ctx.account)}
+  ${wizard(!!ctx.account, ctx.branches || [])}
   <script type="application/json" id="app-data">${raw(json)}</script>`;
 
   return publicLayout(ctx, { body, scripts: raw('<script src="/js/app.js"></script><script src="/js/scroll.js"></script>'), bodyClass: 'public' });

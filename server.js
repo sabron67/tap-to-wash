@@ -1,6 +1,7 @@
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
+const compression = require('compression');
 const session = require('express-session');
 const PgSession = require('connect-pg-simple')(session);
 
@@ -26,10 +27,18 @@ if (!process.env.SESSION_SECRET) {
   console.warn('WARNING: SESSION_SECRET is not set - using an insecure development default.');
 }
 
+app.use(compression()); // gzip html/css/js/svg: much smaller downloads on phones
 app.use(securityHeaders);
 app.use(express.json({ limit: '50kb' }));
 app.use(express.urlencoded({ extended: false, limit: '50kb' }));
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: isProd ? '7d' : 0 }));
+app.use(
+  express.static(path.join(__dirname, 'public'), {
+    // pictures cache for a week; css/js are re-checked (cheap 304) so an update shows up straight away
+    setHeaders: (res, file) => {
+      res.setHeader('Cache-Control', /\.(css|js)$/.test(file) || !isProd ? 'no-cache' : 'public, max-age=604800');
+    },
+  })
+);
 
 // Views are plain .js functions that return html`...`; res.view() sends the result.
 app.use((req, res, next) => {
