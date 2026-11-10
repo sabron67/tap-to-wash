@@ -14,15 +14,16 @@ function staffPage(ctx, { rows, created }) {
     ? html`<section class="glass pad notice">
         <h2>${created.what === 'reset' ? 'New temporary password' : 'Account created'} for ${created.name}</h2>
         <p>Give these sign-in details to ${created.name} now. <strong>The password is shown only once</strong> and they must choose their own at first sign-in.</p>
-        <p class="mono" style="font-size:1rem">Email: <strong>${created.email}</strong><br>Temporary password: <strong>${created.password}</strong></p>
+        <p class="mono" style="font-size:1rem">Sign in at: <strong>${created.role === 'owner' ? `${ctx.baseUrl}/admin/login` : `${ctx.baseUrl}/staff`}</strong><br>Email: <strong>${created.email}</strong><br>Temporary password: <strong>${created.password}</strong></p>
         ${created.phone && validWaNumber(created.phone)
-          ? html`<p><a class="btn btn-accent btn-sm" href="${waLink(created.phone, `Hello ${String(created.name).split(' ')[0]}, your ${ctx.settings.business_name} staff account is ready.\nEmail: ${created.email}\nTemporary password: ${created.password}\nPlease choose your own password when you first sign in.`)}" target="_blank" rel="noopener">${icon('message-circle')} Send on WhatsApp</a></p>`
+          ? html`<p><a class="btn btn-accent btn-sm" href="${waLink(created.phone, `Hello ${String(created.name).split(' ')[0]}, your ${ctx.settings.business_name} staff account is ready.\nEmail: ${created.email}\nTemporary password: ${created.password}\nSign in here: ${created.role === 'owner' ? ctx.baseUrl + '/admin/login' : ctx.baseUrl + '/staff'}\nPlease choose your own password when you first sign in.`)}" target="_blank" rel="noopener">${icon('message-circle')} Send on WhatsApp</a></p>`
           : ''}
       </section>`
     : ''}
 
   <section class="glass pad">
     <div class="card-head"><h2>Staff accounts</h2><span class="muted small">${rows.filter((r) => r.is_active).length} active · everyone signs in with their own email</span></div>
+    <p class="muted small">Staff sign-in page (manager, cashier, rider, attendant): <strong class="mono">${ctx.baseUrl}/staff</strong> · Owner sign-in page: <strong class="mono">${ctx.baseUrl}/admin/login</strong>. Each page refuses the other group's accounts.</p>
     <div class="table-wrap"><table class="table">
       <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
       <tbody>${rows.map((r) => {
@@ -59,7 +60,7 @@ function staffPage(ctx, { rows, created }) {
       <label class="field"><span>Full name</span><input name="name" maxlength="80" required></label>
       <label class="field"><span>Email (their sign-in)</span><input type="email" name="email" maxlength="120" required autocomplete="off"></label>
       <label class="field"><span>WhatsApp / phone number</span><input type="tel" name="phone" maxlength="20" placeholder="0712 345 678"><small class="muted">Optional. Used for job alerts on WhatsApp.</small></label>
-      <label class="field"><span>Role</span><select name="role" required>${roleOptions('rider')}</select></label>
+      <label class="field"><span>Role</span><select name="role" required>${roleOptions('rider')}</select><small class="muted">Owners sign in at /admin/login. Every other role signs in at /staff.</small></label>
       <button class="btn btn-primary" type="submit">${icon('plus')} Create account</button>
       <p class="muted small">A temporary password is generated and shown once.</p>
     </form>

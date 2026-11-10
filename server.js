@@ -11,7 +11,9 @@ const { securityHeaders } = require('./lib/security');
 const { messagePage } = require('./views/public/track');
 const publicRoutes = require('./routes/public');
 const adminRoutes = require('./routes/admin');
+const { staffRouter } = adminRoutes;
 const accountRoutes = require('./routes/account');
+const { slotMiddleware, newSlotId } = require('./lib/slots');
 
 const isProd = process.env.NODE_ENV === 'production';
 const app = express();
@@ -42,23 +44,32 @@ app.use(
 
 // Views are plain .js functions that return html`...`; res.view() sends the result.
 app.use((req, res, next) => {
-  res.view = (page) => res.type('html').send(String(page));
+  res.view = (page) => res.type('html').send(res.prefixHtml ? res.prefixHtml(page) : String(page));
   next();
 });
 
-app.use(
+const sessionStore = new PgSession({ pool, tableName: 'session', createTableIfMissing: true });
+const buildSession = (name, cookiePath) =>
   session({
-    store: new PgSession({ pool, tableName: 'session', createTableIfMissing: true }),
-    name: 'ttw.sid',
+    store: sessionStore,
+    name,
     secret: process.env.SESSION_SECRET || 'dev-only-secret-change-me',
     resave: false,
     saveUninitialized: false,
     rolling: true, // idle timeout: the cookie is renewed on every request and expires after 2 hours of inactivity
-    cookie: { httpOnly: true, sameSite: 'lax', secure: isProd, maxAge: 1000 * 60 * 60 * 2 },
-  })
-);
+    cookie: { httpOnly: true, sameSite: 'lax', secure: isProd, path: cookiePath, maxAge: 1000 * 60 * 60 * 2 },
+  });
+// Each login runs in its own session (see lib/slots.js), so several people can sign in in one browser.
+app.use(slotMiddleware(buildSession));
+
+// "Sign in as another user": opens a fresh, separate login so the current one stays signed in.
+app.get('/admin/another', (req, res) => {
+  const door = req.query.door === 'admin' ? '/admin/login' : '/staff';
+  res.set('Cache-Control', 'no-store').redirect(302, `/${newSlotId()}${door}`);
+});
 
 app.use('/admin', adminRoutes);
+app.use('/staff', staffRouter); // staff sign-in page (every role except the owner)
 app.use('/account', accountRoutes);
 app.use('/', publicRoutes);
 
@@ -72,7 +83,8 @@ app.use(async (err, req, res, next) => {
   const clientErr = err && err.status >= 400 && err.status < 500;
   if (!clientErr) console.error(err);
   if (res.headersSent) return;
-  if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/admin/photos') || req.originalUrl.startsWith('/admin/settings/favicon')) {
+  const cleanUrl = req.cleanUrl || req.originalUrl;
+  if (cleanUrl.startsWith('/api') || cleanUrl.startsWith('/admin/api') || cleanUrl.startsWith('/admin/photos') || cleanUrl.startsWith('/admin/settings/favicon')) {
     return res.status(clientErr ? err.status : 500).json({ ok: false, error: clientErr ? 'That request could not be processed (too large or malformed).' : 'Something went wrong. Please try again.' });
   }
   const settings = await getSettings().catch(() => ({ business_name: 'Tap to Wash', tagline: '' }));

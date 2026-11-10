@@ -137,7 +137,7 @@ router.post(
 
 // ---------- forgot / reset password (code sent by WhatsApp) ----------
 const UNAVAILABLE = 'Automatic reset codes are not available right now. Please contact us on WhatsApp or by phone and we will reset your password for you.';
-const SENT = `We have sent a 6-digit code to the WhatsApp number saved on your account. It works for ${TTL_MINUTES} minutes.`;
+const SENT = `If that email has an account with a WhatsApp number saved, we have sent it a 6-digit code (it works for ${TTL_MINUTES} minutes). Nothing arrived? Contact us and we will reset your password for you.`;
 
 router.get(
   '/forgot',
@@ -155,8 +155,9 @@ router.post(
     const ctx = await pubCtx(req);
     if (!EMAIL_RE.test(email)) return res.status(400).view(forgotPage(ctx, 'customer', { error: 'Please enter a valid email address.', email }));
     const r = await requestCode('customer', email, ctx.settings.business_name);
-    if (r.problem) return res.status(r.problem === 'wait' ? 429 : 400).view(forgotPage(ctx, 'customer', { error: problemMessage(r.problem, 'customer'), email }));
     if (!r.available) return res.view(forgotPage(ctx, 'customer', { error: UNAVAILABLE, email }));
+    // Same reply whether or not the email has an account (or a WhatsApp number), so nobody can test which emails exist.
+    if (r.problem) return res.view(resetPage(ctx, 'customer', { info: SENT, email }));
     res.view(resetPage(ctx, 'customer', { info: SENT, email }));
   })
 );

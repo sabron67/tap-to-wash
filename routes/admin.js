@@ -12,6 +12,8 @@ const { can, roleOf, visibleStatuses, settableStatuses } = require('../lib/roles
 const { pickupBlocker, GATED_TARGETS, autoBill } = require('../lib/bill');
 const { ROUTES, eventFor, notifyEvent, recipientsFor, teamMessage, customerMessage, HEADLINES } = require('../lib/notify');
 const { waLink, canSend: waCanSend } = require('../lib/whatsapp');
+const { newSlotId } = require('../lib/slots');
+const { PORTALS, loginUrlForRole, portalHint, rememberPortal, loginUrlFromHint } = require('../lib/portal');
 
 const { loginPage } = require('../views/admin/login');
 const { dashboardPage } = require('../views/admin/dashboard');
@@ -38,18 +40,25 @@ const signinLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: +process.env.LOGI
 const loginLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: +process.env.LOGIN_MAX || 12, message: 'Too many sign-in attempts. Please wait a few minutes.' });
 
 // ---------- session helpers ----------
-router.use((req, res, next) => {
+const ensureCsrf = (req, res, next) => {
   if (!req.session.csrf) req.session.csrf = crypto.randomBytes(24).toString('hex');
   next();
-});
-
-router.use((req, res, next) => {
+};
+const checkCsrf = (req, res, next) => {
   const sent = req.get('x-csrf-token') || (req.body && req.body._csrf);
   if (req.method === 'POST' && !safeEqual(sent, req.session.csrf)) {
     return res.status(403).send('Your form expired. Go back, refresh the page and try again.');
   }
   next();
-});
+};
+router.use(ensureCsrf);
+router.use(checkCsrf);
+
+// The staff door (/staff) is its own small router: sign-in only. Once signed in, everyone works in the same workspace.
+const staffRouter = express.Router();
+staffRouter.use(adminNoCache);
+staffRouter.use(ensureCsrf);
+staffRouter.use(checkCsrf);
 
 const flash = (req, type, msg) => {
   req.session.flash = { type, msg };
@@ -74,6 +83,7 @@ async function buildCtx(req) {
   const role = req.session.admin ? req.session.admin.role : '';
   return {
     settings,
+    baseUrl: (process.env.BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, ''),
     admin: req.session.admin,
     csrf: req.session.csrf,
     flash: f,
@@ -89,79 +99,103 @@ async function buildCtx(req) {
 }
 
 // ---------- auth ----------
-router.get(
-  '/login',
-  wrap(async (req, res) => {
-    if (req.session.admin) return res.redirect(can(req.session.admin.role, 'dashboard') ? '/admin' : '/admin/requests');
-    res.view(loginPage(await buildCtx(req)));
-  })
-);
+// One handler pair serves both doors. portal 'admin' = owner only (/admin/login); portal 'staff' = everyone else (/staff).
+const homeFor = (role) => (can(role, 'dashboard') ? '/admin' : '/admin/requests');
 
-router.post(
-  '/login',
-  signinLimit,
-  wrap(async (req, res, next) => {
-    const email = cleanText(req.body.email, 120).toLowerCase();
-    const password = String(req.body.password || '').slice(0, 200);
-    const { rows } = await pool.query(
-      'SELECT id, name, email, role, is_active, password_hash, failed_attempts, locked_until, must_change_password FROM admins WHERE email = $1',
-      [email]
-    );
-    const a = rows[0];
-    const match = await bcrypt.compare(password, a ? a.password_hash : DUMMY_HASH); // always run, so timing does not reveal valid emails
-    const fail = async (status, error) => {
-      const ctx = await buildCtx(req);
-      return res.status(status).view(loginPage(ctx, { error, email }));
-    };
+function mountLogin(r, portal, paths) {
+  const P = PORTALS[portal];
 
-    if (a && a.locked_until && new Date(a.locked_until) > new Date()) {
-      await audit(req, 'login_blocked', 'Account is locked', { id: a.id, email: a.email });
-      return fail(429, 'Too many failed attempts. This account is locked for a short while - please try again later.');
-    }
-    if (!a || !match) {
-      if (a) {
-        const fails = a.failed_attempts + 1;
-        const lock = fails >= MAX_FAILS;
-        await pool.query('UPDATE admins SET failed_attempts = $1, locked_until = $2 WHERE id = $3', [
-          lock ? 0 : fails,
-          lock ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000) : null,
-          a.id,
-        ]);
-        await audit(req, lock ? 'login_locked' : 'login_failed', lock ? `Locked for ${LOCK_MINUTES} minutes` : `Attempt ${fails} of ${MAX_FAILS}`, { id: a.id, email: a.email });
-      } else {
-        await audit(req, 'login_failed', `Unknown email: ${email}`.slice(0, 120), { email });
+  r.get(
+    paths,
+    wrap(async (req, res) => {
+      if (req.session.admin) {
+        // Already signed in here: a login page opened in another tab starts its own separate login instead of reusing this one.
+        if (!req.slot) return res.redirect(302, `/${newSlotId()}${portal === 'admin' ? '/admin/login' : '/staff'}`);
+        return res.redirect(homeFor(req.session.admin.role));
       }
-      return fail(401, 'Incorrect email or password.');
-    }
+      rememberPortal(res, portal);
+      res.view(loginPage(await buildCtx(req), { portal }));
+    })
+  );
 
-    if (!a.is_active) {
-      await audit(req, 'login_blocked', 'Disabled account', { id: a.id, email: a.email });
-      return fail(403, 'This account has been disabled. Please contact the owner.');
-    }
-    await pool.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = $1', [a.id]);
-    const admin = { id: a.id, name: a.name, email: a.email, role: a.role, mustChange: a.must_change_password, since: Date.now() };
-    req.session.regenerate((err) => {
-      if (err) return next(err);
-      req.session.admin = admin;
-      req.session.csrf = crypto.randomBytes(24).toString('hex');
-      req.session.save(async (err2) => {
-        if (err2) return next(err2);
-        await audit(req, 'login', `Signed in (${a.role})`, admin);
-        res.redirect(admin.mustChange ? '/admin/account' : can(a.role, 'dashboard') ? '/admin' : '/admin/requests');
+  r.post(
+    paths.map((p) => (p === '/' ? '/login' : p)).filter((p, i, arr) => arr.indexOf(p) === i),
+    signinLimit,
+    wrap(async (req, res, next) => {
+      const email = cleanText(req.body.email, 120).toLowerCase();
+      const password = String(req.body.password || '').slice(0, 200);
+      const { rows } = await pool.query(
+        'SELECT id, name, email, role, is_active, password_hash, failed_attempts, locked_until, must_change_password FROM admins WHERE email = $1',
+        [email]
+      );
+      const a = rows[0];
+      const match = await bcrypt.compare(password, a ? a.password_hash : DUMMY_HASH); // always run, so timing does not reveal valid emails
+      const fail = async (status, error) => {
+        const ctx = await buildCtx(req);
+        return res.status(status).view(loginPage(ctx, { error, email, portal }));
+      };
+
+      if (a && a.locked_until && new Date(a.locked_until) > new Date()) {
+        await audit(req, 'login_blocked', 'Account is locked', { id: a.id, email: a.email });
+        return fail(429, 'Too many failed attempts. This account is locked for a short while - please try again later.');
+      }
+      if (!a || !match) {
+        if (a) {
+          const fails = a.failed_attempts + 1;
+          const lock = fails >= MAX_FAILS;
+          await pool.query('UPDATE admins SET failed_attempts = $1, locked_until = $2 WHERE id = $3', [
+            lock ? 0 : fails,
+            lock ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000) : null,
+            a.id,
+          ]);
+          await audit(req, lock ? 'login_locked' : 'login_failed', lock ? `Locked for ${LOCK_MINUTES} minutes` : `Attempt ${fails} of ${MAX_FAILS}`, { id: a.id, email: a.email });
+        } else {
+          await audit(req, 'login_failed', `Unknown email: ${email}`.slice(0, 120), { email });
+        }
+        return fail(401, 'Incorrect email or password.');
+      }
+
+      if (!a.is_active) {
+        await audit(req, 'login_blocked', 'Disabled account', { id: a.id, email: a.email });
+        return fail(403, 'This account has been disabled. Please contact the owner.');
+      }
+      // Right password, wrong door: refuse without starting a session. Only said after the password is proven correct.
+      if (!P.allows(a.role)) {
+        await audit(req, 'login_wrong_door', `${a.role} account tried the ${portal === 'admin' ? 'owner' : 'staff'} sign-in`, { id: a.id, email: a.email });
+        return fail(
+          403,
+          portal === 'admin' ? 'This sign-in is for the owner only. Staff sign in at the staff page.' : 'Owner accounts sign in on the owner page (/admin/login), not here.'
+        );
+      }
+      await pool.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = $1', [a.id]);
+      const admin = { id: a.id, name: a.name, email: a.email, role: a.role, mustChange: a.must_change_password, since: Date.now() };
+      req.session.regenerate((err) => {
+        if (err) return next(err);
+        req.session.admin = admin;
+        req.session.csrf = crypto.randomBytes(24).toString('hex');
+        req.session.save(async (err2) => {
+          if (err2) return next(err2);
+          await audit(req, 'login', `Signed in (${a.role}) via ${portal === 'admin' ? 'owner' : 'staff'} page`, admin);
+          rememberPortal(res, portal);
+          res.redirect(admin.mustChange ? '/admin/account' : homeFor(a.role));
+        });
       });
-    });
-  })
-);
+    })
+  );
+}
+
+mountLogin(router, 'admin', ['/login']);
+mountLogin(staffRouter, 'staff', ['/', '/login']);
 
 // ---------- forgot / reset password (code sent by WhatsApp to the number on the staff account) ----------
 const STAFF_UNAVAILABLE = 'Automatic reset codes are not available right now (WhatsApp is not linked). Ask the owner to reset your password under Staff.';
-const STAFF_SENT = `We have sent a 6-digit code to the WhatsApp number saved on your staff account. It works for ${TTL_MINUTES} minutes.`;
+const STAFF_SENT = `If that email belongs to a staff account with a WhatsApp number saved, we have sent it a 6-digit code (it works for ${TTL_MINUTES} minutes). Nothing arrived? Ask the owner to reset your password under Staff.`;
 
 router.get(
   '/forgot',
   wrap(async (req, res) => {
-    if (req.session.admin) return res.redirect(can(req.session.admin.role, 'dashboard') ? '/admin' : '/admin/requests');
-    res.view(forgotPage(await buildCtx(req), 'admin'));
+    if (req.session.admin) return res.redirect(homeFor(req.session.admin.role));
+    res.view(forgotPage(await buildCtx(req), 'admin', { portal: portalHint(req) }));
   })
 );
 
@@ -171,20 +205,20 @@ router.post(
   wrap(async (req, res) => {
     const email = cleanText(req.body.email, 120).toLowerCase();
     const ctx = await buildCtx(req);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return res.status(400).view(forgotPage(ctx, 'admin', { error: 'Please enter a valid email address.', email }));
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return res.status(400).view(forgotPage(ctx, 'admin', { error: 'Please enter a valid email address.', email, portal: portalHint(req) }));
     const r = await requestCode('admin', email, ctx.settings.business_name);
     await audit(req, 'password_reset_requested', `Code requested for ${email}`.slice(0, 120), { email });
-    if (r.problem) return res.status(r.problem === 'wait' ? 429 : 400).view(forgotPage(ctx, 'admin', { error: problemMessage(r.problem, 'admin'), email }));
-    if (!r.available) return res.view(forgotPage(ctx, 'admin', { error: STAFF_UNAVAILABLE, email }));
-    res.view(resetPage(ctx, 'admin', { info: STAFF_SENT, email }));
+    if (!r.available) return res.view(forgotPage(ctx, 'admin', { error: STAFF_UNAVAILABLE, email, portal: portalHint(req) }));
+    // Same reply whether or not the email has an account (or a WhatsApp number), so nobody can test which emails exist.
+    res.view(resetPage(ctx, 'admin', { info: STAFF_SENT, email, portal: portalHint(req) }));
   })
 );
 
 router.get(
   '/reset',
   wrap(async (req, res) => {
-    if (req.session.admin) return res.redirect(can(req.session.admin.role, 'dashboard') ? '/admin' : '/admin/requests');
-    res.view(resetPage(await buildCtx(req), 'admin', { email: cleanText(req.query.email, 120) }));
+    if (req.session.admin) return res.redirect(homeFor(req.session.admin.role));
+    res.view(resetPage(await buildCtx(req), 'admin', { email: cleanText(req.query.email, 120), portal: portalHint(req) }));
   })
 );
 
@@ -197,30 +231,33 @@ router.post(
     const r = await completeReset('admin', email, b.code, b.password, b.confirm);
     if (!r.ok) {
       await audit(req, 'password_reset_failed', 'Wrong or expired code', { email });
-      return res.status(400).view(resetPage(await buildCtx(req), 'admin', { error: r.error, email }));
+      return res.status(400).view(resetPage(await buildCtx(req), 'admin', { error: r.error, email, portal: portalHint(req) }));
     }
     await audit(req, 'password_reset', 'Password reset with a WhatsApp code', { id: r.user.id, email: r.user.email });
     flash(req, 'success', 'Your password was updated. Please sign in.');
-    res.redirect('/admin/login');
+    const who = await pool.query('SELECT role FROM admins WHERE id = $1', [r.user.id]);
+    res.redirect(loginUrlForRole(who.rows[0] && who.rows[0].role)); // owner -> /admin/login, everyone else -> /staff
   })
 );
 
 router.post('/logout', async (req, res) => {
+  const door = req.session.admin ? loginUrlForRole(req.session.admin.role) : loginUrlFromHint(req);
   if (req.session.admin) await audit(req, 'logout', 'Signed out');
-  req.session.destroy(() => res.redirect('/admin/login'));
+  req.session.destroy(() => res.redirect(door));
 });
 
 router.use(
   wrap(async (req, res, next) => {
     const a = req.session.admin;
-    if (!a) return res.redirect('/admin/login');
+    if (!a) return res.redirect(loginUrlFromHint(req));
+    const door = loginUrlForRole(a.role);
     if (Date.now() - (a.since || 0) > ABSOLUTE_SESSION_MS) {
-      return req.session.destroy(() => res.redirect('/admin/login'));
+      return req.session.destroy(() => res.redirect(door));
     }
     // Re-read the account on every request so role changes and disabling take effect immediately.
     const { rows } = await pool.query('SELECT name, email, role, is_active, must_change_password FROM admins WHERE id = $1', [a.id]);
     if (!rows.length || !rows[0].is_active) {
-      return req.session.destroy(() => res.redirect('/admin/login'));
+      return req.session.destroy(() => res.redirect(door));
     }
     Object.assign(a, { name: rows[0].name, email: rows[0].email, role: rows[0].role, mustChange: rows[0].must_change_password });
     // A temporary / default password must be replaced before anything else can be used.
@@ -255,7 +292,8 @@ router.get(
         FROM requests`),
       pool.query('SELECT COUNT(*)::int AS n FROM customers'),
       pool.query(`SELECT
-          COALESCE(SUM(amount_paid) FILTER (WHERE date_trunc('month', created_at AT TIME ZONE 'Africa/Nairobi') = date_trunc('month', now() AT TIME ZONE 'Africa/Nairobi')), 0) AS collected,
+          COALESCE(SUM(amount_paid) FILTER (WHERE date_trunc('month', created_at AT TIME ZONE 'Africa/Nairobi') = date_trunc('month', now() AT TIME ZONE 'Africa/Nairobi')), 0)
+          + (SELECT COALESCE(SUM(d.amount_paid), 0) FROM deleted_requests d WHERE date_trunc('month', d.created_at AT TIME ZONE 'Africa/Nairobi') = date_trunc('month', now() AT TIME ZONE 'Africa/Nairobi')) AS collected,
           COALESCE(SUM(GREATEST(total_amount - amount_paid, 0)) FILTER (WHERE status <> 'cancelled'), 0) AS outstanding
         FROM requests`),
       pool.query(`SELECT to_char(d::date, 'Dy') AS label, COALESCE(c.n, 0)::int AS n
@@ -465,7 +503,8 @@ router.post(
     const subtotal = Number(req.body.total_amount);
     const paid = Number(req.body.amount_paid);
     const code = cleanText(req.body.discount_code,40).toUpperCase();
-    const bs = Number.isInteger(id) ? await pool.query('SELECT bill_status FROM requests WHERE id = $1', [id]) : { rows: [] };
+    if (!Number.isInteger(id)) return res.redirect('/admin/requests');
+    const bs = await pool.query('SELECT bill_status FROM requests WHERE id = $1', [id]);
     if (!bs.rows.length || bs.rows[0].bill_status !== 'legacy') {
       flash(req, 'error', 'Prices now come from the weighed bill. Use the Bill section on this request.');
       return res.redirect(`/admin/requests/${id}`);
@@ -521,9 +560,40 @@ router.post(
   need('delete'),
   wrap(async (req, res) => {
     const rid = parseInt(req.params.id, 10);
-    await pool.query('DELETE FROM requests WHERE id = $1', [rid]);
-    await audit(req, 'request_delete', `Request #${rid}`);
-    flash(req, 'success', 'Request deleted.');
+    if (!Number.isInteger(rid)) {
+      flash(req, 'error', 'Request not found.');
+      return res.redirect('/admin/requests');
+    }
+    // Keep the money: copy the totals to deleted_requests and keep the payment rows before removing the request.
+    const client = await pool.connect();
+    let kept = null;
+    try {
+      await client.query('BEGIN');
+      const r = await client.query(
+        `SELECT r.id, r.ref_code, r.customer_id, r.status, r.total_amount, r.amount_paid, r.created_at, c.name, c.phone
+           FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.id = $1 FOR UPDATE OF r`,
+        [rid]
+      );
+      if (r.rows.length) {
+        const q = r.rows[0];
+        kept = q;
+        await client.query('UPDATE payments SET request_ref = $1 WHERE request_id = $2', [q.ref_code, rid]);
+        await client.query(
+          `INSERT INTO deleted_requests (original_id, ref_code, customer_id, customer_name, customer_phone, status, total_amount, amount_paid, created_at, deleted_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [q.id, q.ref_code, q.customer_id, q.name, q.phone, q.status, q.total_amount, q.amount_paid, q.created_at, req.session.admin.name]
+        );
+        await client.query('DELETE FROM requests WHERE id = $1', [rid]);
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+    await audit(req, 'request_delete', kept ? `Request #${rid} ${kept.ref_code} (paid ${kept.amount_paid} kept in the totals)` : `Request #${rid}`);
+    flash(req, 'success', kept && Number(kept.amount_paid) > 0 ? 'Request deleted. The money already received on it is still counted in your totals.' : 'Request deleted.');
     res.redirect('/admin/requests');
   })
 );
@@ -604,7 +674,9 @@ router.post(
   '/categories/:id/toggle',
   need('categories'),
   wrap(async (req, res) => {
-    await pool.query('UPDATE categories SET is_active = NOT is_active WHERE id = $1', [parseInt(req.params.id, 10)]);
+    const cid = parseInt(req.params.id, 10);
+    if (!Number.isInteger(cid)) return res.redirect('/admin/categories');
+    await pool.query('UPDATE categories SET is_active = NOT is_active WHERE id = $1', [cid]);
     await audit(req, 'category_toggle', `#${req.params.id}`);
     flash(req, 'success', 'Category visibility changed.');
     res.redirect('/admin/categories');
@@ -615,7 +687,9 @@ router.post(
   '/categories/:id/delete',
   need('categories'),
   wrap(async (req, res) => {
-    await pool.query('DELETE FROM categories WHERE id = $1', [parseInt(req.params.id, 10)]);
+    const cid = parseInt(req.params.id, 10);
+    if (!Number.isInteger(cid)) return res.redirect('/admin/categories');
+    await pool.query('DELETE FROM categories WHERE id = $1', [cid]);
     await audit(req, 'category_delete', `#${req.params.id}`);
     flash(req, 'success', 'Category deleted.');
     res.redirect('/admin/categories');
@@ -635,7 +709,7 @@ async function customersView(req, created = null) {
     pool.query(
       `SELECT c.id, c.name, c.phone, c.created_at,
           COUNT(r.id)::int AS requests,
-          COALESCE(SUM(r.amount_paid), 0) AS paid,
+          COALESCE(SUM(r.amount_paid), 0) + (SELECT COALESCE(SUM(d.amount_paid), 0) FROM deleted_requests d WHERE d.customer_id = c.id) AS paid,
           MAX(r.created_at) AS last_request
          FROM customers c LEFT JOIN requests r ON r.customer_id = c.id
         WHERE ${where}
@@ -804,3 +878,4 @@ require('./admin-operations')(router, { buildCtx, flash, need });
 require('./admin-billing')(router, { flash, need });
 
 module.exports = router;
+module.exports.staffRouter = staffRouter;

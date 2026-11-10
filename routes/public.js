@@ -14,7 +14,7 @@ const { SLOTS, mediaVersions } = require('../lib/media');
 
 const router = express.Router();
 
-const submitLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 12, message: 'Too many requests from this device. Please try again in a few minutes.' });
+const submitLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: +process.env.REQUEST_MAX || 30, message: 'Too many requests from this device. Please try again in a few minutes.' });
 const trackLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, message: 'Too many lookups. Please try again in a few minutes.' });
 
 router.get(
@@ -198,7 +198,7 @@ router.post(
 
       const cust = await client.query(
         `INSERT INTO customers (name, phone, phone_key) VALUES ($1, $2, $3)
-         ON CONFLICT (phone_key) DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone
+         ON CONFLICT (phone_key) DO UPDATE SET phone = EXCLUDED.phone
          RETURNING id`,
         [name, phone, phoneKey(phone)]
       );
@@ -347,7 +347,7 @@ router.post(
     const kind = cleanText(req.body.kind, 20);
     const rating = Number(req.body.rating);
     const comment = cleanMultiline(req.body.comment, 1500);
-    const found = await pool.query(`SELECT r.id,r.customer_id,c.phone_key FROM requests r JOIN customers c ON c.id=r.customer_id WHERE r.ref_code=$1`, [ref]);
+    const found = await pool.query(`SELECT r.id,r.customer_id,r.status,c.phone_key FROM requests r JOIN customers c ON c.id=r.customer_id WHERE r.ref_code=$1`, [ref]);
     if (!found.rows.length || !validPhone(phone) || found.rows[0].phone_key !== phoneKey(phone)) {
       const settings = await getSettings();
       return res.status(400).view(trackPage({settings,account:req.session.account,accountPhone:await savedPhone(req)},{ref,error:'We could not verify that order. Check the reference code and phone number.'}));
@@ -355,6 +355,10 @@ router.post(
     if (!['review','complaint'].includes(kind) || !Number.isInteger(rating) || rating<1 || rating>5 || (!comment.trim() && kind==='complaint')) {
       const settings = await getSettings();
       return res.status(400).view(trackPage({settings,account:req.session.account,accountPhone:await savedPhone(req)},{ref,error:'Please provide a valid rating and, for a complaint, describe the issue.'}));
+    }
+    if (kind === 'review' && found.rows[0].status !== 'delivered') {
+      const settings = await getSettings();
+      return res.status(400).view(trackPage({ settings, account: req.session.account, accountPhone: await savedPhone(req) }, { ref, error: 'You can rate the service once your laundry has been delivered. To report a problem now, choose “Report a problem”.' }));
     }
     if (kind === 'review') {
       await pool.query(`INSERT INTO customer_reviews(request_id,customer_id,rating,comment) VALUES($1,$2,$3,$4) ON CONFLICT(request_id) DO UPDATE SET rating=EXCLUDED.rating,comment=EXCLUDED.comment,created_at=now()`,[found.rows[0].id,found.rows[0].customer_id,rating,comment]);

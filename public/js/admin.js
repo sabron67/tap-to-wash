@@ -1,6 +1,10 @@
 (function () {
   'use strict';
 
+  // Address prefix of this login (empty for the normal one) - keeps requests inside the right session.
+  var baseEl = document.querySelector('meta[name="app-base"]');
+  var BASE = baseEl ? baseEl.getAttribute('content') : '';
+
   // Mobile sidebar
   var menuBtn = document.getElementById('menuBtn');
   var sidebar = document.getElementById('sidebar');
@@ -43,7 +47,7 @@
     var numBox = wa.querySelector('[data-wa-number]');
     var numEl = wa.querySelector('[data-wa-num]');
     var tick = function () {
-      fetch('/admin/api/whatsapp/status', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      fetch(BASE + '/admin/api/whatsapp/status', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (!d || !d.ok) return;
@@ -110,7 +114,7 @@
         canvas.toBlob(function (blob) {
           if (!blob) return show('Could not prepare that picture.');
           btn.disabled = true;
-          fetch('/admin/photos/' + slot, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'X-CSRF-Token': tokenEl ? tokenEl.value : '' }, body: blob })
+          fetch(BASE + '/admin/photos/' + slot, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'X-CSRF-Token': tokenEl ? tokenEl.value : '' }, body: blob })
             .then(function (r) { return r.json().catch(function () { return {}; }); })
             .then(function (out) { if (out.ok) window.location.reload(); else { btn.disabled = false; show(out.error || 'Upload failed.'); } })
             .catch(function () { btn.disabled = false; show('Upload failed. Check your connection.'); });
@@ -150,7 +154,7 @@
           canvas.toBlob(function (blob) {
             if (!blob) return favShow('Could not prepare that picture.');
             favBtn.disabled = true;
-            fetch('/admin/settings/favicon', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/png', 'X-CSRF-Token': tokenEl ? tokenEl.value : '' }, body: blob })
+            fetch(BASE + '/admin/settings/favicon', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/png', 'X-CSRF-Token': tokenEl ? tokenEl.value : '' }, body: blob })
               .then(function (r) { return r.json().catch(function () { return {}; }); })
               .then(function (out) { if (out.ok) window.location.reload(); else { favBtn.disabled = false; favShow(out.error || 'Upload failed.'); } })
               .catch(function () { favBtn.disabled = false; favShow('Upload failed. Check your connection.'); });
@@ -206,7 +210,7 @@
     }
     var a = document.createElement('a');
     a.className = 'toast';
-    a.href = item.url;
+    a.href = BASE + item.url;
     var t = document.createElement('strong');
     t.textContent = item.title;
     var b = document.createElement('span');
@@ -229,7 +233,7 @@
   function poll() {
     if (!polling) return;
     if (document.hidden) return setTimeout(poll, 20000);
-    fetch('/admin/api/alerts?after=' + lastId, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+    fetch(BASE + '/admin/api/alerts?after=' + lastId, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
       .then(function (r) {
         var ct = r.headers.get('content-type') || '';
         if (!r.ok || ct.indexOf('json') === -1) { polling = false; return null; } // signed out or blocked: stop quietly
@@ -284,19 +288,19 @@
         say('Setting up…');
         Notification.requestPermission().then(function (perm) {
           if (perm !== 'granted') throw new Error('Notifications are blocked. Allow them in your browser settings, then try again.');
-          return fetch('/admin/api/push/key', { credentials: 'same-origin' }).then(function (r) { return r.json(); });
+          return fetch(BASE + '/admin/api/push/key', { credentials: 'same-origin' }).then(function (r) { return r.json(); });
         }).then(function (k) {
           if (!k.ok) throw new Error('Phone alerts are not available on this server.');
           return navigator.serviceWorker.ready.then(function (reg) {
             return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(k.key) });
           });
-        }).then(function (sub) { return postJson('/admin/api/push/subscribe', sub.toJSON()); })
+        }).then(function (sub) { return postJson(BASE + '/admin/api/push/subscribe', sub.toJSON()); })
           .then(function (out) { say(out.ok ? 'Enabled on this device.' : (out.error || 'Could not enable.')); })
           .catch(function (e) { say(e.message || 'Could not enable alerts.'); });
       });
       if (testBtn) testBtn.addEventListener('click', function () {
         say('Sending…');
-        postJson('/admin/api/push/test').then(function (o) { say(o.sent ? 'Test sent - check your notifications.' : 'No device is enabled yet. Tap "Enable on this device" first.'); })
+        postJson(BASE + '/admin/api/push/test').then(function (o) { say(o.sent ? 'Test sent - check your notifications.' : 'No device is enabled yet. Tap "Enable on this device" first.'); })
           .catch(function () { say('Could not send the test.'); });
       });
     }

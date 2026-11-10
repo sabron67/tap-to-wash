@@ -30,7 +30,7 @@ ${head(`${title} · Admin`, s)}
 <body class="admin">
 <div class="shell">
   <aside class="sidebar glass" id="sidebar">
-    <a class="brand" href="${ctx.can('dashboard') ? '/admin' : '/admin/requests'}"><span>${s.business_name}<small>Admin</small></span></a>
+    <a class="brand" href="${ctx.can('dashboard') ? '/admin' : '/admin/requests'}"><span>${s.business_name}<small>${ctx.role === 'owner' ? 'Admin' : 'Staff'}</small></span></a>
     <nav class="side-nav">
       ${NAV.filter((n) => ctx.can(n[4])).map(
         ([key, href, ic, label]) => html`<a href="${href}" class="${key === active ? 'active' : ''}">
@@ -42,6 +42,7 @@ ${head(`${title} · Admin`, s)}
     <div class="side-foot">
       <a href="/" target="_blank" rel="noopener" class="side-link">${icon('globe')} View website</a>
       <a class="side-link ${active === 'account' ? 'strong' : ''}" href="/admin/account">${icon('key-round')} My account</a>
+      <a class="side-link" href="/admin/another">${icon('users')} Sign in as another user</a>
       <div class="who">Signed in as <strong>${ctx.admin.name}</strong> · ${ctx.roleLabel}</div>
       <form method="post" action="/admin/logout">${csrfField(ctx)}<button class="btn btn-ghost btn-sm btn-block" type="submit">${icon('log-out')} Sign out</button></form>
     </div>

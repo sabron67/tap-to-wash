@@ -52,7 +52,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
       pool.query(`SELECT
         (SELECT COUNT(*) FROM customer_complaints WHERE status IN ('open','investigating'))::int AS open_complaints,
         (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE date_trunc('month', spent_on::timestamp) = date_trunc('month', CURRENT_DATE::timestamp)) AS month_expenses,
-        (SELECT COALESCE(SUM(amount_paid), 0) FROM requests WHERE date_trunc('month', created_at) = date_trunc('month', now())) AS month_revenue,
+        ((SELECT COALESCE(SUM(amount_paid), 0) FROM requests WHERE date_trunc('month', created_at) = date_trunc('month', now())) + (SELECT COALESCE(SUM(amount_paid), 0) FROM deleted_requests WHERE date_trunc('month', created_at) = date_trunc('month', now()))) AS month_revenue,
         (SELECT COUNT(*) FROM inventory_items WHERE quantity <= reorder_level)::int AS low_stock`),
     ]);
     res.view(operationsPage(ctx, {

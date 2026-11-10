@@ -83,7 +83,20 @@ For scheduled backups, run `npm run db:backup` from the project directory using 
    npm run db:init           # creates tables, first admin, settings, starter categories
    npm start                 # http://localhost:3000
    ```
-3. Sign in at `/admin/login` with the `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env`, then change the password under **Settings**.
+3. Sign in at `/admin/login` with the `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.env`, then change the password under **My account**.
+
+## Two sign-in pages: owner and staff
+
+| Page | Who may sign in | Everyone else |
+|---|---|---|
+| `/admin/login` | the **owner** only | refused with "This sign-in is for the owner only" |
+| `/staff` | **manager, cashier, rider, laundry attendant** | owner accounts are refused and pointed to `/admin/login` |
+
+- Both pages check the same accounts (**Admin → Staff**). The page only decides who may come in through it; the password is checked first, so a wrong page never reveals whether an account exists. A refused sign-in does not start a session and is written to the activity log (`login_wrong_door`).
+- After signing in, everyone works in the same workspace, and each role still sees only what its permissions allow.
+- Sign-out, an expired session and "Forgot password" all return the person to their own page (owner → `/admin/login`, staff → `/staff`).
+- **Admin → Staff** shows both links, and the "account created" notice and WhatsApp message give the new person the right link for their role.
+- Share `/staff` with your team; keep `/admin/login` for yourself.
 
 ## WhatsApp alerts and password reset codes (Baileys, no browser)
 

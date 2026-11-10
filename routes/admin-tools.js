@@ -60,7 +60,8 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     need('reports'),
     wrap(async (req, res) => {
       const { from, to, today } = await resolveRange(req.query);
-      const [ctx, k] = await Promise.all([
+      const DR = RANGE.replace(/\br\./g, 'd.');
+      const [ctx, k, del] = await Promise.all([
         buildCtx(req),
         pool.query(
           `SELECT COUNT(*)::int AS requests,
@@ -71,8 +72,11 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
              FROM requests r WHERE ${RANGE}`,
           [from, to]
         ),
+        // Deleted requests: their money still counts as billed and collected.
+        pool.query(`SELECT COALESCE(SUM(d.total_amount), 0) AS billed, COALESCE(SUM(d.amount_paid), 0) AS collected FROM deleted_requests d WHERE ${DR}`, [from, to]),
       ]);
-      res.view(reportsPage(ctx, { from, to, kpi: k.rows[0], presets: presets(today) }));
+      const kpi = { ...k.rows[0], billed: Number(k.rows[0].billed) + Number(del.rows[0].billed), collected: Number(k.rows[0].collected) + Number(del.rows[0].collected) };
+      res.view(reportsPage(ctx, { from, to, kpi, presets: presets(today) }));
     })
   );
 
@@ -81,7 +85,8 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     need('reports'),
     wrap(async (req, res) => {
       const { from, to } = await resolveRange(req.query);
-      const [settings, reqs, itemRows, custs, cats] = await Promise.all([
+      const DR = RANGE.replace(/\br\./g, 'd.');
+      const [settings, reqs, itemRows, custs, cats, delRows] = await Promise.all([
         getSettings(),
         pool.query(
           `SELECT r.ref_code, to_char((r.created_at AT TIME ZONE 'Africa/Nairobi')::date, 'YYYY-MM-DD') AS day, r.status, r.location_description,
@@ -105,7 +110,14 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
           [from, to]
         ),
         pool.query('SELECT name, unit, price, is_active FROM categories ORDER BY sort_order, name LIMIT 100'),
+        pool.query(
+          `SELECT d.ref_code, to_char((d.created_at AT TIME ZONE 'Africa/Nairobi')::date, 'YYYY-MM-DD') AS day, 'deleted' AS status, '' AS location_description,
+                  d.total_amount, d.amount_paid, NULL AS terms_version, d.customer_name, d.customer_phone, '(request deleted - money kept)' AS items, NULL AS delivered_day
+             FROM deleted_requests d WHERE ${DR} AND d.amount_paid > 0 ORDER BY d.created_at DESC LIMIT 1000`,
+          [from, to]
+        ),
       ]);
+      reqs.rows.push(...delRows.rows); // money earned on deleted requests stays in the report
       const truncated = { requests: reqs.rows.length > 5000, items: itemRows.rows.length > 10000, customers: custs.rows.length > 2000 };
       const wb = await buildWorkbook({
         settings,

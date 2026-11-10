@@ -287,3 +287,45 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE INDEX IF NOT EXISTS payments_request_idx ON payments(request_id);
 -- The same M-Pesa confirmation code can never be counted twice.
 CREATE UNIQUE INDEX IF NOT EXISTS payments_mpesa_ref_uq ON payments(reference) WHERE method = 'mpesa';
+
+-- Deleting a request must never delete the money earned on it. The money stays in two places:
+--  * payments keep their rows (request_id becomes empty, request_ref keeps the order code), and the M-Pesa code stays used;
+--  * deleted_requests keeps a one-line record of the order (totals, who deleted it and when). Dashboard, Operations,
+--    Reports and the Excel report all still count this money.
+CREATE TABLE IF NOT EXISTS deleted_requests (
+  id             SERIAL PRIMARY KEY,
+  original_id    INTEGER,
+  ref_code       TEXT          NOT NULL,
+  customer_id    INTEGER       REFERENCES customers(id) ON DELETE SET NULL,
+  customer_name  TEXT          NOT NULL DEFAULT '',
+  customer_phone TEXT          NOT NULL DEFAULT '',
+  status         TEXT          NOT NULL DEFAULT '',
+  total_amount   NUMERIC(12,2) NOT NULL DEFAULT 0,
+  amount_paid    NUMERIC(12,2) NOT NULL DEFAULT 0,
+  created_at     TIMESTAMPTZ   NOT NULL,
+  deleted_at     TIMESTAMPTZ   NOT NULL DEFAULT now(),
+  deleted_by     TEXT          NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS deleted_requests_created_idx ON deleted_requests(created_at);
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS request_ref TEXT NOT NULL DEFAULT '';
+ALTER TABLE payments ALTER COLUMN request_id DROP NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_request_id_fkey' AND confdeltype = 'c') THEN
+    ALTER TABLE payments DROP CONSTRAINT payments_request_id_fkey;
+    ALTER TABLE payments ADD CONSTRAINT payments_request_id_fkey FOREIGN KEY (request_id) REFERENCES requests(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+-- Indexes on foreign-key columns that had none. They speed up the per-request lookups (quality gate, refunds, complaints,
+-- alerts) and, importantly, deleting a request, which has to find its related rows in every one of these tables.
+CREATE INDEX IF NOT EXISTS quality_request_idx        ON quality_inspections(request_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS refunds_request_idx        ON refunds(request_id);
+CREATE INDEX IF NOT EXISTS complaints_request_idx     ON customer_complaints(request_id);
+CREATE INDEX IF NOT EXISTS complaints_customer_idx    ON customer_complaints(customer_id);
+CREATE INDEX IF NOT EXISTS reviews_customer_idx       ON customer_reviews(customer_id);
+CREATE INDEX IF NOT EXISTS notifications_request_idx  ON notifications(request_id);
+CREATE INDEX IF NOT EXISTS requests_branch_idx        ON requests(branch_id) WHERE branch_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS requests_rider_idx         ON requests(rider_admin_id) WHERE rider_admin_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS deleted_requests_customer_idx ON deleted_requests(customer_id);
+CREATE INDEX IF NOT EXISTS inventory_moves_item_idx   ON inventory_movements(inventory_item_id);

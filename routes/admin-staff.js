@@ -94,6 +94,10 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     need('staff'),
     wrap(async (req, res) => {
       const id = parseInt(req.params.id, 10);
+      if (!Number.isInteger(id)) {
+        flash(req, 'error', 'Account not found.');
+        return res.redirect('/admin/staff');
+      }
       if (id === req.session.admin.id) {
         flash(req, 'error', 'Use “My account” to change your own password.');
         return res.redirect('/admin/staff');

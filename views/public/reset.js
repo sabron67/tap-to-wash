@@ -11,8 +11,8 @@ const CFG = {
   admin: { base: '/admin', loginUrl: '/admin/login', who: 'staff account' },
 };
 
-function forgotForm(ctx, kind, { error = '', email = '' }) {
-  const c = CFG[kind];
+function forgotForm(ctx, kind, { error = '', email = '', portal = '' }) {
+  const c = { ...CFG[kind], ...(kind === 'admin' && portal === 'staff' ? { loginUrl: '/staff' } : {}) };
   return html`<form method="post" action="${c.base}/forgot" class="stack">
     ${csrfField(ctx)}
     <h1 class="rs-title">Forgot your password?</h1>
@@ -24,8 +24,8 @@ function forgotForm(ctx, kind, { error = '', email = '' }) {
   </form>`;
 }
 
-function resetForm(ctx, kind, { error = '', info = '', email = '' }) {
-  const c = CFG[kind];
+function resetForm(ctx, kind, { error = '', info = '', email = '', portal = '' }) {
+  const c = { ...CFG[kind], ...(kind === 'admin' && portal === 'staff' ? { loginUrl: '/staff' } : {}) };
   return html`<form method="post" action="${c.base}/reset" class="stack">
     ${csrfField(ctx)}
     <h1 class="rs-title">Choose a new password</h1>
