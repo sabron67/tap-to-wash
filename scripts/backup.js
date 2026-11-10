@@ -1,4 +1,5 @@
 // PostgreSQL custom-format backup. Requires pg_dump on the host.
+process.env.DB_STATEMENT_TIMEOUT_MS = '0'; // set-up and backup scripts may run long queries
 require('dotenv').config();
 const { execFile } = require('child_process');
 const fs = require('fs');

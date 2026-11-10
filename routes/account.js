@@ -31,6 +31,9 @@ router.use((req, res, next) => {
   next();
 });
 
+// Sign-in only: a successful sign-in is not counted, so many customers on one Wi-Fi / mobile network can all get in.
+const signinLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: +process.env.LOGIN_MAX || 15, message: 'Too many attempts. Please wait a few minutes.', skipSuccess: true });
+
 const flash = (req, type, msg) => {
   req.session.aflash = { type, msg };
 };
@@ -108,7 +111,7 @@ router.post(
 
 router.post(
   '/login',
-  authLimit,
+  signinLimit,
   wrap(async (req, res, next) => {
     const email = cleanText(req.body.email, 120).toLowerCase();
     const password = String(req.body.password || '').slice(0, 200);

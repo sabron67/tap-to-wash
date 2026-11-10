@@ -1,5 +1,6 @@
 // Creates the tables and seeds a first admin, default settings and starter categories.
 // Run with:  npm run db:init
+process.env.DB_STATEMENT_TIMEOUT_MS = '0'; // set-up and backup scripts may run long queries
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');

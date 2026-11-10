@@ -131,6 +131,8 @@ public/              css, client js (app.js, admin.js, theme.js), favicon
 ```
 
 ## Notes
+- Database pool: `DB_POOL_MAX` (default 12) caps open connections, `DB_POOL_MIN` (default 2) keeps connections warm, `DB_CONNECT_TIMEOUT_MS`, `DB_IDLE_TIMEOUT_MS` and `DB_STATEMENT_TIMEOUT_MS` stop slow queries from queueing customers. Keep `DB_POOL_MAX` below your database plan's connection limit.
+- Billing: only clothes charged per kg are weighed and confirmed by the customer. Every other order is billed automatically when the order is confirmed, and payment can then be collected.
 - Production: set `NODE_ENV=production`, a strong `SESSION_SECRET`, and `PGSSL=true` if your host requires SSL. Serve over HTTPS (browsers only allow location sharing on HTTPS).
 - Starter categories and prices are examples — edit them in Admin > Categories (pick an icon from the icon grid for each category).
 

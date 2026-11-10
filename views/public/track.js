@@ -14,8 +14,8 @@ function billCard(ctx, result) {
   const hidden = html`<input type="hidden" name="ref" value="${result.ref_code}"><input type="hidden" name="phone" value="${result.phone || ''}"><input type="hidden" name="version" value="${b.version}">`;
   return html`<section class="glass pad bill-card" id="bill">
     <h3>Your bill</h3>
-    <p class="muted small">${b.status === 'awaiting_confirm' ? 'We weighed or counted your laundry. Please check the bill and confirm it.' : b.status === 'confirmed' ? 'You confirmed this bill.' : 'You queried this bill. We will check it and send you a new one.'}</p>
-    <div class="table-wrap"><table class="table"><thead><tr><th>Service</th><th>Measured</th><th>Rate</th><th>Amount</th></tr></thead><tbody>
+    <p class="muted small">${b.status === 'awaiting_confirm' ? 'We weighed your clothes. Please check the weight and bill, then confirm it.' : b.status === 'confirmed' ? (b.weighed ? 'You confirmed this bill.' : 'Your order is confirmed. This is your bill.') : 'You queried this bill. We will check it and send you a new one.'}</p>
+    <div class="table-wrap"><table class="table"><thead><tr><th>Service</th><th>${b.weighed ? 'Weight / items' : 'Items'}</th><th>Rate</th><th>Amount</th></tr></thead><tbody>
       ${b.lines.map((l) => html`<tr><td data-label="Service">${l.category_name}</td><td data-label="Measured">${qty(l.measured_qty)} ${l.unit || 'item'}</td><td data-label="Rate">${money(l.rate, cur)}</td><td data-label="Amount">${money(l.line_total, cur)}</td></tr>`)}
     </tbody></table></div>
     <div class="bill-totals">

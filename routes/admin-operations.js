@@ -6,6 +6,7 @@ const { operationsPage } = require('../views/admin/operations');
 const { notifyEvent } = require('../lib/notify');
 const { getSettings } = require('../lib/settings');
 const { receiptPage } = require('../views/admin/receipt');
+const { pickupBlocker, autoBill } = require('../lib/bill');
 
 // Kept: dispatch, quality control, expenses, stock, complaints and refunds, reviews, discount codes, branches, receipts.
 // Removed as unnecessary: garment-level tracking, machines and wash batches, customer packages (subscriptions), loyalty points.
@@ -125,6 +126,14 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     const current = await pool.query('SELECT status FROM requests WHERE id = $1', [id]);
     if (!current.rowCount) { flash(req, 'error', 'Request not found.'); return back(res, 'dispatch'); }
     if (stage === 'picked_up' && !['confirmed', 'picked_up'].includes(current.rows[0].status)) { flash(req, 'error', 'A request must be confirmed before pickup.'); return back(res, 'dispatch'); }
+    // Same rule as the status buttons: per-kg laundry must be weighed and confirmed by the customer, and payment received
+    // (or pay later approved), before pick-up. Orders with no per-kg service are billed automatically once confirmed.
+    if (stage === 'picked_up' && current.rows[0].status === 'confirmed') {
+      await autoBill(pool, id);
+      const bill = await pool.query('SELECT status, bill_status, total_amount, amount_paid, pay_later FROM requests WHERE id = $1', [id]);
+      const why = pickupBlocker(bill.rows[0]);
+      if (why) { flash(req, 'error', why); return back(res, 'dispatch'); }
+    }
     if (['out_for_delivery', 'delivered'].includes(stage) && !['ready', 'delivered'].includes(current.rows[0].status)) { flash(req, 'error', 'A request must pass quality control and be ready before delivery.'); return back(res, 'dispatch'); }
     await pool.query(`UPDATE requests SET rider_admin_id = $1, pickup_scheduled_at = $2, delivery_scheduled_at = $3, dispatch_stage = $4, updated_at = now()${branchSql} WHERE id = $5`, params);
     if (['picked_up', 'delivered'].includes(stage) && current.rows[0].status !== stage) {

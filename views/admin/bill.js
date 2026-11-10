@@ -4,13 +4,13 @@ const { html } = require('../../lib/html');
 const { money, fmtDate } = require('../../lib/helpers');
 const { csrfField } = require('../partials/ui');
 const { icon } = require('../../lib/icons');
-const { measureLabel, isWeight } = require('../../lib/bill');
+const { measureLabel, isWeight, orderNeedsWeighing } = require('../../lib/bill');
 
 const STATE = {
-  none: ['Not weighed yet', 'pay-unpriced'],
+  none: ['Not billed yet', 'pay-unpriced'],
   needs_price: ['Price needed', 'pay-partial'],
   awaiting_confirm: ['Waiting for customer', 'pay-partial'],
-  confirmed: ['Customer confirmed', 'pay-paid'],
+  confirmed: ['Bill confirmed', 'pay-paid'],
   disputed: ['Customer queried it', 'pay-unpaid'],
   legacy: ['Older order', 'pay-unpriced'],
 };
@@ -32,10 +32,12 @@ function billPanel(ctx, { r, items, payments, wa }) {
   const over = Math.max(0, paid - total);
   const showDue = seesPrices || (can('collect') && bs === 'confirmed');
   const weighed = items.length > 0 && items.every((i) => i.measured_qty !== null && i.measured_qty !== undefined);
+  // Only clothes charged per kg are weighed and confirmed by the customer. Other orders are billed once the order is confirmed.
+  const hasKg = orderNeedsWeighing(items);
 
   const privileged = can('billadmin');
   const stageOk = privileged ? ['confirmed', 'picked_up', 'washing', 'ready'].includes(r.status) : r.status === 'confirmed';
-  const canWeigh = can('weigh') && stageOk && ['none', 'needs_price', 'awaiting_confirm', 'disputed'].includes(bs);
+  const canWeigh = hasKg && can('weigh') && stageOk && ['none', 'needs_price', 'awaiting_confirm', 'disputed'].includes(bs);
   const canPay = can('collect') && balance > 0 && (bs === 'confirmed' || (seesPrices && bs === 'legacy'));
 
   const stepDone = (ok) => (ok ? 'done' : '');
@@ -43,8 +45,13 @@ function billPanel(ctx, { r, items, payments, wa }) {
   const steps =
     bs === 'legacy'
       ? ''
+      : !hasKg
+      ? html`<ol class="bill-steps">
+      <li class="${stepDone(bs === 'confirmed' || bs === 'needs_price')}"><span>1</span> Order confirmed and billed</li>
+      <li class="${stepDone(paidOrLater)}"><span>2</span> ${r.pay_later && balance > 0 ? 'Pay later approved' : 'Payment received'}</li>
+    </ol>`
       : html`<ol class="bill-steps">
-      <li class="${stepDone(weighed && bs !== 'none')}"><span>1</span> Weighed or counted</li>
+      <li class="${stepDone(weighed && bs !== 'none')}"><span>1</span> Weighed (per-kg clothes)</li>
       <li class="${stepDone(bs === 'confirmed')}"><span>2</span> Customer confirms the bill</li>
       <li class="${stepDone(paidOrLater)}"><span>3</span> ${r.pay_later && balance > 0 ? 'Pay later approved' : 'Payment received'}</li>
     </ol>`;
@@ -55,7 +62,7 @@ function billPanel(ctx, { r, items, payments, wa }) {
       : paidOrLater
       ? html`<p class="bill-ok">${icon('circle-check')} Ready for pick-up.</p>`
       : html`<p class="bill-wait">${icon('clock')} ${
-          bs === 'none' ? 'Weigh or count the laundry, then send the customer their bill.'
+          bs === 'none' ? (hasKg ? 'Weigh the per-kg clothes, then send the customer their bill to confirm.' : 'Confirm the order and the bill is created automatically, ready for payment.')
           : bs === 'needs_price' ? 'A service has no price yet, so a manager or cashier needs to price it.'
           : bs === 'awaiting_confirm' ? 'Waiting for the customer to confirm the bill.'
           : bs === 'disputed' ? 'The customer queried the bill. Weigh again to send a new one.'
@@ -66,11 +73,12 @@ function billPanel(ctx, { r, items, payments, wa }) {
   const weighForm = canWeigh
     ? html`<form method="post" action="/admin/requests/${r.id}/weigh" class="stack bill-form">
       ${csrfField(ctx)}
-      <h3>${weighed ? 'Weigh again' : 'Weigh or count the laundry'}</h3>
-      <p class="muted small">Enter what you actually measure. Kilograms for weighed services, a count for everything else.</p>
+      <h3>${weighed ? 'Weigh again' : 'Weigh the clothes'}</h3>
+      <p class="muted small">Enter the weight in kilograms for each per-kg service. Other services are billed from the number of items ordered.</p>
       <div class="bill-lines">
         ${items.map((i) => {
           const u = i.cat_unit || i.unit;
+          if (!isWeight(u)) return html`<div class="bill-line"><span><strong>${i.category_name}</strong><small class="muted">Not weighed. Billed as ordered</small></span><span class="bill-input"><strong>${qty(i.quantity)}</strong><em>${unitText(u)}</em></span></div>`;
           return html`<label class="bill-line">
             <span><strong>${i.category_name}</strong><small class="muted">Customer said ${qty(i.quantity)} ${unitText(u)}</small></span>
             <span class="bill-input"><input name="qty_${i.id}" type="text" inputmode="decimal" autocomplete="off" required placeholder="${isWeight(u) ? 'e.g. 4.5' : 'e.g. 3'}" value="${i.measured_qty !== null && i.measured_qty !== undefined ? qty(i.measured_qty) : ''}" aria-label="${measureLabel(u)} for ${i.category_name}"><em>${unitText(u)}</em></span>
@@ -119,8 +127,9 @@ function billPanel(ctx, { r, items, payments, wa }) {
       : '';
 
   // ----- staff actions on the bill -----
+  const autoConfirmed = bs === 'confirmed' && r.bill_confirmed_by === 'Order confirmation' && paid === 0;
   const recalcForm =
-    seesPrices && ['needs_price', 'awaiting_confirm', 'disputed'].includes(bs) && weighed
+    seesPrices && (['needs_price', 'awaiting_confirm', 'disputed'].includes(bs) || autoConfirmed) && weighed
       ? html`<form method="post" action="/admin/requests/${r.id}/bill/recalc" class="row-form bill-inline">
         ${csrfField(ctx)}
         <input name="discount_code" maxlength="40" placeholder="Discount code (optional)" value="${r.discount_code || ''}" aria-label="Discount code">
@@ -139,7 +148,7 @@ function billPanel(ctx, { r, items, payments, wa }) {
 
   const confirmedLine =
     bs === 'confirmed'
-      ? html`<p class="muted small">${icon('circle-check')} Confirmed ${fmtDate(r.bill_confirmed_at)}${seesPrices && r.bill_confirmed_by ? ` · ${r.bill_confirmed_by}` : ''}. Weighed by ${r.weighed_by || '-'}${r.weighed_at ? ` · ${fmtDate(r.weighed_at)}` : ''}.</p>`
+      ? html`<p class="muted small">${icon('circle-check')} ${hasKg ? 'Confirmed' : 'Order confirmed and billed'} ${fmtDate(r.bill_confirmed_at)}${seesPrices && r.bill_confirmed_by && hasKg ? ` · ${r.bill_confirmed_by}` : ''}.${hasKg ? ` Weighed by ${r.weighed_by || '-'}${r.weighed_at ? ` · ${fmtDate(r.weighed_at)}` : ''}.` : ''}</p>`
       : '';
 
   // ----- payment -----
@@ -174,7 +183,7 @@ function billPanel(ctx, { r, items, payments, wa }) {
       : '';
 
   const reopen =
-    privileged && ['awaiting_confirm', 'confirmed'].includes(bs)
+    privileged && hasKg && ['awaiting_confirm', 'confirmed'].includes(bs)
       ? html`<details class="bill-reopen"><summary>Re-open the bill to weigh again</summary>
         <form method="post" action="/admin/requests/${r.id}/bill/reopen" class="row-form bill-inline">
           ${csrfField(ctx)}

@@ -38,11 +38,35 @@ function buildConfig(env = process.env) {
     ssl = isTrue(env.PGSSL_STRICT) ? true : { rejectUnauthorized: false };
   }
 
-  return { connectionString: url, ssl };
+  return { connectionString: url, ssl, ...poolSettings(env) };
+}
+
+// Connection pool limits, so customers never queue behind each other or wait on a cold connection.
+//   DB_POOL_MAX ......... most connections open at once (default 12). Sessions, pages and background jobs all share
+//                         this pool. Keep it BELOW your database plan's connection limit (many free plans allow ~20-25).
+//   DB_POOL_MIN ......... connections kept warm so the first visitor never pays the SSL handshake (default 2)
+//   DB_IDLE_TIMEOUT_MS .. close a connection that has been idle this long (default 30000)
+//   DB_CONNECT_TIMEOUT_MS  give up waiting for a free connection after this long instead of hanging (default 10000)
+//   DB_STATEMENT_TIMEOUT_MS  stop one runaway query from holding a connection for ever (default 30000, 0 = no limit)
+function poolSettings(env = process.env) {
+  const num = (name, fallback, min) => {
+    const n = parseInt(env[name], 10);
+    return Number.isFinite(n) && n >= min ? n : fallback;
+  };
+  const max = num('DB_POOL_MAX', 12, 1);
+  return {
+    max,
+    min: Math.min(num('DB_POOL_MIN', 2, 0), max),
+    idleTimeoutMillis: num('DB_IDLE_TIMEOUT_MS', 30000, 1000),
+    connectionTimeoutMillis: num('DB_CONNECT_TIMEOUT_MS', 10000, 1000),
+    ...(String(env.DB_STATEMENT_TIMEOUT_MS).trim() === '0' ? {} : { statement_timeout: num('DB_STATEMENT_TIMEOUT_MS', 30000, 1000) }),
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
+  };
 }
 
 const pool = new Pool(buildConfig());
 
 pool.on('error', (err) => console.error('Unexpected PostgreSQL error:', err.message));
 
-module.exports = { pool, buildConfig };
+module.exports = { pool, buildConfig, poolSettings };

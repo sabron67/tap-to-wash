@@ -9,7 +9,7 @@ const { passwordProblem } = require('../lib/password');
 const { wrap, STATUS_MAP, cleanText, cleanMultiline } = require('../lib/helpers');
 const { categoryIconName } = require('../lib/icons');
 const { can, roleOf, visibleStatuses, settableStatuses } = require('../lib/roles');
-const { pickupBlocker, GATED_TARGETS } = require('../lib/bill');
+const { pickupBlocker, GATED_TARGETS, autoBill } = require('../lib/bill');
 const { ROUTES, eventFor, notifyEvent, recipientsFor, teamMessage, customerMessage, HEADLINES } = require('../lib/notify');
 const { waLink, canSend: waCanSend } = require('../lib/whatsapp');
 
@@ -33,6 +33,8 @@ const ABSOLUTE_SESSION_MS = 12 * 60 * 60 * 1000;
 const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 12); // keeps login timing the same for unknown emails
 const NAIROBI_TODAY = `(now() AT TIME ZONE 'Africa/Nairobi')::date`;
 
+// Sign-in only: a successful sign-in is not counted, so several staff on the shop Wi-Fi can all sign in.
+const signinLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: +process.env.LOGIN_MAX || 12, message: 'Too many sign-in attempts. Please wait a few minutes.', skipSuccess: true });
 const loginLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: +process.env.LOGIN_MAX || 12, message: 'Too many sign-in attempts. Please wait a few minutes.' });
 
 // ---------- session helpers ----------
@@ -97,7 +99,7 @@ router.get(
 
 router.post(
   '/login',
-  loginLimit,
+  signinLimit,
   wrap(async (req, res, next) => {
     const email = cleanText(req.body.email, 120).toLowerCase();
     const password = String(req.body.password || '').slice(0, 200);
@@ -331,6 +333,7 @@ router.get(
   wrap(async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return next();
+    await autoBill(pool, id); // older confirmed orders with no per-kg service get their bill here
     const [ctx, reqRes, items, payments, events, qcRes] = await Promise.all([
       buildCtx(req),
       pool.query(
@@ -411,7 +414,11 @@ router.post(
       flash(req, 'error', 'Your role cannot set that status.');
       return res.redirect(`/admin/requests/${id}`);
     }
-    const before = await pool.query('SELECT status, bill_status, total_amount, amount_paid, pay_later FROM requests WHERE id = $1', [id]);
+    let before = await pool.query('SELECT status, bill_status, total_amount, amount_paid, pay_later FROM requests WHERE id = $1', [id]);
+    // A confirmed order with no per-kg service is billed automatically, so it is never stuck waiting for weighing.
+    if (before.rows.length && before.rows[0].status === 'confirmed' && before.rows[0].bill_status === 'none' && (await autoBill(pool, id))) {
+      before = await pool.query('SELECT status, bill_status, total_amount, amount_paid, pay_later FROM requests WHERE id = $1', [id]);
+    }
     // Leaving New / Confirmed for pick-up or later needs a weighed, customer-confirmed and paid (or pay-later) bill.
     if (before.rows.length && GATED_TARGETS.includes(status) && ['new', 'confirmed'].includes(before.rows[0].status)) {
       const why = pickupBlocker(before.rows[0]);
@@ -425,6 +432,11 @@ router.post(
       [status, id, vis]
     );
     if (upd.rows.length) {
+      // Just confirmed: if nothing is charged per kg, create the bill now so payment can be taken straight away.
+      if (status === 'confirmed' && before.rows[0] && before.rows[0].status !== 'confirmed') {
+        const auto = await autoBill(pool, id);
+        if (auto && auto.status === 'needs_price') notifyEvent('bill_needs_price', id, req.session.admin.id, (await getSettings()).business_name);
+      }
       const ev = before.rows[0] && before.rows[0].status !== status ? eventFor(status, upd.rows[0].total_amount, upd.rows[0].amount_paid) : null;
       if (ev) notifyEvent(ev, id, req.session.admin.id, (await getSettings()).business_name); // alerts the next role; never throws
       await pool.query('INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,$2,$3,$4)', [id, status, note, req.session.admin.name]);

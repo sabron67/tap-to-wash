@@ -7,7 +7,7 @@ const { audit } = require('../lib/audit');
 const { can, visibleStatuses } = require('../lib/roles');
 const { getSettings } = require('../lib/settings');
 const { notifyEvent } = require('../lib/notify');
-const { round2, parseMeasurements, computeLines, discountFor, MPESA_CODE, cleanMpesaCode, loadBillData } = require('../lib/bill');
+const { round2, parseMeasurements, computeLines, discountFor, MPESA_CODE, cleanMpesaCode, loadBillData, needsWeighing, autoBill } = require('../lib/bill');
 
 const OPEN_BILL = ['none', 'needs_price', 'awaiting_confirm', 'disputed']; // can still be weighed / repriced
 const POST_CONFIRM_STATUSES = ['confirmed', 'picked_up', 'washing', 'ready']; // managers may re-weigh in these
@@ -54,10 +54,15 @@ module.exports = function mountBilling(router, { flash, need }) {
 
   // Re-price missing rates, work out the totals and save the bill. Caller holds the row lock.
   async function applyBill(client, r, code) {
-    const { rows: items } = await client.query('SELECT id, measured_qty, rate FROM request_items WHERE request_id = $1 ORDER BY id', [r.id]);
+    const { rows: items } = await client.query(
+      'SELECT i.id, i.measured_qty, i.rate, COALESCE(c.unit, i.unit) AS unit FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 ORDER BY i.id',
+      [r.id]
+    );
+    // Orders with no per-kg service never wait for the customer: the bill is confirmed as soon as it is priced.
+    const customerConfirms = items.some((i) => needsWeighing(i.unit));
     const calc = computeLines(items);
     for (const l of calc.lines) await client.query('UPDATE request_items SET rate = $1, line_total = $2 WHERE id = $3', [l.rate, l.line_total, l.id]);
-    let status = 'awaiting_confirm';
+    let status = customerConfirms ? 'awaiting_confirm' : 'confirmed';
     let subtotal = calc.subtotal;
     let discount = 0;
     let useCode = code;
@@ -74,9 +79,9 @@ module.exports = function mountBilling(router, { flash, need }) {
     const total = round2(Math.max(0, subtotal - discount));
     await client.query(
       `UPDATE requests SET subtotal_amount=$1, discount_code=$2, discount_amount=$3, total_amount=$4, bill_status=$5,
-              bill_version=bill_version+1, bill_confirmed_at=NULL, bill_confirmed_by='', pay_later=FALSE, pay_later_by='', updated_at=now()
+              bill_version=bill_version+1, bill_confirmed_at=${status === 'confirmed' ? 'now()' : 'NULL'}, bill_confirmed_by=$7, pay_later=FALSE, pay_later_by='', updated_at=now()
         WHERE id=$6`,
-      [subtotal, useCode, discount, total, status, r.id]
+      [subtotal, useCode, discount, total, status, r.id, status === 'confirmed' ? 'Order confirmation' : '']
     );
     return { status, subtotal, discount, total };
   }
@@ -94,13 +99,21 @@ module.exports = function mountBilling(router, { flash, need }) {
         const privileged = can(req.session.admin.role, 'billadmin');
         const okStatus = privileged ? POST_CONFIRM_STATUSES.includes(r.status) : r.status === 'confirmed';
         if (!okStatus) return { error: 'This order can only be weighed once it is confirmed and before it is delivered.' };
-        if (!OPEN_BILL.includes(r.bill_status)) return { error: 'The customer has already confirmed this bill. Ask a manager to re-open it before weighing again.' };
+        if (!OPEN_BILL.includes(r.bill_status)) {
+          const kg = await client.query('SELECT 1 FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 AND lower(trim(COALESCE(c.unit, i.unit, \'\'))) IN (\'kg\',\'kgs\',\'g\') LIMIT 1', [id]);
+          return { error: kg.rows.length ? 'The customer has already confirmed this bill. Ask a manager to re-open it before weighing again.' : 'Only clothes charged per kg are weighed. This order is billed from what the customer ordered, so there is nothing to weigh.' };
+        }
         const { rows: items } = await client.query(
-          `SELECT i.id, i.category_name, i.unit, i.rate, c.unit AS cat_unit, c.price AS cat_price
+          `SELECT i.id, i.category_name, i.quantity, i.unit, i.rate, c.unit AS cat_unit, c.price AS cat_price
              FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 ORDER BY i.id`,
           [id]
         );
         if (!items.length) return { error: 'This order has no items to weigh.' };
+        if (!items.some((i) => needsWeighing(i.cat_unit || i.unit))) {
+          // Nothing is charged per kg: no weighing, no customer confirmation. Bill it from the order and let payment proceed.
+          await autoBill(client, id);
+          return { error: 'Only clothes charged per kg are weighed. This order is billed from what the customer ordered, so payment can be collected.' };
+        }
         const parsed = parseMeasurements(items, req.body);
         if (parsed.error) return { error: parsed.error };
         for (const it of items) {
@@ -144,7 +157,8 @@ module.exports = function mountBilling(router, { flash, need }) {
       const outcome = await tx(async (client) => {
         const r = await mine(req, id, client, true);
         if (!r) return { denied: true };
-        if (!['needs_price', 'awaiting_confirm', 'disputed'].includes(r.bill_status)) return { error: 'This bill cannot be changed now.' };
+        const autoConfirmed = r.bill_status === 'confirmed' && r.bill_confirmed_by === 'Order confirmation' && Number(r.amount_paid) === 0;
+        if (!['needs_price', 'awaiting_confirm', 'disputed'].includes(r.bill_status) && !autoConfirmed) return { error: 'This bill cannot be changed now.' };
         const { rows: items } = await client.query(
           `SELECT i.id, i.measured_qty, i.rate, c.price AS cat_price FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1`,
           [id]
@@ -160,7 +174,7 @@ module.exports = function mountBilling(router, { flash, need }) {
       if (outcome.error) flash(req, 'error', outcome.error);
       else {
         await audit(req, 'bill_recalc', `Request #${id}: ${outcome.bill.status}, code ${code || '-'}`);
-        flash(req, 'success', outcome.bill.status === 'needs_price' ? 'A service still has no price. Set it under Categories, then recalculate.' : 'Bill recalculated. The customer must confirm it again.');
+        flash(req, 'success', outcome.bill.status === 'needs_price' ? 'A service still has no price. Set it under Categories, then recalculate.' : outcome.bill.status === 'confirmed' ? 'Bill recalculated. Payment can be collected.' : 'Bill recalculated. The customer must confirm it again.');
       }
       back(res, id);
     })
@@ -213,6 +227,8 @@ module.exports = function mountBilling(router, { flash, need }) {
         const r = await mine(req, id, client, true);
         if (!r) return { denied: true };
         if (!['awaiting_confirm', 'confirmed'].includes(r.bill_status)) return { error: 'This bill is not waiting or confirmed, so there is nothing to re-open.' };
+        const w = await client.query('SELECT 1 FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 AND lower(trim(COALESCE(c.unit, i.unit, \'\'))) IN (\'kg\',\'kgs\',\'g\') LIMIT 1', [id]);
+        if (!w.rows.length) return { error: 'This order has no per-kg service. Use Recalculate to change its bill.' };
         await client.query("UPDATE requests SET bill_status='disputed', bill_confirmed_at=NULL, bill_confirmed_by='', pay_later=FALSE, pay_later_by='', updated_at=now() WHERE id=$1", [id]);
         await addEvent(client, r, 'Your bill is being checked again.', req.session.admin.name);
         return { ok: true };
@@ -273,11 +289,12 @@ module.exports = function mountBilling(router, { flash, need }) {
       let outcome;
       try {
         outcome = await tx(async (client) => {
-          const r = await mine(req, id, client, true);
+          let r = await mine(req, id, client, true);
           if (!r) return { denied: true };
+          if (r.bill_status === 'none' && r.status === 'confirmed' && (await autoBill(client, id))) r = await mine(req, id, client, true);
           // Riders only collect on a bill the customer has confirmed. Cashier / manager can also settle older orders.
           const okBill = r.bill_status === 'confirmed' || (seesPrices && r.bill_status === 'legacy');
-          if (!okBill || r.status === 'cancelled') return { error: 'Payment can be recorded once the customer has confirmed the bill.' };
+          if (!okBill || r.status === 'cancelled') return { error: 'Payment can be recorded once the bill is confirmed (per-kg laundry is confirmed by the customer after weighing; other orders once the order is confirmed).' };
           const balance = round2(Number(r.total_amount) - Number(r.amount_paid));
           if (balance <= 0) return { error: 'This order is already fully paid.' };
           if (amount > balance + 0.001) return { error: `That is more than the balance due (${money(balance, (await getSettings()).currency)}).` };

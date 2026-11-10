@@ -288,6 +288,7 @@ router.get(
           status: r.bill_status,
           version: r.bill_version,
           lines: items.rows,
+          weighed: items.rows.some((i) => /^(kg|kgs|g)$/i.test(String(i.unit || '').trim())),
           subtotal: r.subtotal_amount,
           discount_code: r.discount_code,
           discount: r.discount_amount,
