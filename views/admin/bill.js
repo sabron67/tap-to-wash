@@ -36,7 +36,7 @@ function billPanel(ctx, { r, items, payments, wa }) {
   const hasKg = orderNeedsWeighing(items);
 
   const privileged = can('billadmin');
-  const stageOk = privileged ? ['confirmed', 'picked_up', 'washing', 'ready'].includes(r.status) : r.status === 'confirmed';
+  const stageOk = privileged ? ['confirmed', 'rider_arrived', 'picked_up', 'washing', 'ready'].includes(r.status) : r.status === 'rider_arrived';
   const canWeigh = hasKg && can('weigh') && stageOk && ['none', 'needs_price', 'awaiting_confirm', 'disputed'].includes(bs);
   const canPay = can('collect') && balance > 0 && (bs === 'confirmed' || (seesPrices && bs === 'legacy'));
 

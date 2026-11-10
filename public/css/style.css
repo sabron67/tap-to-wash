@@ -264,10 +264,19 @@ textarea { resize: vertical; }
 .result { margin-top: 1.4rem; }
 .result-head, .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .result-status { padding: .5rem 1.1rem; border-radius: 999px; font-weight: 700; background: color-mix(in srgb, var(--bc) 16%, var(--surface)); border: 2px solid var(--bc); }
-.timeline { list-style: none; display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; padding: 0; margin: 1.2rem 0 1.4rem; }
-.timeline li { position: relative; text-align: center; font-size: .72rem; font-weight: 500; color: var(--muted); }
-.timeline li::before { content: ''; position: absolute; top: 19px; left: -50%; width: 100%; height: 3px; background: var(--line); }
+/* One equal column per step, so any number of steps stays on a single row. */
+.timeline { list-style: none; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0; padding: 0; margin: 1.2rem 0 1.4rem; }
+.timeline li { position: relative; text-align: center; font-size: .72rem; font-weight: 500; color: var(--muted); min-width: 0; }
+/* Wavy connector: the line colour is the background, the wave shape is a repeating mask. */
+.timeline li::before {
+  content: ''; position: absolute; top: 16px; left: -50%; width: 100%; height: 8px; background: var(--line);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='8' viewBox='0 0 16 8'%3E%3Cpath d='M0 4 Q4 0.2 8 4 T16 4' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x 0 50% / 16px 8px;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='8' viewBox='0 0 16 8'%3E%3Cpath d='M0 4 Q4 0.2 8 4 T16 4' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x 0 50% / 16px 8px;
+}
 .timeline li:first-child::before { display: none; }
+@keyframes tl-wave { to { -webkit-mask-position: 16px 50%; mask-position: 16px 50%; } }
+.timeline li.current::before { animation: tl-wave 1.4s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .timeline li.current::before { animation: none; } }
 .timeline li.done::before, .timeline li.current::before { background: var(--accent); }
 .timeline .dot { position: relative; z-index: 1; display: grid; place-items: center; width: 40px; height: 40px; margin: 0 auto .35rem; border-radius: 50%; background: var(--surface); border: 2px solid var(--line-2); }
 .timeline li.done, .timeline li.current { color: var(--text); }
@@ -516,9 +525,10 @@ div.big .ic { width: 3.2rem; height: 3.2rem; stroke-width: 1.5; vertical-align: 
   .nav-links { display: none; }
   .nav .theme-switch { margin-left: auto; }
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .timeline { grid-auto-columns: minmax(62px, 1fr); overflow-x: auto; padding-bottom: .4rem; -webkit-overflow-scrolling: touch; }
   .timeline li { font-size: .62rem; }
   .timeline .dot { width: 34px; height: 34px; }
-  .timeline li::before { top: 16px; }
+  .timeline li::before { top: 13px; }
   .wiz-steps li { font-size: 0; padding: .45rem; justify-content: center; }
   .wiz-steps li span { font-size: .72rem; }
   .qty span { min-width: 48px; }

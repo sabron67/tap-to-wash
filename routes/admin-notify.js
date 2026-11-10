@@ -2,11 +2,17 @@
 const { pool } = require('../config/db');
 const { wrap, cleanText } = require('../lib/helpers');
 const { audit } = require('../lib/audit');
+const live = require('../lib/live');
 const { publicKey, pushToAdmin, available } = require('../lib/push');
 const { validWaNumber, mode } = require('../lib/whatsapp');
 const { notificationsPage } = require('../views/admin/notifications');
 
 module.exports = function mount(router, { buildCtx, flash }) {
+  // Live order updates for the signed-in staff member (Server-Sent Events). The role decides which orders arrive.
+  router.get('/api/live', (req, res) => {
+    live.open(req, res, { kind: 'staff', role: req.session.admin.role });
+  });
+
   // Polled every few seconds by the open admin page.
   router.get(
     '/api/alerts',

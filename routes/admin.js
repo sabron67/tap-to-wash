@@ -6,10 +6,12 @@ const { getSettings, saveSettings } = require('../lib/settings');
 const { rateLimit, safeEqual, adminNoCache, backPath } = require('../lib/security');
 const { audit } = require('../lib/audit');
 const { passwordProblem } = require('../lib/password');
-const { wrap, STATUS_MAP, cleanText, cleanMultiline } = require('../lib/helpers');
+const { wrap, STATUS_MAP, cleanText, cleanMultiline, backwardBlocker } = require('../lib/helpers');
 const { categoryIconName } = require('../lib/icons');
 const { can, roleOf, visibleStatuses, settableStatuses } = require('../lib/roles');
-const { pickupBlocker, GATED_TARGETS, autoBill } = require('../lib/bill');
+const { pickupBlocker, GATED_TARGETS, autoBill, advanceIfPaid } = require('../lib/bill');
+const live = require('../lib/live');
+const { autoAssignRider } = require('../lib/dispatch');
 const { ROUTES, eventFor, notifyEvent, recipientsFor, teamMessage, customerMessage, HEADLINES } = require('../lib/notify');
 const { waLink, canSend: waCanSend } = require('../lib/whatsapp');
 const { PORTALS, loginUrlForRole, portalHint, loginUrlFromHint } = require('../lib/portal');
@@ -290,7 +292,7 @@ router.get(
       buildCtx(req),
       pool.query(`SELECT
           COUNT(*) FILTER (WHERE status = 'new')::int AS new,
-          COUNT(*) FILTER (WHERE status IN ('confirmed','picked_up','washing'))::int AS in_progress,
+          COUNT(*) FILTER (WHERE status IN ('confirmed','rider_arrived','picked_up','washing'))::int AS in_progress,
           COUNT(*) FILTER (WHERE status = 'ready')::int AS ready
         FROM requests`),
       pool.query('SELECT COUNT(*)::int AS n FROM customers'),
@@ -456,13 +458,36 @@ router.post(
       return res.redirect(`/admin/requests/${id}`);
     }
     let before = await pool.query('SELECT status, bill_status, total_amount, amount_paid, pay_later FROM requests WHERE id = $1', [id]);
+    // Statuses only move forward. The database trigger enforces the same rule; this gives a clear message and an audit entry.
+    if (before.rows.length) {
+      const bw = backwardBlocker(before.rows[0].status, status);
+      if (bw) {
+        await audit(req, 'status_backward_blocked', `Request #${id}: ${before.rows[0].status} → ${status} refused`);
+        flash(req, 'error', bw);
+        return res.redirect(`/admin/requests/${id}`);
+      }
+    }
+    // Lifecycle: Confirmed -> Rider arrived -> Picked up. Orders already under way before this step existed (legacy bills) are not blocked.
+    if (before.rows.length && before.rows[0].bill_status !== 'legacy') {
+      if (status === 'rider_arrived' && before.rows[0].status !== 'confirmed' && before.rows[0].status !== 'rider_arrived') {
+        flash(req, 'error', 'Rider arrived can only be set on a confirmed order.');
+        return res.redirect(`/admin/requests/${id}`);
+      }
+      if (status === 'picked_up' && !['rider_arrived', 'picked_up'].includes(before.rows[0].status)) {
+        flash(req, 'error', 'The rider must arrive at the customer first. Mark “Rider arrived”, then the bill is weighed and paid before pick-up.');
+        return res.redirect(`/admin/requests/${id}`);
+      }
+    }
     // A confirmed order with no per-kg service is billed automatically, so it is never stuck waiting for weighing.
+    if (before.rows.length && ['confirmed', 'rider_arrived'].includes(before.rows[0].status) && before.rows[0].status !== status && status === 'rider_arrived' && before.rows[0].bill_status === 'none' && (await autoBill(pool, id))) {
+      before = await pool.query('SELECT status, bill_status, total_amount, amount_paid, pay_later FROM requests WHERE id = $1', [id]);
+    }
     if (before.rows.length && before.rows[0].status === 'confirmed' && before.rows[0].bill_status === 'none' && (await autoBill(pool, id))) {
       before = await pool.query('SELECT status, bill_status, total_amount, amount_paid, pay_later FROM requests WHERE id = $1', [id]);
     }
     // Leaving New / Confirmed for pick-up or later needs a weighed, customer-confirmed and paid (or pay-later) bill.
-    if (before.rows.length && GATED_TARGETS.includes(status) && ['new', 'confirmed'].includes(before.rows[0].status)) {
-      const why = pickupBlocker(before.rows[0]);
+    if (before.rows.length && GATED_TARGETS.includes(status) && ['new', 'confirmed', 'rider_arrived'].includes(before.rows[0].status)) {
+      const why = pickupBlocker(before.rows[0], (await getSettings()).pay_before_cleaning !== '0');
       if (why) {
         flash(req, 'error', why);
         return res.redirect(`/admin/requests/${id}`);
@@ -477,6 +502,15 @@ router.post(
       if (status === 'confirmed' && before.rows[0] && before.rows[0].status !== 'confirmed') {
         const auto = await autoBill(pool, id);
         if (auto && auto.status === 'needs_price') notifyEvent('bill_needs_price', id, req.session.admin.id, (await getSettings()).business_name);
+      }
+      // Just confirmed: assign a rider automatically if none is assigned yet (the alert then goes to that rider).
+      if (status === 'confirmed' && before.rows[0] && before.rows[0].status !== 'confirmed') await autoAssignRider(pool, id, 'system').catch(() => {});
+      // Rider arrived on an order that is already paid: with Pay Before Cleaning on, pick-up starts straight away.
+      let autoPicked = false;
+      if (status === 'rider_arrived' && (await getSettings()).pay_before_cleaning !== '0') autoPicked = await advanceIfPaid(pool, id);
+      if (autoPicked) {
+        await audit(req, 'request_status', `Request #${id} → picked_up (automatic, already paid)`);
+        notifyEvent('picked_up', id, req.session.admin.id, (await getSettings()).business_name);
       }
       const ev = before.rows[0] && before.rows[0].status !== status ? eventFor(status, upd.rows[0].total_amount, upd.rows[0].amount_paid) : null;
       if (ev) notifyEvent(ev, id, req.session.admin.id, (await getSettings()).business_name); // alerts the next role; never throws
@@ -773,6 +807,19 @@ router.post(
     await audit(req, 'settings_save', 'Business details');
     flash(req, 'success', 'Settings saved.');
     res.redirect('/admin/settings');
+  })
+);
+
+router.post(
+  '/settings/pay-before-cleaning',
+  need('settings'),
+  wrap(async (req, res) => {
+    const on = req.body.enabled === '1';
+    await saveSettings({ pay_before_cleaning: on ? '1' : '0' });
+    await audit(req, 'pay_before_cleaning_toggle', on ? 'Pay Before Cleaning switched on' : 'Pay Before Cleaning switched off (pay on delivery)');
+    live.broadcastStaff('policy', { pay_before_cleaning: on });
+    flash(req, 'success', on ? 'Pay Before Cleaning is on. Payment is needed before pick-up.' : 'Pay Before Cleaning is off. Orders can be picked up now and paid on delivery.');
+    res.redirect('/admin/settings#payCard');
   })
 );
 

@@ -11,6 +11,7 @@ const { privacyPage } = require('../views/public/privacy');
 const { notifyEvent } = require('../lib/notify');
 const { toIntl, validWaNumber } = require('../lib/whatsapp');
 const { SLOTS, mediaVersions } = require('../lib/media');
+const live = require('../lib/live');
 
 const router = express.Router();
 
@@ -141,6 +142,11 @@ router.post(
 
     if (b.website) return res.json({ ok: true, ref: 'TTW-OK' }); // honeypot: pretend success to bots
 
+    // An account is required to book. Guests are sent to sign in or sign up, then returned to the booking.
+    if (!req.session.account) {
+      return res.status(401).json({ ok: false, login: '/account/login?next=' + encodeURIComponent('/?start=1'), error: 'Please sign in or create an account to book a pick-up.' });
+    }
+
     const settings = await getSettings();
     if (b.accept_terms !== true) return fail('Please accept the Terms of Service to continue.');
     if (String(b.terms_version) !== String(settings.terms_version)) {
@@ -236,6 +242,7 @@ router.post(
 
       await client.query('COMMIT');
       notifyEvent('new', requestId, null, settings.business_name); // alerts staff; never throws, not awaited
+      live.publish(requestId, { force: true });
       res.json({ ok: true, ref });
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
@@ -243,6 +250,20 @@ router.post(
     } finally {
       client.release();
     }
+  })
+);
+
+// Live updates for the customer who owns the order (reference code + phone, the same check as the tracking page).
+router.get(
+  '/live/order',
+  wrap(async (req, res) => {
+    const ref = cleanText(req.query.ref, 20).toUpperCase();
+    const phone = cleanText(req.query.phone, 20);
+    const found = ref && validPhone(phone)
+      ? await pool.query('SELECT r.id, c.phone_key FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1', [ref])
+      : { rows: [] };
+    if (!found.rows.length || found.rows[0].phone_key !== phoneKey(phone)) return res.status(403).end();
+    live.open(req, res, { kind: 'order', orderId: found.rows[0].id }); // this connection only ever receives this order's room
   })
 );
 
@@ -327,6 +348,7 @@ router.post(
       if (!upd.rows.length) return back('stale');
       await pool.query('INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,$2,$3,$4)', [r.id, r.status, 'Bill confirmed by the customer.', 'Customer']);
       notifyEvent('bill_confirmed', r.id, null, business);
+      live.publish(r.id);
       return back('confirmed');
     }
     const comment = cleanText(req.body.comment, 300);
@@ -334,6 +356,7 @@ router.post(
     if (!upd.rows.length) return back('stale');
     await pool.query('INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,$2,$3,$4)', [r.id, r.status, comment ? `Customer queried the bill: ${comment}` : 'Customer queried the bill.', 'Customer']);
     notifyEvent('bill_disputed', r.id, null, business);
+    live.publish(r.id);
     return back('queried');
   })
 );

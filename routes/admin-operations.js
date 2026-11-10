@@ -1,5 +1,5 @@
 const { pool } = require('../config/db');
-const { wrap, cleanText, cleanMultiline } = require('../lib/helpers');
+const { wrap, cleanText, cleanMultiline, backwardBlocker } = require('../lib/helpers');
 const { audit } = require('../lib/audit');
 const { visibleStatuses } = require('../lib/roles');
 const { operationsPage } = require('../views/admin/operations');
@@ -125,13 +125,15 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     }
     const current = await pool.query('SELECT status FROM requests WHERE id = $1', [id]);
     if (!current.rowCount) { flash(req, 'error', 'Request not found.'); return back(res, 'dispatch'); }
-    if (stage === 'picked_up' && !['confirmed', 'picked_up'].includes(current.rows[0].status)) { flash(req, 'error', 'A request must be confirmed before pickup.'); return back(res, 'dispatch'); }
+    const bwd = backwardBlocker(current.rows[0].status, stage);
+    if (bwd && ['picked_up', 'delivered'].includes(stage)) { flash(req, 'error', bwd); return back(res, 'dispatch'); }
+    if (stage === 'picked_up' && !['rider_arrived', 'picked_up'].includes(current.rows[0].status)) { flash(req, 'error', 'The rider must arrive at the customer first. Mark “Rider arrived” on the request, then weigh, confirm and pay before pick-up.'); return back(res, 'dispatch'); }
     // Same rule as the status buttons: per-kg laundry must be weighed and confirmed by the customer, and payment received
     // (or pay later approved), before pick-up. Orders with no per-kg service are billed automatically once confirmed.
-    if (stage === 'picked_up' && current.rows[0].status === 'confirmed') {
+    if (stage === 'picked_up' && current.rows[0].status === 'rider_arrived') {
       await autoBill(pool, id);
       const bill = await pool.query('SELECT status, bill_status, total_amount, amount_paid, pay_later FROM requests WHERE id = $1', [id]);
-      const why = pickupBlocker(bill.rows[0]);
+      const why = pickupBlocker(bill.rows[0], (await getSettings()).pay_before_cleaning !== '0');
       if (why) { flash(req, 'error', why); return back(res, 'dispatch'); }
     }
     if (['out_for_delivery', 'delivered'].includes(stage) && !['ready', 'delivered'].includes(current.rows[0].status)) { flash(req, 'error', 'A request must pass quality control and be ready before delivery.'); return back(res, 'dispatch'); }

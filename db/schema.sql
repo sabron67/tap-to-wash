@@ -329,3 +329,32 @@ CREATE INDEX IF NOT EXISTS requests_branch_idx        ON requests(branch_id) WHE
 CREATE INDEX IF NOT EXISTS requests_rider_idx         ON requests(rider_admin_id) WHERE rider_admin_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS deleted_requests_customer_idx ON deleted_requests(customer_id);
 CREATE INDEX IF NOT EXISTS inventory_moves_item_idx   ON inventory_movements(inventory_item_id);
+
+-- ---------- forward-only order status (enforced in the database, so no route, admin action or script can bypass it) ----------
+-- new -> confirmed -> rider_arrived -> picked_up -> washing -> ready -> delivered. Cancelling is allowed until delivery; delivered and cancelled are final.
+CREATE OR REPLACE FUNCTION requests_forward_only() RETURNS trigger AS $$
+DECLARE
+  flow TEXT[] := ARRAY['new','confirmed','rider_arrived','picked_up','washing','ready','delivered'];
+  o INT;
+  n INT;
+BEGIN
+  IF NEW.status IS NOT DISTINCT FROM OLD.status THEN RETURN NEW; END IF;
+  IF OLD.status = 'cancelled' THEN
+    RAISE EXCEPTION 'Order status cannot move backward: a cancelled order cannot be re-opened (% -> %)', OLD.status, NEW.status USING ERRCODE = '23514';
+  END IF;
+  IF OLD.status = 'delivered' THEN
+    RAISE EXCEPTION 'Order status cannot move backward: a delivered order is final (% -> %)', OLD.status, NEW.status USING ERRCODE = '23514';
+  END IF;
+  IF NEW.status = 'cancelled' THEN RETURN NEW; END IF;
+  o := array_position(flow, OLD.status);
+  n := array_position(flow, NEW.status);
+  IF o IS NOT NULL AND n IS NOT NULL AND n < o THEN
+    RAISE EXCEPTION 'Order status cannot move backward (% -> %)', OLD.status, NEW.status USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS requests_forward_only_trg ON requests;
+CREATE TRIGGER requests_forward_only_trg BEFORE UPDATE OF status ON requests
+  FOR EACH ROW EXECUTE FUNCTION requests_forward_only();

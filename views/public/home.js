@@ -40,7 +40,7 @@ const PROGRESS = [
   { label: 'Washing' },
   { label: 'Delivery' },
 ];
-const DONE_COUNT = { new: 0, confirmed: 1, picked_up: 2, washing: 2, ready: 3, delivered: 4 };
+const DONE_COUNT = { new: 0, confirmed: 1, rider_arrived: 1, picked_up: 2, washing: 2, ready: 3, delivered: 4 };
 
 function recentCard(recent, s) {
   if (!recent) {
@@ -138,7 +138,7 @@ function wizard(signedIn, branches = []) {
         ${branches.length ? html`<label class="field"><span>Nearest branch</span><select id="fBranch"><option value="">Any branch</option>${branches.map((b) => html`<option value="${b.id}">${b.name}${b.address ? ' - ' + b.address : ''}</option>`)}</select></label>` : ''}
         <label class="field"><span>Preferred pick-up time</span><input id="fTime" type="text" maxlength="80" placeholder="e.g. Tomorrow morning, after 4 PM"></label>
         <label class="field"><span>Anything we should know?</span><textarea id="fNotes" rows="2" maxlength="1000" placeholder="Stains, delicate fabrics, special care…"></textarea></label>
-        ${signedIn ? '' : html`<p class="muted small guest-hint">Ordering as a guest. <a class="link" href="/account/login?next=/">Sign in</a> or <a class="link" href="/account/signup">create an account</a> to save your details.</p>`}
+        ${signedIn ? '' : html`<p class="muted small guest-hint">An account is needed to book. <a class="link" href="/account/login?next=/%3Fstart%3D1">Sign in</a> or <a class="link" href="/account/signup">create an account</a>.</p>`}
         <input type="text" id="fWebsite" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
         <div class="summary" id="summary"></div>
         <label class="check"><input type="checkbox" id="fTerms"><span>I have read and accept the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a>. <em>*</em></span></label>
@@ -155,7 +155,7 @@ function wizard(signedIn, branches = []) {
             <div class="rc-grab" aria-hidden="true"></div>
             <div id="rcBody"></div>
             <p class="rc-thanks"><b>We will call you shortly</b>Our rider confirms pick-up by phone.</p>
-            ${signedIn ? '' : html`<p class="rc-hint" id="acctHint">Want your orders and details saved? <a class="link" href="/account/signup">Create a free account</a> - or keep ordering as a guest.</p>`}
+            
             <div class="rc-actions">
               <a class="btn btn-primary" id="trackLink" href="/track">${icon('clock')} Track my order</a>
               <a class="btn btn-accent" id="waLink" href="#" target="_blank" rel="noopener" hidden>${icon('message-circle')} Message us on WhatsApp</a>

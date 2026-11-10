@@ -34,7 +34,14 @@ function billCard(ctx, result) {
         </details>
       </div>`
       : ''}
-    ${b.status === 'confirmed' && balance > 0 ? html`<p class="muted small">${b.pay_later ? 'You can pay on delivery.' : 'Pay the rider in cash or by M-Pesa. Your rider will take your laundry once payment is received.'}</p>` : ''}
+    ${b.status === 'confirmed' && balance > 0
+      ? html`<p class="${result.status === 'delivered' ? 'due' : 'muted small'}">${result.status === 'delivered'
+          ? `Your laundry has been delivered. Please settle the balance of ${money(balance, cur)} now, in cash or by M-Pesa.`
+          : b.pay_later || ctx.settings.pay_before_cleaning === '0'
+            ? 'You can pay on delivery.'
+            : 'Pay the rider in cash or by M-Pesa. Your rider will take your laundry once payment is received.'}</p>`
+      : ''}
+    ${b.status === 'confirmed' && balance <= 0 && Number(b.total) > 0 ? html`<p class="muted small">${icon('circle-check')} Paid in full. Thank you.</p>` : ''}
   </section>`;
 }
 
@@ -75,7 +82,9 @@ function trackPage(ctx, { ref = '', error = '', result = null, info = '' }) {
           <h3>Updates</h3>
           <ul class="events">${result.events.map((e) => html`<li><span class="ev-dot"></span><div><strong>${STATUS_MAP[e.status] ? STATUS_MAP[e.status].label : e.status}</strong><span class="muted small"> · ${fmtDate(e.created_at)}</span>${e.note ? html`<p class="muted small">${e.note}</p>` : ''}</div></li>`)}</ul>
           <form class="glass pad feedback-form" method="post" action="/track/feedback"><h3>Feedback and support</h3><input type="hidden" name="ref" value="${result.ref_code}"><label class="field"><span>Phone number used for this order</span><input name="phone" type="tel" value="${ctx.accountPhone || ''}" autocomplete="tel" required></label><label class="field"><span>Feedback type</span><select name="kind">${result.status === 'delivered' ? html`<option value="review">Rate my laundry service</option>` : ''}<option value="complaint">Report a problem</option></select></label><label class="field"><span>Rating (1–5)</span><select name="rating"><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Poor</option><option value="1">1 - Very poor</option></select></label><label class="field"><span>Comment / issue details</span><textarea name="comment" rows="3" maxlength="1500"></textarea></label><button class="btn btn-primary" type="submit">Send feedback</button></form>
-        </section>`
+        </section>
+        <div id="liveCfg" data-kind="order" data-ref="${result.ref_code}" data-phone="${result.phone || ''}" hidden></div>
+        <script src="/js/live.js"></script>`
       : ''}
   </main>`;
 

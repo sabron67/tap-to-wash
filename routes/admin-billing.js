@@ -6,11 +6,11 @@ const { wrap, cleanText, cleanMultiline, money } = require('../lib/helpers');
 const { audit } = require('../lib/audit');
 const { can, visibleStatuses } = require('../lib/roles');
 const { getSettings } = require('../lib/settings');
-const { notifyEvent } = require('../lib/notify');
-const { round2, parseMeasurements, computeLines, discountFor, MPESA_CODE, cleanMpesaCode, loadBillData, needsWeighing, autoBill } = require('../lib/bill');
+const { notifyEvent, eventFor } = require('../lib/notify');
+const { round2, parseMeasurements, computeLines, discountFor, MPESA_CODE, cleanMpesaCode, loadBillData, needsWeighing, autoBill, advanceIfPaid } = require('../lib/bill');
 
 const OPEN_BILL = ['none', 'needs_price', 'awaiting_confirm', 'disputed']; // can still be weighed / repriced
-const POST_CONFIRM_STATUSES = ['confirmed', 'picked_up', 'washing', 'ready']; // managers may re-weigh in these
+const POST_CONFIRM_STATUSES = ['confirmed', 'rider_arrived', 'picked_up', 'washing', 'ready']; // managers may re-weigh in these
 
 module.exports = function mountBilling(router, { flash, need }) {
   const back = (res, id) => res.redirect(`/admin/requests/${id}`);
@@ -97,8 +97,8 @@ module.exports = function mountBilling(router, { flash, need }) {
         const r = await mine(req, id, client, true);
         if (!r) return { denied: true };
         const privileged = can(req.session.admin.role, 'billadmin');
-        const okStatus = privileged ? POST_CONFIRM_STATUSES.includes(r.status) : r.status === 'confirmed';
-        if (!okStatus) return { error: 'This order can only be weighed once it is confirmed and before it is delivered.' };
+        const okStatus = privileged ? POST_CONFIRM_STATUSES.includes(r.status) : r.status === 'rider_arrived';
+        if (!okStatus) return { error: privileged ? 'This order can only be weighed once it is confirmed and before it is delivered.' : 'Mark “Rider arrived” first, then weigh the clothes at the customer’s door.' };
         if (!OPEN_BILL.includes(r.bill_status)) {
           const kg = await client.query('SELECT 1 FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 AND lower(trim(COALESCE(c.unit, i.unit, \'\'))) IN (\'kg\',\'kgs\',\'g\') LIMIT 1', [id]);
           return { error: kg.rows.length ? 'The customer has already confirmed this bill. Ask a manager to re-open it before weighing again.' : 'Only clothes charged per kg are weighed. This order is billed from what the customer ordered, so there is nothing to weigh.' };
@@ -291,7 +291,7 @@ module.exports = function mountBilling(router, { flash, need }) {
         outcome = await tx(async (client) => {
           let r = await mine(req, id, client, true);
           if (!r) return { denied: true };
-          if (r.bill_status === 'none' && r.status === 'confirmed' && (await autoBill(client, id))) r = await mine(req, id, client, true);
+          if (r.bill_status === 'none' && ['confirmed', 'rider_arrived'].includes(r.status) && (await autoBill(client, id))) r = await mine(req, id, client, true);
           // Riders only collect on a bill the customer has confirmed. Cashier / manager can also settle older orders.
           const okBill = r.bill_status === 'confirmed' || (seesPrices && r.bill_status === 'legacy');
           if (!okBill || r.status === 'cancelled') return { error: 'Payment can be recorded once the bill is confirmed (per-kg laundry is confirmed by the customer after weighing; other orders once the order is confirmed).' };
@@ -305,7 +305,10 @@ module.exports = function mountBilling(router, { flash, need }) {
           await client.query('UPDATE requests SET amount_paid = amount_paid + $1, updated_at = now() WHERE id = $2', [amount, id]);
           const left = round2(balance - amount);
           await addEvent(client, r, left <= 0 ? 'Payment received. Thank you!' : 'Part payment received. Thank you!', req.session.admin.name);
-          return { left };
+          // Payments are recorded by hand, so a recorded payment counts as paid straight away. With Pay Before Cleaning on,
+          // full payment on a confirmed bill moves the order to Picked up automatically.
+          const advanced = left <= 0 && (await getSettings()).pay_before_cleaning !== '0' ? await advanceIfPaid(client, id) : false;
+          return { left, advanced };
         });
       } catch (err) {
         if (err.code === '23505') return fail('That M-Pesa code has already been recorded on an order.');
@@ -314,6 +317,10 @@ module.exports = function mountBilling(router, { flash, need }) {
       if (outcome.denied) return denied(req, res, id, 'Record payment');
       if (outcome.error) return fail(outcome.error);
       await audit(req, 'payment_recorded', `Request #${id}: ${method} ${amount}${reference ? ` ${reference}` : ''}`);
+      if (outcome.advanced) {
+        await audit(req, 'request_status', `Request #${id} → picked_up (automatic, fully paid)`);
+        notifyEvent(eventFor('picked_up', 0, 0), id, req.session.admin.id, (await getSettings()).business_name);
+      }
       flash(req, 'success', outcome.left <= 0 ? 'Payment recorded. The order is fully paid.' : 'Payment recorded. A balance remains.');
       back(res, id);
     })

@@ -28,6 +28,20 @@ function settingsPage(ctx) {
       <button class="btn btn-primary" type="submit">Save settings</button>
     </form>
 
+  <section class="glass pad" id="payCard">
+    <form class="switch-row" method="post" action="/admin/settings/pay-before-cleaning">
+      ${csrfField(ctx)}
+      <div class="switch-text">
+        <h2>Pay Before Cleaning</h2>
+        <p class="muted small">On: the bill is weighed and confirmed, and payment must be received (or pay later approved) before the laundry is picked up. The moment the full payment is recorded, the order moves to Picked up by itself. Off (pay on delivery): the laundry is picked up once the bill is confirmed, and the customer settles the balance when it is delivered. Open staff screens update straight away when you change this.</p>
+      </div>
+      <input type="hidden" name="enabled" value="${s.pay_before_cleaning !== '0' ? '0' : '1'}">
+      <button type="submit" class="switch ${s.pay_before_cleaning !== '0' ? 'on' : ''}" role="switch" aria-checked="${s.pay_before_cleaning !== '0' ? 'true' : 'false'}" aria-label="Pay Before Cleaning">
+        <span class="switch-knob"></span><span class="switch-txt">${s.pay_before_cleaning !== '0' ? 'On' : 'Off'}</span>
+      </button>
+    </form>
+  </section>
+
   <section class="glass pad" id="branchCard">
     <form class="switch-row" method="post" action="/admin/settings/branches">
       ${csrfField(ctx)}

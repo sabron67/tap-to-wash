@@ -62,9 +62,11 @@ ${head(`${title} · Admin`, s)}
 </div>
 <div class="side-scrim" id="sideScrim"></div>
 ${adminTabbar(ctx, NAV, active)}
+<div id="liveCfg" data-kind="staff" hidden></div>
 <script src="/js/theme.js"></script>
 <script src="/js/password.js"></script>
 <script src="/js/admin.js"></script>
+<script src="/js/live.js"></script>
 </body>
 </html>`;
 }

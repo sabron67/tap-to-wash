@@ -207,6 +207,7 @@
   /* ---------- open / close ---------- */
   let lastFocus = null;
   function openWizard() {
+    if (!data.me) { window.location.href = '/account/login?next=' + encodeURIComponent('/?start=1'); return; } // booking needs an account
     lastFocus = document.activeElement;
     modal.hidden = false;
     document.body.classList.add('modal-open');
@@ -367,6 +368,7 @@
         }),
       });
       const out = await res.json().catch(() => ({}));
+      if (res.status === 401 && out.login) { window.location.href = out.login; return; }
       if (!res.ok || !out.ok) throw new Error(out.error || 'Something went wrong. Please try again.');
       $('#refBox').textContent = out.ref;
       renderReceipt(name, phone);

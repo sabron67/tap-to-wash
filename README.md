@@ -64,6 +64,20 @@ Other rules: only a manager or owner can **re-open** a confirmed bill to weigh a
 
 After updating run `npm run db:init` (adds columns and the `payments` table; safe to repeat).
 
+## Booking, status rules, Pay Before Cleaning and live updates
+
+- **Account required to book.** Guests are sent to sign in or sign up and come back to the booking (`/?start=1`). The server also refuses `POST /api/requests` without a signed-in customer (401).
+- **Forward-only status.** new → confirmed → rider arrived → picked up → washing → ready → delivered. A move backward is refused with a clear message (and logged as `status_backward_blocked`), and a PostgreSQL trigger (`requests_forward_only`) enforces it for every route, admin action or script. Cancelling is allowed until delivery; delivered and cancelled orders are final.
+- **Flow A, Pay Before Cleaning on (default).**
+  1. The customer books (account required). The owner or manager confirms; a rider is **assigned automatically** (fewest open jobs) and alerted. Staff can still change the rider in Operations.
+  2. At the customer's door the rider sets **Rider arrived**. Picked up can only follow Rider arrived (orders already under way before this step existed are not blocked).
+  3. **Per-item orders** are billed from the items as soon as the order is confirmed, so the customer sees the bill and can pay straight away. **Per-kg orders:** the rider weighs at the doorstep (only possible once Rider arrived is set) and submits it; the total is calculated and pushed live to the customer's tracking page, where they confirm it.
+  4. The order stays at Rider arrived until it is paid. Payments are recorded by hand, so a recorded payment counts as paid at once, and full payment on a confirmed bill moves the order to Picked up automatically (also if it was paid before the rider arrived).
+- **Flow B, Pay Before Cleaning off (pay on delivery).** Admin → Settings → Pay Before Cleaning (owner). Pick-up needs only the confirmed bill; after delivery the tracking page asks the customer to settle the balance.
+- **Live updates (Server-Sent Events, no new packages).** Customers get their own order (`/live/order`, checked with reference code + phone). Staff get `/admin/api/live`; each role only receives orders it may see, and riders and attendants never get prices. Events are sent only after a change is saved, so rejected changes never broadcast. Pages reconnect automatically and refresh after a reconnect; a page with a field being edited shows a "tap to refresh" bar instead of reloading. Changing the switch updates open staff screens.
+
+After updating run `npm run db:init` once (installs the trigger; safe to repeat). Behind a proxy such as nginx, turn response buffering off for `/live/` and `/admin/api/live`.
+
 ## Database backups
 
 The project includes `npm run db:backup`. It requires PostgreSQL's `pg_dump` utility to be installed on the server and `DATABASE_URL` to be configured. It creates a private custom-format dump in `backups/` and removes dumps older than 14 days by default. Configure `BACKUP_DIR` and `BACKUP_KEEP_DAYS` to change those defaults. Keep the backup directory outside public web roots and restrict server access because dumps contain customer information.

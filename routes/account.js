@@ -48,7 +48,7 @@ async function pubCtx(req) {
   return { settings: await getSettings(), account: req.session.account, csrf: req.session.csrf, flash: f };
 }
 
-const safeNext = (n) => (n === '/' || n === '/account' ? n : '');
+const safeNext = (n) => (n === '/' || n === '/account' || n === '/?start=1' ? n : '');
 
 function startSession(req, res, next, acc, remember, to, welcome) {
   const keepAdmin = req.session.admin; // signing in as a customer must not sign a staff member out

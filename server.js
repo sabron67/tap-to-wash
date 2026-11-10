@@ -14,6 +14,7 @@ const adminRoutes = require('./routes/admin');
 const { staffRouter } = adminRoutes;
 const accountRoutes = require('./routes/account');
 const { slotMiddleware, newSlotId } = require('./lib/slots');
+const { liveHook } = require('./lib/live');
 
 const isProd = process.env.NODE_ENV === 'production';
 const app = express();
@@ -61,6 +62,7 @@ const buildSession = (name, cookiePath) =>
   });
 // Each login runs in its own session (see lib/slots.js), so several people can sign in in one browser.
 app.use(slotMiddleware(buildSession));
+app.use(liveHook); // announces committed order changes to the live channels
 
 // "Sign in as another user": opens a fresh, separate login so the current one stays signed in.
 app.get('/admin/another', (req, res) => {
