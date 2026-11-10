@@ -331,7 +331,7 @@ router.get(
   wrap(async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id)) return next();
-    const [ctx, reqRes, items, payments, events] = await Promise.all([
+    const [ctx, reqRes, items, payments, events, qcRes] = await Promise.all([
       buildCtx(req),
       pool.query(
         `SELECT r.*, c.name AS customer_name, c.phone AS customer_phone, b.name AS branch_name
@@ -346,6 +346,7 @@ router.get(
       ),
       pool.query('SELECT id, amount, method, reference, recorded_by, reconciled, created_at FROM payments WHERE request_id = $1 ORDER BY id', [id]),
       pool.query('SELECT status, note, created_by, created_at FROM request_events WHERE request_id = $1 ORDER BY created_at DESC, id DESC', [id]),
+      pool.query('SELECT passed FROM quality_inspections WHERE request_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1', [id]),
     ]);
     const vis = visibleStatuses(req.session.admin.role);
     // Rider / attendant: a job that has moved on (old notification, bookmark, or one just finished) is not an error.
@@ -369,7 +370,7 @@ router.get(
       auto: waCanSend(),
       team: team.map((p) => ({ name: p.name, role: p.role, phone: p.phone, link: p.phone ? waLink(p.phone, teamMessage(event, { ...r, items: itemsText }, biz)) : '' })),
     };
-    res.view(requestDetailPage(ctx, { r, items: items.rows, payments: payments.rows, events: events.rows, estimate, wa }));
+    res.view(requestDetailPage(ctx, { r, items: items.rows, payments: payments.rows, events: events.rows, estimate, wa, qcPassed: !!(qcRes.rows[0] && qcRes.rows[0].passed) }));
   })
 );
 
@@ -384,9 +385,23 @@ router.post(
       return res.redirect('/admin/requests');
     }
     const note = cleanText(req.body.note, 200);
+    let qcOverrideReason = ''; // set when an owner / manager releases the order without a passed inspection
     if (status === 'ready') {
       const qc = await pool.query('SELECT passed FROM quality_inspections WHERE request_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1',[id]);
-      if (!qc.rows.length || !qc.rows[0].passed) { flash(req,'error','Complete and pass the quality inspection in Operations before marking this order ready.'); return res.redirect(`/admin/requests/${id}`); }
+      if (!qc.rows.length || !qc.rows[0].passed) {
+        const mayOverride = can(req.session.admin.role, 'qcoverride');
+        if (!(mayOverride && req.body.qc_override === '1')) {
+          flash(req, 'error', mayOverride
+            ? 'Pass the quality inspection in Operations first, or use “Mark Ready anyway (override)” on this request.'
+            : 'A manager must pass the quality inspection in Operations before this order can be marked ready.');
+          return res.redirect(`/admin/requests/${id}`);
+        }
+        qcOverrideReason = cleanText(req.body.qc_reason, 150);
+        if (qcOverrideReason.length < 3) {
+          flash(req, 'error', 'Give a short reason for marking this order ready without an inspection.');
+          return res.redirect(`/admin/requests/${id}`);
+        }
+      }
     }
     const role = req.session.admin.role;
     const settable = settableStatuses(role);
@@ -414,6 +429,14 @@ router.post(
       if (ev) notifyEvent(ev, id, req.session.admin.id, (await getSettings()).business_name); // alerts the next role; never throws
       await pool.query('INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,$2,$3,$4)', [id, status, note, req.session.admin.name]);
       await audit(req, 'request_status', `Request #${id} → ${status}`);
+      if (qcOverrideReason) {
+        // A visible record in Quality control (passed, with no checks ticked) so an override is never silent.
+        await pool.query(
+          `INSERT INTO quality_inspections (request_id, checked_by, passed, notes) VALUES ($1,$2,TRUE,$3)`,
+          [id, req.session.admin.id, `OVERRIDE by ${req.session.admin.name}: ${qcOverrideReason}`]
+        );
+        await audit(req, 'qc_override', `Request #${id} marked ready without inspection: ${qcOverrideReason}`);
+      }
       const gone = vis && !vis.includes(status); // the job just left this role's stages
       flash(req, 'success', gone ? `Marked as “${STATUS_MAP[status].label}”. Done, so it has left your list.` : `Status updated to “${STATUS_MAP[status].label}”.`);
       if (gone) return res.redirect('/admin/requests');

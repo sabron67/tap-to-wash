@@ -60,7 +60,7 @@ function operationsPage(ctx, d) {
 
   ${section('quality', 'Quality control', 'Record a final inspection before an order is released to the customer.', html`
     ${form('quality', html`${select('request_id', 'Laundry request', requestOptions)}<div class="check-grid">${['stain_check', 'count_check', 'damage_check', 'packaging_check'].map((k, i) => html`<label><input type="checkbox" name="${k}" value="1"> ${['Stain check', 'Item count check', 'Damage check', 'Packaging check'][i]}</label>`)}</div>${select('passed', 'Result', [['1', 'Passed'], ['0', 'Needs rework']])}<label class="field"><span>Notes</span><input name="notes" maxlength="1000"></label>`, 'Save inspection')}
-    ${table(['Request', 'Checked by', 'Result', 'Checks', 'Notes', 'Date'], d.inspections.map((x) => html`<tr><td>${x.ref_code}</td><td>${x.checked_by_name || 'Staff'}</td><td>${x.passed ? 'Passed' : 'Rework'}</td><td>${[x.stain_check, x.count_check, x.damage_check, x.packaging_check].filter(Boolean).length}/4</td><td>${x.notes || '—'}</td><td>${fmtDate(x.created_at)}</td></tr>`))}
+    ${table(['Request', 'Checked by', 'Result', 'Checks', 'Notes', 'Date'], d.inspections.map((x) => html`<tr><td>${x.ref_code}</td><td>${x.checked_by_name || 'Staff'}</td><td>${x.passed ? (String(x.notes || '').startsWith('OVERRIDE') ? html`<span class="badge pay-partial">Passed (override)</span>` : 'Passed') : 'Rework'}</td><td>${[x.stain_check, x.count_check, x.damage_check, x.packaging_check].filter(Boolean).length}/4</td><td>${x.notes || '—'}</td><td>${fmtDate(x.created_at)}</td></tr>`))}
   `)}
 
   ${section('finance', 'Expenses', 'Record operating costs. Profit estimate = collected revenue minus recorded expenses.', html`

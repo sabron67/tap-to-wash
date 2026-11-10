@@ -60,6 +60,8 @@ Payment now happens at pick-up, after the laundry is measured. Payments are reco
 
 Other rules: only a manager or owner can **re-open** a confirmed bill to weigh again (earlier payments stay on the order); a service with no price puts the bill in "needs price" and alerts the manager; manual billing is only used for orders that were already under way when this was switched on (marked `legacy`, never blocked). New permissions in `lib/roles.js`: `weigh`, `collect`, `billadmin`. New alert events in `lib/notify.js`: `bill_confirmed` (rider), `bill_disputed` and `bill_needs_price` (manager).
 
+**Quality gate override:** an order normally cannot be marked Ready until a passed quality inspection exists. Owners and managers (permission `qcoverride`) can release an order without one: on the request page, *Mark Ready anyway (override)* asks for a written reason, saves an `OVERRIDE by <name>: <reason>` entry under Operations, Quality control (shown as *Passed (override)*) and writes `qc_override` to the activity log. The reason is not shown to customers.
+
 After updating run `npm run db:init` (adds columns and the `payments` table; safe to repeat).
 
 ## Database backups

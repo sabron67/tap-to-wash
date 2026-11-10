@@ -58,7 +58,7 @@ function requestsPage(ctx, { rows, total, page, pages, status, q, tabCounts }) {
   return adminLayout(ctx, { title: 'Requests', active: 'requests', body });
 }
 
-function requestDetailPage(ctx, { r, items, payments = [], events, estimate, wa }) {
+function requestDetailPage(ctx, { r, items, payments = [], events, estimate, wa, qcPassed = true }) {
   const cur = ctx.settings.currency;
   const nxt = nextStatus(r.status);
   const balance = Math.max(0, Number(r.total_amount) - Number(r.amount_paid));
@@ -88,6 +88,15 @@ function requestDetailPage(ctx, { r, items, payments = [], events, estimate, wa 
         <input name="note" type="text" maxlength="200" placeholder="Optional note for the customer">
         <button class="btn btn-ghost" type="submit">Update status</button>
       </form>
+      ${ctx.can('qcoverride') && !qcPassed && ['picked_up', 'washing'].includes(r.status)
+        ? html`<details class="bill-reopen qc-override"><summary>No quality inspection yet? Mark Ready anyway (override)</summary>
+          <form method="post" action="/admin/requests/${r.id}/status" class="row-form bill-inline">
+            ${csrfField(ctx)}<input type="hidden" name="status" value="ready"><input type="hidden" name="qc_override" value="1">
+            <input name="qc_reason" maxlength="150" required placeholder="Reason, e.g. inspected by eye, system was offline" aria-label="Reason for override">
+            <button class="btn btn-ghost btn-sm" type="submit">Mark Ready (override)</button>
+          </form>
+          <p class="muted small">Your name and reason are saved under Operations, then Quality control, and in the activity log.</p></details>`
+        : ''}
     </div>`}
   </section>
 
