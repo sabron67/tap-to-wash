@@ -54,9 +54,31 @@ app.use((req, res, next) => {
 });
 
 const sessionStore = new PgSession({ pool, tableName: 'session', createTableIfMissing: true });
+// express-session assigns `store.generate` (which holds that middleware's cookie options, including the cookie path) on
+// the store object it is given. With one shared store, every new login slot overwrote it, so sessions created afterwards
+// in OTHER slots - customers' /account session included - were issued a cookie scoped to the wrong path. The browser never
+// sent it back, the CSRF check failed and the form was wiped. Each middleware therefore gets its own thin view of the
+// store: reads and writes still go to the same PostgreSQL session table, but `generate` (and `regenerate`, which calls it)
+// are private to that middleware. (Proxy, not Object.create: connect-pg-simple uses private class fields.)
+function storeView(base) {
+  let generate;
+  return new Proxy(base, {
+    get(target, prop) {
+      if (prop === 'generate') return generate;
+      if (prop === 'regenerate') return (req, fn) => target.destroy(req.sessionID, (err) => { generate(req); fn(err); });
+      const v = target[prop];
+      return typeof v === 'function' ? v.bind(target) : v;
+    },
+    set(target, prop, value) {
+      if (prop === 'generate') generate = value;
+      else target[prop] = value;
+      return true;
+    },
+  });
+}
 const buildSession = (name, cookiePath) =>
   session({
-    store: sessionStore,
+    store: storeView(sessionStore),
     name,
     secret: process.env.SESSION_SECRET || 'dev-only-secret-change-me',
     resave: false,
