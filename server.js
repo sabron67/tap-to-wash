@@ -13,6 +13,7 @@ const publicRoutes = require('./routes/public');
 const adminRoutes = require('./routes/admin');
 const { staffRouter } = adminRoutes;
 const accountRoutes = require('./routes/account');
+const payCallback = require('./routes/pay-callback');
 const { slotMiddleware, newSlotId } = require('./lib/slots');
 const { liveHook } = require('./lib/live');
 
@@ -42,6 +43,9 @@ app.use(
     },
   })
 );
+
+// M-Pesa STK push callback: called by Safaricom with no cookies, so it sits before the session middleware.
+app.use('/pay', payCallback);
 
 // Views are plain .js functions that return html`...`; res.view() sends the result.
 app.use((req, res, next) => {

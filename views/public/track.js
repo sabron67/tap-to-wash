@@ -7,8 +7,34 @@ const { icon } = require('../../lib/icons');
 const { payInstructions } = require('../../lib/mpesa');
 const { mpesaBadge, paidTick } = require('../../lib/pay-ui');
 
+// The M-Pesa prompt: the customer types their number, a prompt appears on their phone, they enter their PIN.
+function stkBox(ctx, result, balance) {
+  const pay = result.pay;
+  if (!pay || !pay.enabled) return '';
+  const cur = ctx.settings.currency;
+  const a = pay.attempt;
+  const hiddenFields = html`${pay.csrf ? html`<input type="hidden" name="_csrf" value="${pay.csrf}">` : ''}<input type="hidden" name="ref" value="${result.ref_code}">${result.phone ? html`<input type="hidden" name="phone" value="${result.phone}">` : ''}`;
+  if (a && a.status === 'pending') {
+    return html`<div class="pay-box stk-box" id="stkWait" data-status-url="${pay.statusUrl(a.id)}">
+      <h4>${mpesaBadge()} <span>Check your phone</span></h4>
+      <p class="stk-msg" data-msg role="status">We sent an M-Pesa prompt to ${a.phone}. Enter your M-Pesa PIN to pay ${money(balance, cur)}.</p>
+      <p class="muted small">This page updates by itself once you have paid. No prompt? Wait a moment, or use the steps below.</p>
+    </div>`;
+  }
+  return html`<div class="pay-box stk-box">
+    <h4>${mpesaBadge()} <span>Pay with an M-Pesa prompt</span></h4>
+    ${a && a.status !== 'success' ? html`<p class="err show" role="alert">${a.message}</p>` : ''}
+    <p class="muted small">We send a prompt to your phone. Enter your M-Pesa PIN and ${money(balance, cur)} is paid. Nothing is taken until you enter the PIN.</p>
+    <form method="post" action="${pay.payAction}" class="stack">
+      ${hiddenFields}
+      <label class="field"><span>M-Pesa phone number</span><input name="msisdn" type="tel" inputmode="tel" value="${pay.phone || ''}" placeholder="0712 345 678" maxlength="20" autocomplete="tel" required></label>
+      <button class="btn btn-primary" type="submit">${icon('smartphone')} Pay ${money(balance, cur)} with M-Pesa</button>
+    </form>
+  </div>`;
+}
+
 // How to pay by M-Pesa: the Till number or the Paybill (with the order reference as the account) the owner chose in Settings.
-function mpesaBox(ctx, result, balance) {
+function mpesaBox(ctx, result, balance, { manualOnly = true } = {}) {
   const how = payInstructions(ctx.settings, { ref: result.ref_code });
   if (!how) return '';
   return html`<div class="pay-box">
@@ -30,7 +56,9 @@ function billCard(ctx, result) {
   const cur = ctx.settings.currency;
   const qty = (n) => Number(n).toLocaleString('en-KE', { maximumFractionDigits: 2 });
   const balance = Math.max(0, Number(b.total) - Number(b.paid));
-  const hidden = html`<input type="hidden" name="ref" value="${result.ref_code}"><input type="hidden" name="phone" value="${result.phone || ''}"><input type="hidden" name="version" value="${b.version}">`;
+  const pay = result.pay || {};
+  const billAction = pay.billAction || '/track/bill';
+  const hidden = html`${pay.csrf ? html`<input type="hidden" name="_csrf" value="${pay.csrf}">` : ''}<input type="hidden" name="ref" value="${result.ref_code}"><input type="hidden" name="phone" value="${result.phone || ''}"><input type="hidden" name="version" value="${b.version}">`;
   return html`<section class="glass pad bill-card" id="bill">
     <h3>Your bill</h3>
     <p class="muted small">${b.status === 'awaiting_confirm' ? 'We weighed your clothes. Please check the weight and bill, then confirm it.' : b.status === 'confirmed' ? (b.weighed ? 'You confirmed this bill.' : 'Your order is confirmed. This is your bill.') : 'You queried this bill. We will check it and send you a new one.'}</p>
@@ -45,9 +73,9 @@ function billCard(ctx, result) {
     </div>
     ${b.status === 'awaiting_confirm'
       ? html`<div class="bill-actions">
-        <form method="post" action="/track/bill">${hidden}<input type="hidden" name="action" value="confirm"><button class="btn btn-primary" type="submit">${icon('circle-check')} Confirm this bill</button></form>
+        <form method="post" action="${billAction}">${hidden}<input type="hidden" name="action" value="confirm"><button class="btn btn-primary" type="submit">${icon('circle-check')} Confirm this bill</button></form>
         <details><summary class="btn btn-ghost">Something looks wrong</summary>
-          <form method="post" action="/track/bill" class="stack">${hidden}<input type="hidden" name="action" value="dispute">
+          <form method="post" action="${billAction}" class="stack">${hidden}<input type="hidden" name="action" value="dispute">
             <label class="field"><span>What should we check?</span><textarea name="comment" rows="2" maxlength="300" placeholder="e.g. I also gave two bedsheets"></textarea></label>
             <button class="btn btn-ghost" type="submit">Send to the team</button></form>
         </details>
@@ -60,7 +88,8 @@ function billCard(ctx, result) {
             ? 'You can pay on delivery.'
             : 'Pay the rider in cash or by M-Pesa. Your rider will take your laundry once payment is received.'}</p>`
       : ''}
-    ${b.status === 'confirmed' && balance > 0 ? mpesaBox(ctx, result, balance) : ''}
+    ${b.status === 'confirmed' && balance > 0 && pay.enabled ? stkBox(ctx, result, balance) : ''}
+    ${b.status === 'confirmed' && balance > 0 ? (pay.enabled ? html`<details class="pay-manual"><summary>Or pay with the Till / Paybill steps</summary>${mpesaBox(ctx, result, balance)}</details>` : mpesaBox(ctx, result, balance)) : ''}
     ${b.status === 'confirmed' && balance <= 0 && Number(b.total) > 0 ? html`<p class="paid-line">${paidTick()}<span><strong>Paid in full</strong>Thank you.</span></p>` : ''}
   </section>`;
 }
@@ -95,7 +124,7 @@ function trackPage(ctx, { ref = '', error = '', result = null, info = '' }) {
           </div>
           ${timeline(result.status)}
           ${result.receipt_href ? html`<p><a class="btn btn-primary" href="${result.receipt_href}">${icon('receipt')} View receipt</a></p>` : ''}
-          ${result.bill ? billCard(ctx, result) : ''}
+          ${result.bill ? billCard(ctx, result) : result.status === 'cancelled' ? '' : html`<p class="muted small" id="bill">Your bill will appear here as soon as it is ready. You will be able to confirm and pay it on this page.</p>`}
           <h3>Items</h3>
           <ul class="plain-list">${result.items.map((i) => html`<li>${i.category_name} <strong>× ${i.quantity}</strong></li>`)}</ul>
           ${result.pickup_scheduled_at || result.delivery_scheduled_at || result.dispatch_stage ? html`<h3>Collection and delivery</h3><p class="muted small">${result.dispatch_stage ? `Dispatch: ${result.dispatch_stage} · ` : ''}${result.pickup_scheduled_at ? `Pickup scheduled: ${fmtDate(result.pickup_scheduled_at)}` : ''}${result.delivery_scheduled_at ? ` · Delivery scheduled: ${fmtDate(result.delivery_scheduled_at)}` : ''}</p>` : ''}
@@ -104,7 +133,8 @@ function trackPage(ctx, { ref = '', error = '', result = null, info = '' }) {
           <form class="glass pad feedback-form" method="post" action="/track/feedback"><h3>Feedback and support</h3><input type="hidden" name="ref" value="${result.ref_code}"><label class="field"><span>Phone number used for this order</span><input name="phone" type="tel" value="${ctx.accountPhone || ''}" autocomplete="tel" required></label><label class="field"><span>Feedback type</span><select name="kind">${result.status === 'delivered' ? html`<option value="review">Rate my laundry service</option>` : ''}<option value="complaint">Report a problem</option></select></label><label class="field"><span>Rating (1–5)</span><select name="rating"><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Poor</option><option value="1">1 - Very poor</option></select></label><label class="field"><span>Comment / issue details</span><textarea name="comment" rows="3" maxlength="1500"></textarea></label><button class="btn btn-primary" type="submit">Send feedback</button></form>
         </section>
         <div id="liveCfg" data-kind="order" data-ref="${result.ref_code}" data-phone="${result.phone || ''}" hidden></div>
-        <script src="/js/live.js"></script>`
+        <script src="/js/live.js"></script>
+        <script src="/js/pay.js" defer></script>`
       : ''}
   </main>`;
 

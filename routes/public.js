@@ -12,10 +12,15 @@ const { notifyEvent } = require('../lib/notify');
 const { toIntl, validWaNumber } = require('../lib/whatsapp');
 const { SLOTS, mediaVersions } = require('../lib/media');
 const live = require('../lib/live');
+const stk = require('../lib/stk');
+const { BILL_ROW, billFrom, payState, loadOrderParts } = require('../lib/order-view');
+const { respondToBill } = require('../lib/customer-bill');
 
 const router = express.Router();
 
 const submitLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: +process.env.REQUEST_MAX || 30, message: 'Too many requests from this device. Please try again in a few minutes.' });
+const payLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 15, message: 'Too many payment attempts. Please try again in a few minutes.' });
+const payStatusLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 600, message: 'Too many checks. Please wait a moment.' });
 const trackLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, message: 'Too many lookups. Please try again in a few minutes.' });
 
 router.get(
@@ -293,39 +298,21 @@ router.get(
     if (!ref && !phone) return res.view(trackPage(ctx, {}));
     if (!ref || !validPhone(phone)) return res.view(trackPage(ctx, { ref, error: 'Enter both your reference code and phone number.' }));
 
-    const found = await pool.query(
-      `SELECT r.id, r.ref_code, r.status, r.pickup_scheduled_at, r.delivery_scheduled_at, r.dispatch_stage, c.phone_key,
-            r.bill_status, r.bill_version, r.subtotal_amount, r.discount_code, r.discount_amount, r.total_amount, r.amount_paid, r.pay_later
-         FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1`,
-      [ref]
-    );
+    const found = await pool.query(`SELECT ${BILL_ROW}, c.phone_key FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1`, [ref]);
     if (!found.rows.length || found.rows[0].phone_key !== phoneKey(phone)) {
       return res.view(trackPage(ctx, { ref, error: 'We could not find a request matching those details. Please check and try again.' }));
     }
 
     const r = found.rows[0];
-    const [items, events] = await Promise.all([
-      pool.query('SELECT category_name, quantity, unit, measured_qty, rate, line_total FROM request_items WHERE request_id = $1 ORDER BY id', [r.id]),
-      pool.query('SELECT status, note, created_at FROM request_events WHERE request_id = $1 ORDER BY created_at DESC, id DESC', [r.id]),
-    ]);
-    // The bill is shown to the customer once the laundry has been weighed and priced.
-    const billed = ['awaiting_confirm', 'confirmed', 'disputed'].includes(r.bill_status) && items.rows.length && items.rows.every((i) => i.measured_qty !== null && i.line_total !== null);
-    const bill = billed
-      ? {
-          status: r.bill_status,
-          version: r.bill_version,
-          lines: items.rows,
-          weighed: items.rows.some((i) => /^(kg|kgs|g)$/i.test(String(i.unit || '').trim())),
-          subtotal: r.subtotal_amount,
-          discount_code: r.discount_code,
-          discount: r.discount_amount,
-          total: r.total_amount,
-          paid: r.amount_paid,
-          pay_later: r.pay_later,
-        }
-      : null;
+    const { items, events } = await loadOrderParts(r.id);
+    const bill = billFrom(r, items);
+    const pay = await payState(r, bill, { wantedId: parseInt(req.query.stk, 10) || 0, phone: phone || '' });
+    pay.billAction = '/track/bill';
+    pay.payAction = '/track/pay';
+    pay.statusUrl = (id) => `/track/pay/${id}/status?ref=${encodeURIComponent(r.ref_code)}&phone=${encodeURIComponent(phone)}`;
+    const payErrors = { phone: 'Enter a Safaricom number like 0712 345 678.', fail: 'M-Pesa did not accept the request. Please try again, or pay using the steps below.', unavailable: 'Pay by M-Pesa prompt is not available right now. Use the steps below.', notdue: 'There is nothing to pay on this order right now.' };
     const infoMsg = req.query.bill === 'confirmed' ? 'Thank you. Your bill is confirmed.' : req.query.bill === 'queried' ? 'Thank you. We have noted your question and will check the bill with you.' : req.query.bill === 'stale' ? 'Your bill was updated while you were looking at it. Please review it again.' : req.query.feedback === 'sent' ? 'Thank you. Your feedback has been received.' : '';
-    res.view(trackPage(ctx, { ref, info: infoMsg, result: { ref_code: r.ref_code, status: r.status, items: items.rows, events: events.rows, pickup_scheduled_at:r.pickup_scheduled_at, delivery_scheduled_at:r.delivery_scheduled_at, dispatch_stage:r.dispatch_stage, bill, phone } }));
+    res.view(trackPage(ctx, { ref, info: infoMsg, error: payErrors[req.query.pay] || '', result: { ref_code: r.ref_code, status: r.status, items, events, pickup_scheduled_at: r.pickup_scheduled_at, delivery_scheduled_at: r.delivery_scheduled_at, dispatch_stage: r.dispatch_stage, bill, phone, pay } }));
   })
 );
 
@@ -344,26 +331,48 @@ router.post(
     }
     const r = found.rows[0];
     const back = (flag) => res.redirect(`/track?ref=${encodeURIComponent(ref)}&phone=${encodeURIComponent(phone)}&bill=${flag}`);
-    if (r.bill_status !== 'awaiting_confirm' || Number(req.body.version) !== r.bill_version) return back('stale');
     const business = (await getSettings()).business_name;
-    if (action === 'confirm') {
-      const upd = await pool.query(
-        "UPDATE requests SET bill_status='confirmed', bill_confirmed_at=now(), bill_confirmed_by='Customer', updated_at=now() WHERE id=$1 AND bill_status='awaiting_confirm' AND bill_version=$2 RETURNING id",
-        [r.id, r.bill_version]
-      );
-      if (!upd.rows.length) return back('stale');
-      await pool.query('INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,$2,$3,$4)', [r.id, r.status, 'Bill confirmed by the customer.', 'Customer']);
-      notifyEvent('bill_confirmed', r.id, null, business);
-      live.publish(r.id);
-      return back('confirmed');
+    return back(await respondToBill(r, { action, version: req.body.version, comment: req.body.comment, business }));
+  })
+);
+
+// Pay the confirmed bill with an M-Pesa prompt on the customer's phone (reference code + phone check, like the rest of tracking).
+router.post(
+  '/track/pay',
+  payLimit,
+  wrap(async (req, res) => {
+    const ref = cleanText(req.body.ref, 20).toUpperCase();
+    const phone = cleanText(req.body.phone, 20);
+    const found = await pool.query('SELECT r.id, r.ref_code, r.status, r.bill_status, r.total_amount, r.amount_paid, c.phone_key FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1', [ref]);
+    if (!found.rows.length || !validPhone(phone) || found.rows[0].phone_key !== phoneKey(phone)) {
+      const settings = await getSettings();
+      return res.status(400).view(trackPage({ settings, account: req.session.account, accountPhone: await savedPhone(req) }, { ref, error: 'We could not verify that order. Check the reference code and phone number.' }));
     }
-    const comment = cleanText(req.body.comment, 300);
-    const upd = await pool.query("UPDATE requests SET bill_status='disputed', updated_at=now() WHERE id=$1 AND bill_status='awaiting_confirm' AND bill_version=$2 RETURNING id", [r.id, r.bill_version]);
-    if (!upd.rows.length) return back('stale');
-    await pool.query('INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,$2,$3,$4)', [r.id, r.status, comment ? `Customer queried the bill: ${comment}` : 'Customer queried the bill.', 'Customer']);
-    notifyEvent('bill_disputed', r.id, null, business);
-    live.publish(r.id);
-    return back('queried');
+    const r = found.rows[0];
+    const back = (q) => res.redirect(`/track?ref=${encodeURIComponent(ref)}&phone=${encodeURIComponent(phone)}&${q}#bill`);
+    if (!stk.enabled()) return back('pay=unavailable');
+    const out = await stk.startPush(r, cleanText(req.body.msisdn, 20) || phone);
+    if (out.ok) return back(`stk=${out.stk.id}`);
+    return back(`pay=${!stk.normalizePhone(req.body.msisdn || phone) ? 'phone' : stk.cannotPay(r) ? 'notdue' : 'fail'}`);
+  })
+);
+
+// The page that waits for the answer asks here every few seconds.
+router.get(
+  '/track/pay/:id/status',
+  payStatusLimit,
+  wrap(async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const ref = cleanText(req.query.ref, 20).toUpperCase();
+    const phone = cleanText(req.query.phone, 20);
+    res.set('Cache-Control', 'no-store');
+    const found = await pool.query('SELECT r.id, c.phone_key FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1', [ref]);
+    const owns = found.rows.length && validPhone(phone) && found.rows[0].phone_key === phoneKey(phone) && Number.isInteger(id)
+      ? await pool.query('SELECT id FROM mpesa_stk WHERE id = $1 AND request_id = $2', [id, found.rows[0].id])
+      : { rows: [] };
+    if (!owns.rows.length) return res.status(404).json({ ok: false });
+    const row = await stk.refresh(id);
+    res.json({ ok: true, status: row.status, message: stk.describe(row) });
   })
 );
 

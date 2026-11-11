@@ -12,6 +12,9 @@ const { trackPage } = require('../views/public/track');
 const { receiptPage } = require('../views/admin/receipt');
 const { forgotPage, resetPage } = require('../views/public/reset');
 const { requestCode, completeReset, problemMessage, TTL_MINUTES } = require('../lib/reset');
+const stk = require('../lib/stk');
+const { BILL_ROW, billFrom, payState, loadOrderParts } = require('../lib/order-view');
+const { respondToBill } = require('../lib/customer-bill');
 
 const router = express.Router();
 const MAX_FAILS = 5;
@@ -20,6 +23,8 @@ const REMEMBER_MS = 30 * 24 * 60 * 60 * 1000;
 const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 12);
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/;
 
+const payLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 15, message: 'Too many payment attempts. Please try again in a few minutes.' });
+const payStatusLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 600, message: 'Too many checks. Please wait a moment.' });
 const authLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: +process.env.LOGIN_MAX || 15, message: 'Too many attempts. Please wait a few minutes.' });
 
 router.use((req, res, next) => {
@@ -293,19 +298,93 @@ router.post(
   })
 );
 
+// The order page inside a customer's account: status, the bill, and the pay box (M-Pesa prompt plus manual steps).
+const myOrder = (req) => {
+  const ref = cleanText(req.params.ref, 20).toUpperCase();
+  return pool.query(`SELECT ${BILL_ROW} FROM requests r WHERE r.ref_code = $1 AND r.account_id = $2`, [ref, req.acc.id]);
+};
+
 router.get(
   '/requests/:ref',
   wrap(async (req, res, next) => {
-    const ref = cleanText(req.params.ref, 20).toUpperCase();
-    const { rows } = await pool.query('SELECT id, ref_code, status FROM requests WHERE ref_code = $1 AND account_id = $2', [ref, req.acc.id]);
+    const { rows } = await myOrder(req);
     if (!rows.length) return next();
     const r = rows[0];
-    const [items, events] = await Promise.all([
-      pool.query('SELECT category_name, quantity FROM request_items WHERE request_id = $1 ORDER BY id', [r.id]),
-      pool.query('SELECT status, note, created_at FROM request_events WHERE request_id = $1 ORDER BY created_at DESC, id DESC', [r.id]),
-    ]);
+    const ref = r.ref_code;
+    const { items, events } = await loadOrderParts(r.id);
+    const bill = billFrom(r, items);
     const ctx = { ...(await pubCtx(req)), accountPhone: req.acc.phone || '' };
-    res.view(trackPage(ctx, { ref, result: { ref_code: r.ref_code, status: r.status, items: items.rows, events: events.rows, receipt_href: `/account/requests/${r.ref_code}/receipt` } }));
+    const pay = await payState(r, bill, { wantedId: parseInt(req.query.stk, 10) || 0, phone: req.acc.phone || '' });
+    pay.csrf = ctx.csrf;
+    pay.billAction = `/account/requests/${r.ref_code}/bill`;
+    pay.payAction = `/account/requests/${r.ref_code}/pay`;
+    pay.statusUrl = (id) => `/account/requests/${r.ref_code}/pay/${id}/status`;
+    const infoMsg = req.query.bill === 'confirmed' ? 'Thank you. Your bill is confirmed.' : req.query.bill === 'queried' ? 'Thank you. We have noted your question and will check the bill with you.' : req.query.bill === 'stale' ? 'Your bill was updated while you were looking at it. Please review it again.' : '';
+    const flashed = ctx.flash || null;
+    res.view(
+      trackPage(ctx, {
+        ref,
+        info: infoMsg || (flashed && flashed.type !== 'error' ? flashed.msg : ''),
+        error: flashed && flashed.type === 'error' ? flashed.msg : '',
+        accountOrder: true,
+        result: {
+          ref_code: r.ref_code, status: r.status, items, events, bill, pay,
+          pickup_scheduled_at: r.pickup_scheduled_at, delivery_scheduled_at: r.delivery_scheduled_at, dispatch_stage: r.dispatch_stage,
+          receipt_href: `/account/requests/${r.ref_code}/receipt`,
+        },
+      })
+    );
+  })
+);
+
+// Confirm the bill (or say something looks wrong) from inside the account. The signed-in account must own the order.
+router.post(
+  '/requests/:ref/bill',
+  wrap(async (req, res, next) => {
+    const { rows } = await myOrder(req);
+    if (!rows.length) return next();
+    const r = rows[0];
+    const action = req.body.action === 'dispute' ? 'dispute' : req.body.action === 'confirm' ? 'confirm' : '';
+    const back = (flag) => res.redirect(`/account/requests/${r.ref_code}?bill=${flag}#bill`);
+    if (!action) return back('stale');
+    const business = (await getSettings()).business_name;
+    return back(await respondToBill(r, { action, version: req.body.version, comment: req.body.comment, business }));
+  })
+);
+
+// Send the M-Pesa prompt to the customer's phone for the balance of this order.
+router.post(
+  '/requests/:ref/pay',
+  payLimit,
+  wrap(async (req, res, next) => {
+    const { rows } = await myOrder(req);
+    if (!rows.length) return next();
+    const r = rows[0];
+    const to = (q) => res.redirect(`/account/requests/${r.ref_code}${q}#bill`);
+    if (!stk.enabled()) {
+      flash(req, 'error', 'Pay by M-Pesa prompt is not available right now. Use the steps shown in the pay box.');
+      return to('');
+    }
+    const msisdn = cleanText(req.body.msisdn, 20) || req.acc.phone || '';
+    const out = await stk.startPush(r, msisdn);
+    if (out.ok) return to(`?stk=${out.stk.id}`);
+    flash(req, 'error', out.error);
+    return to('');
+  })
+);
+
+// The page that waits for the answer asks here every few seconds.
+router.get(
+  '/requests/:ref/pay/:id/status',
+  payStatusLimit,
+  wrap(async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const { rows } = await myOrder(req);
+    const id = parseInt(req.params.id, 10);
+    const owns = rows.length && Number.isInteger(id) ? await pool.query('SELECT id FROM mpesa_stk WHERE id = $1 AND request_id = $2', [id, rows[0].id]) : { rows: [] };
+    if (!owns.rows.length) return res.status(404).json({ ok: false });
+    const row = await stk.refresh(id);
+    res.json({ ok: true, status: row.status, message: stk.describe(row) });
   })
 );
 

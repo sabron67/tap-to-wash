@@ -187,3 +187,29 @@ Numbers are calculated when the file is opened (Excel, LibreOffice, Google Sheet
 **Customer accounts** are optional; guest requests work exactly as before. Customers can sign up with email and password, see their orders, keep their details and earlier places, use "Request again", add an earlier guest order (reference code + phone), and delete their account. There is no email service yet, so a forgotten password is reset by staff (Customers → Customer accounts → Reset) and the temporary password is passed on by WhatsApp or phone. The Privacy Notice is editable in Settings.
 
 After updating run `npm install` (adds `web-push`) and `npm run db:init`.
+
+## Bill and pay box inside a customer account, and M-Pesa STK push
+
+**Order page in the account.** Opening an order from *My account* now shows the same bill as the tracking link: the weighed or counted lines, the total, **Confirm this bill / Something looks wrong** (per-kg orders), the balance, and the pay box. The account is the proof of ownership, so no reference code or phone number is asked for. The tracking page and the account page are built by the same code (`lib/order-view.js`, `views/public/track.js`), so they can never show different bills.
+
+**STK push (Safaricom Daraja "M-Pesa Express").** On a confirmed bill with a balance, the customer types their M-Pesa number, a prompt appears on their phone, and they enter their PIN. The page then waits and updates by itself.
+
+1. Create an app on https://developer.safaricom.co.ke, then add these to your `.env` (locally) or the **Environment** tab on Render (see `.env.example`):
+
+   | Variable | What to put |
+   |---|---|
+   | `MPESA_ENV` | `sandbox` to test, `production` for real money |
+   | `MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET` | from your Daraja app |
+   | `MPESA_SHORTCODE` | your Paybill, or (Buy Goods) the Head Office / store number your Till belongs to |
+   | `MPESA_PASSKEY` | the Lipa na M-Pesa Online passkey for that shortcode |
+   | `MPESA_TRANSACTION_TYPE` | `CustomerPayBillOnline` (Paybill) or `CustomerBuyGoodsOnline` (Till) |
+   | `MPESA_PARTY_B` | Buy Goods only: your Till number (empty = same as the shortcode) |
+   | `MPESA_CALLBACK_SECRET` | a long random text (30+ letters and numbers) you make up |
+   | `APP_URL` | your public https address, e.g. `https://igumori.onrender.com` (no slash at the end) |
+
+2. Run `npm run db:init` once (adds the `mpesa_stk` table; safe to repeat) and restart.
+3. Safaricom sends the result to `APP_URL/pay/callback/<MPESA_CALLBACK_SECRET>`. That address has to be reachable from the internet over https (Render is fine; `localhost` is not). Only a call with the right secret is accepted.
+
+If any of the variables are missing, STK push stays off and customers see the manual Till / Paybill steps exactly as before.
+
+How money is recorded: only Safaricom's callback can credit a payment, and it carries the M-Pesa receipt number, which is stored as the payment reference (the same unique-code rule as hand-entered codes). Each prompt is settled once, so a repeated callback or a double tap never counts twice, and a customer who taps again while a prompt is waiting gets the same prompt instead of a second charge. A payment is marked as already received/reconciled. Paying the full balance on a confirmed bill moves the order to Picked up automatically when Pay Before Cleaning is on, and staff and the customer see it live. If the callback is slow, the page asks Safaricom for the result, but only to show a cancel or failure early; it never credits money from that check. If a customer is charged but no callback ever arrives (for example a wrong `APP_URL`), the rider or cashier can still record the M-Pesa code by hand. M-Pesa cannot charge cents, so a balance with cents is rounded up to the next shilling for the prompt.

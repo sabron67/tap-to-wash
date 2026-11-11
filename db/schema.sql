@@ -358,3 +358,24 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS requests_forward_only_trg ON requests;
 CREATE TRIGGER requests_forward_only_trg BEFORE UPDATE OF status ON requests
   FOR EACH ROW EXECUTE FUNCTION requests_forward_only();
+
+-- ---------- M-Pesa STK push (Daraja): one row per prompt sent to a customer's phone ----------
+-- The row is created when the prompt is sent (pending) and settled once, by Safaricom's callback.
+CREATE TABLE IF NOT EXISTS mpesa_stk (
+  id                  SERIAL PRIMARY KEY,
+  request_id          INTEGER       REFERENCES requests(id) ON DELETE SET NULL,
+  request_ref         TEXT          NOT NULL DEFAULT '',
+  phone               TEXT          NOT NULL,
+  amount              INTEGER       NOT NULL CHECK (amount > 0),
+  merchant_request_id TEXT          NOT NULL DEFAULT '',
+  checkout_request_id TEXT          NOT NULL UNIQUE,
+  status              TEXT          NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'success', 'failed', 'cancelled', 'timeout')),
+  result_code         INTEGER,
+  result_desc         TEXT          NOT NULL DEFAULT '',
+  receipt             TEXT          NOT NULL DEFAULT '',
+  paid_amount         NUMERIC(12,2),
+  last_query_at       TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+  completed_at        TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS mpesa_stk_request_idx ON mpesa_stk(request_id, created_at DESC);

@@ -1111,3 +1111,11 @@ img.mpesa-badge.logo { box-sizing: content-box; background: #fff; padding: .12re
   .hf-b { bottom: auto; top: 4.6rem; }
   .hc-b { display: none; }
 }
+
+/* M-Pesa prompt (STK push) box on the bill */
+.stk-box .stk-msg { font-weight: 600; margin: 0 0 .5rem; }
+.stk-box form { margin-top: .6rem; }
+.stk-box .btn { width: 100%; justify-content: center; }
+.pay-manual { margin-top: .8rem; }
+.pay-manual > summary { cursor: pointer; font-size: .9rem; color: var(--muted); padding: .3rem 0; }
+.pay-manual[open] > summary { margin-bottom: .4rem; }
