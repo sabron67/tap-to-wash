@@ -95,6 +95,32 @@ p { margin: 0 0 1rem; }
 .btn[disabled] { opacity: .55; cursor: not-allowed; transform: none; }
 .btn-primary { background: var(--accent); }
 .btn-primary:hover { background: var(--accent-h); }
+/* Secondary action buttons: explicit high-contrast treatment (used by category photo upload). */
+.btn-secondary {
+  background: var(--accent);
+  color: #FFFFFF;
+  border-color: var(--accent);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.btn-secondary:hover {
+  background: var(--accent-h);
+  border-color: var(--accent-h);
+  color: #FFFFFF;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.btn-secondary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.btn-secondary[disabled], .btn-secondary:disabled {
+  background: var(--muted);
+  border-color: var(--muted);
+  color: #FFFFFF;
+  opacity: .72;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
 .btn-accent { background: var(--text); color: var(--bg); }
 .btn-accent:hover { opacity: .88; }
 .btn-ghost { color: var(--text); background: transparent; border-color: var(--line-2); }
