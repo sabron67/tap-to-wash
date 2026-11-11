@@ -5,9 +5,9 @@ function head(title, settings, description) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title ? `${title} · ` : ''}${settings.business_name}</title>
 <meta name="description" content="${description || settings.tagline}">
-<meta name="theme-color" content="#2E274D" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#E9EEFD" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#E9EEFD" data-dynamic>
+<meta name="theme-color" content="#101F2B" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F5F8FA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#F5F8FA" data-dynamic>
 <script src="/js/boot.js"></script>
 <link rel="icon" href="/site-icon${settings.icon_v ? `?v=${settings.icon_v}` : ''}">
 ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${settings.icon_v}">` : ''}

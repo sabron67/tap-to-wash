@@ -1,11 +1,11 @@
 /* Receipt look (app-style): banner -> rounded sheet -> status chips -> item rows -> total card -> pill buttons.
    Used by the standalone receipt page (body.rc-solo) and the "Request received" screen after ordering (.rc-embed).
-   Colours come from the site theme variables; .rc-solo defines the same light-mode (#E9EEFD) / violet (#9C7FF3) values for the standalone page. */
+   Colours come from the site theme variables; .rc-solo uses the Tap to Wash clean blue and fresh teal palette. */
 body.rc-solo {
   color-scheme: light;
-  --bg: #E9EEFD; --bg-alt: #DCE3FA; --surface: #ffffff; --surface-2: #F1F4FF; --line: #C9D2F0; --line-2: #AEB8E0;
-  --text: #2E274D; --muted: #5A5380; --accent: #9C7FF3; --accent-h: #8A68EE; --accent-ink: #5B3FD0; --on-accent: #1D1838; --focus: #3B1FB5;
-  --footer-bg: #2E274D; --footer-tx: #E9EEFD; --shadow-up: 0 10px 24px rgba(46, 39, 77, .16); --ease: cubic-bezier(.22, .61, .36, 1);
+  --bg: #F5F8FA; --bg-alt: #EAF6F7; --surface: #ffffff; --surface-2: #EFF7F8; --line: #DCE6EC; --line-2: #C3D3DC;
+  --text: #123047; --muted: #526777; --accent: #087F8C; --accent-h: #066B76; --accent-ink: #08717D; --on-accent: #FFFFFF; --focus: #087F8C;
+  --footer-bg: #123047; --footer-tx: #F1F7FA; --shadow-up: 0 12px 30px rgba(18, 48, 71, .12); --ease: cubic-bezier(.22, .61, .36, 1);
   margin: 0; background: var(--bg-alt); color: var(--text);
   font: 15px/1.5 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; -webkit-font-smoothing: antialiased;
 }
