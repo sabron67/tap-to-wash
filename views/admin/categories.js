@@ -3,6 +3,7 @@ const { money } = require('../../lib/helpers');
 const { icon, categoryIconName, CATEGORY_ICONS } = require('../../lib/icons');
 const { adminLayout } = require('../layouts/admin');
 const { csrfField } = require('../partials/ui');
+const { categoryImageUrl } = require('../../lib/media');
 
 // Visual icon picker: one radio per icon, the chosen one is highlighted.
 function iconPicker(selected) {
@@ -33,7 +34,7 @@ function fields(ctx, c = {}) {
     </div>`;
 }
 
-function categoriesPage(ctx, { rows }) {
+function categoriesPage(ctx, { rows, versions = {} }) {
   const cur = ctx.settings.currency;
   const body = html`
   <section class="glass pad">
@@ -48,9 +49,9 @@ function categoriesPage(ctx, { rows }) {
   <section class="cat-admin">
     ${rows.length
       ? rows.map(
-          (c) => html`<article class="glass pad cat-admin-card ${c.is_active ? '' : 'is-off'}" style="--c:${c.color}">
+          (c) => html`<article class="glass pad cat-admin-card ${c.is_active ? '' : 'is-off'}" style="--c:#087F8C">
             <div class="cat-admin-top">
-              <span class="cat-icon sm">${icon(categoryIconName(c.icon))}</span>
+              <img class="category-admin-thumb" src="${categoryImageUrl(c, versions)}" alt="${c.name}" loading="lazy">
               <div class="grow">
                 <h3>${c.name} ${c.is_active ? '' : html`<span class="badge" style="--bc:#94a3b8">Hidden</span>`}</h3>
                 <p class="muted small">${c.description || 'No description'}</p>
@@ -61,8 +62,14 @@ function categoriesPage(ctx, { rows }) {
                 <form method="post" action="/admin/categories/${c.id}/delete" class="inline" data-confirm="Delete “${c.name}”? Past requests keep their history.">${csrfField(ctx)}<button class="btn btn-danger btn-sm" type="submit" aria-label="Delete ${c.name}">${icon('trash-2')}</button></form>
               </div>
             </div>
+            <div class="category-image-tools">
+              <label class="field"><span>Category photo <small>PNG, JPEG or WebP · max 2.5 MB</small></span><input type="file" accept="image/jpeg,image/png,image/webp" data-category-image-input="${c.id}" aria-label="Choose photo for ${c.name}"></label>
+              <button class="btn btn-secondary btn-sm" type="button" data-category-image-upload="${c.id}">${icon('upload')} Upload photo</button>
+              <p class="err" data-category-image-err="${c.id}" role="alert"></p>
+              ${versions[`category-${c.id}`] ? html`<form method="post" action="/admin/categories/${c.id}/image/reset" class="inline" data-confirm="Remove this uploaded photo and use the default category photo?">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon('rotate-ccw')} Use default photo</button></form>` : html`<span class="muted small">Using the built-in service photo.</span>`}
+            </div>
             <details>
-              <summary>${icon('pencil')} Edit</summary>
+              <summary>${icon('pencil')} Edit details</summary>
               <form method="post" action="/admin/categories/${c.id}" class="stack">
                 ${csrfField(ctx)}
                 ${fields(ctx, c)}
@@ -72,7 +79,8 @@ function categoriesPage(ctx, { rows }) {
           </article>`
         )
       : html`<div class="glass pad empty"><div class="big">${icon('tag')}</div><p>No categories yet. Add your first one above.</p></div>`}
-  </section>`;
+  </section>
+  <input type="hidden" id="csrfToken" value="${ctx.csrf}">`;
 
   return adminLayout(ctx, { title: 'Categories', active: 'categories', body });
 }

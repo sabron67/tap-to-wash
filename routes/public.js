@@ -10,7 +10,7 @@ const { termsPage } = require('../views/public/terms');
 const { privacyPage } = require('../views/public/privacy');
 const { notifyEvent } = require('../lib/notify');
 const { toIntl, validWaNumber } = require('../lib/whatsapp');
-const { SLOTS, mediaVersions } = require('../lib/media');
+const { SLOTS, mediaVersions, categoryImageUrl } = require('../lib/media');
 const live = require('../lib/live');
 const stk = require('../lib/stk');
 const { BILL_ROW, billFrom, payState, loadOrderParts } = require('../lib/order-view');
@@ -37,6 +37,8 @@ router.get(
       ),
       acc ? pool.query('SELECT name, phone FROM accounts WHERE id = $1 AND is_active', [acc.id]) : { rows: [] },
     ]);
+    const categoryVersions = media;
+    cats.rows = cats.rows.map((c) => ({ ...c, imageUrl: categoryImageUrl(c, categoryVersions) }));
     // Signed-in customers get their details pre-filled, a list of earlier places, and "request again".
     let personal = null;
     if (acc && mine.rows.length) {
@@ -103,8 +105,10 @@ router.get(
   '/media/:slot',
   wrap(async (req, res, next) => {
     const slot = req.params.slot;
-    if (!Object.prototype.hasOwnProperty.call(SLOTS, slot)) return next();
+    const isCategoryImage = /^category-[1-9]\d*$/.test(slot);
+    if (!Object.prototype.hasOwnProperty.call(SLOTS, slot) && !isCategoryImage) return next();
     const { rows } = await pool.query('SELECT mime, data, updated_at FROM media WHERE slot = $1', [slot]);
+    if (isCategoryImage && !rows.length) return res.status(404).end();
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (!rows.length) {
       res.setHeader('Cache-Control', 'public, max-age=86400');

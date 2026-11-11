@@ -83,6 +83,45 @@
     });
   });
 
+  // Category photos: resize locally and store against the selected category.
+  document.querySelectorAll('[data-category-image-upload]').forEach(function (btn) {
+    var id = btn.getAttribute('data-category-image-upload');
+    var input = document.querySelector('[data-category-image-input="' + id + '"]');
+    var err = document.querySelector('[data-category-image-err="' + id + '"]');
+    function show(msg) { if (err) { err.textContent = msg || ''; err.classList.toggle('show', !!msg); } }
+    btn.addEventListener('click', function () {
+      show('');
+      var file = input && input.files && input.files[0];
+      if (!file) return show('Choose a category photo first.');
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return show('Choose a JPEG, PNG or WebP image.');
+      var reader = new FileReader();
+      reader.onerror = function () { show('That image could not be read.'); };
+      reader.onload = function () {
+        var img = new Image();
+        img.onerror = function () { show('That image could not be read.'); };
+        img.onload = function () {
+          var max = 1200, scale = Math.min(1, max / Math.max(img.width, img.height));
+          var canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(img.width * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          var ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(function (blob) {
+            if (!blob) return show('Could not prepare that image.');
+            btn.disabled = true;
+            fetch(BASE + '/admin/categories/' + id + '/image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'X-CSRF-Token': tokenEl ? tokenEl.value : '' }, body: blob })
+              .then(function (r) { return r.json().catch(function () { return {}; }); })
+              .then(function (out) { if (out.ok) window.location.reload(); else { btn.disabled = false; show(out.error || 'Upload failed.'); } })
+              .catch(function () { btn.disabled = false; show('Upload failed. Check your connection.'); });
+          }, 'image/jpeg', 0.86);
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+
   // Flash messages are shown as toasts by /js/toast.js
 
   // Background photos: resize in the browser, then upload as JPEG

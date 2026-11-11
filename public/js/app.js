@@ -84,7 +84,17 @@
       main.setAttribute('aria-pressed', on ? 'true' : 'false');
       const ico = document.createElement('span');
       ico.className = 'pick-ico';
-      ico.innerHTML = c.icon; // trusted SVG rendered by the server
+      if (c.imageUrl) {
+        const photo = document.createElement('img');
+        photo.className = 'pick-photo';
+        photo.src = c.imageUrl;
+        photo.alt = '';
+        photo.loading = 'lazy';
+        photo.onerror = function () { photo.remove(); ico.innerHTML = c.icon; };
+        ico.appendChild(photo);
+      } else {
+        ico.innerHTML = c.icon; // trusted SVG rendered by the server
+      }
       const txt = document.createElement('span');
       txt.className = 'pick-txt';
       const nm = document.createElement('strong');

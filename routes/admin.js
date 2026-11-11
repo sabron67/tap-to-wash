@@ -9,6 +9,7 @@ const { audit } = require('../lib/audit');
 const { passwordProblem } = require('../lib/password');
 const { wrap, STATUS_MAP, cleanText, cleanMultiline, backwardBlocker } = require('../lib/helpers');
 const { categoryIconName } = require('../lib/icons');
+const { mediaVersions } = require('../lib/media');
 const { can, roleOf, visibleStatuses, settableStatuses } = require('../lib/roles');
 const { pickupBlocker, GATED_TARGETS, autoBill, advanceIfPaid } = require('../lib/bill');
 const live = require('../lib/live');
@@ -49,7 +50,7 @@ const ensureCsrf = (req, res, next) => {
 const checkCsrf = (req, res, next) => {
   const sent = req.get('x-csrf-token') || (req.body && req.body._csrf);
   if (req.method === 'POST' && !safeEqual(sent, req.session.csrf)) {
-    const isFetch = !!req.get('x-csrf-token') || /^\/(api|admin\/api|admin\/photos|admin\/settings\/favicon)/.test(req.cleanUrl || req.originalUrl);
+    const isFetch = !!req.get('x-csrf-token') || /^\/(api|admin\/api|admin\/photos|admin\/categories\/|admin\/settings\/favicon)/.test(req.cleanUrl || req.originalUrl);
     if (isFetch) return res.status(403).json({ ok: false, error: 'Your session expired. Refresh the page and try again.' });
     // A normal form: do not leave the person on a dead-end page.
     if (!req.session.admin) {
@@ -639,7 +640,7 @@ router.post(
 // ---------- categories ----------
 function parseCategory(body) {
   const name = cleanText(body.name, 60);
-  const color = /^#[0-9a-fA-F]{6}$/.test(body.color || '') ? body.color : '#c2663a';
+  const color = /^#[0-9a-fA-F]{6}$/.test(body.color || '') ? body.color : '#087F8C';
   const priceRaw = String(body.price == null ? '' : body.price).trim();
   const price = priceRaw === '' ? null : Number(priceRaw);
   const sort = parseInt(body.sort_order, 10);
@@ -658,14 +659,15 @@ router.get(
   '/categories',
   need('categories'),
   wrap(async (req, res) => {
-    const [ctx, cats] = await Promise.all([
+    const [ctx, cats, versions] = await Promise.all([
       buildCtx(req),
       pool.query(
         `SELECT c.*, (SELECT COUNT(*)::int FROM request_items i WHERE i.category_id = c.id) AS used
            FROM categories c ORDER BY c.sort_order, c.name`
       ),
+      mediaVersions(),
     ]);
-    res.view(categoriesPage(ctx, { rows: cats.rows }));
+    res.view(categoriesPage(ctx, { rows: cats.rows, versions }));
   })
 );
 
@@ -704,6 +706,51 @@ router.post(
     );
     await audit(req, 'category_edit', `#${id} ${c.name}`);
     flash(req, 'success', 'Category updated.');
+    res.redirect('/admin/categories');
+  })
+);
+
+// Category photography is stored in the existing media table, one image per category.
+router.post(
+  '/categories/:id/image',
+  need('categories'),
+  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: '3mb' }),
+  wrap(async (req, res) => {
+    const id = Number.parseInt(req.params.id, 10);
+    const buf = req.body;
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ ok: false, error: 'Invalid category.' });
+    if (!Buffer.isBuffer(buf) || buf.length < 1000) return res.status(400).json({ ok: false, error: 'Choose a valid image first.' });
+    if (buf.length > 2.5 * 1024 * 1024) return res.status(413).json({ ok: false, error: 'Image is too large. Maximum size is 2.5 MB.' });
+    const mime = req.get('content-type').split(';')[0].toLowerCase();
+    const valid = mime === 'image/jpeg'
+      ? buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff
+      : mime === 'image/png'
+        ? buf.subarray(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))
+        : mime === 'image/webp' && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP';
+    if (!valid) return res.status(400).json({ ok: false, error: 'The selected file is not a valid JPEG, PNG or WebP image.' });
+    const exists = await pool.query('SELECT id FROM categories WHERE id = $1', [id]);
+    if (!exists.rows.length) return res.status(404).json({ ok: false, error: 'Category not found.' });
+    const slot = `category-${id}`;
+    await pool.query(
+      `INSERT INTO media (slot, mime, data, updated_at) VALUES ($1, $2, $3, now())
+       ON CONFLICT (slot) DO UPDATE SET mime = EXCLUDED.mime, data = EXCLUDED.data, updated_at = now()`,
+      [slot, mime, buf]
+    );
+    await audit(req, 'category_image_upload', `Category #${id} (${Math.round(buf.length / 1024)} KB)`);
+    res.json({ ok: true });
+  })
+);
+
+router.post(
+  '/categories/:id/image/reset',
+  need('categories'),
+  wrap(async (req, res) => {
+    const id = Number.parseInt(req.params.id, 10);
+    if (Number.isInteger(id) && id > 0) {
+      await pool.query('DELETE FROM media WHERE slot = $1', [`category-${id}`]);
+      await audit(req, 'category_image_reset', `Category #${id}`);
+      flash(req, 'success', 'Category photo reset to its built-in image.');
+    }
     res.redirect('/admin/categories');
   })
 );
