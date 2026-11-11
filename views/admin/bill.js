@@ -5,6 +5,8 @@ const { money, fmtDate } = require('../../lib/helpers');
 const { csrfField } = require('../partials/ui');
 const { icon } = require('../../lib/icons');
 const { measureLabel, isWeight, orderNeedsWeighing } = require('../../lib/bill');
+const { payInstructions } = require('../../lib/mpesa');
+const { mpesaBadge, paidTick } = require('../../lib/pay-ui');
 
 const STATE = {
   none: ['Not billed yet', 'pay-unpriced'],
@@ -60,7 +62,7 @@ function billPanel(ctx, { r, items, payments, wa }) {
     bs === 'legacy'
       ? ''
       : paidOrLater
-      ? html`<p class="bill-ok">${icon('circle-check')} Ready for pick-up.</p>`
+      ? html`<p class="bill-ok">${paidTick('sm')} Ready for pick-up.</p>`
       : html`<p class="bill-wait">${icon('clock')} ${
           bs === 'none' ? (hasKg ? 'Weigh the per-kg clothes, then send the customer their bill to confirm.' : 'Confirm the order and the bill is created automatically, ready for payment.')
           : bs === 'needs_price' ? 'A service has no price yet, so a manager or cashier needs to price it.'
@@ -152,10 +154,12 @@ function billPanel(ctx, { r, items, payments, wa }) {
       : '';
 
   // ----- payment -----
+  const how = payInstructions(ctx.settings, { ref: r.ref_code });
   const payForm = canPay
     ? html`<form method="post" action="/admin/requests/${r.id}/payments" class="stack bill-form" data-pay-form>
       ${csrfField(ctx)}
       <h3>Record a payment</h3>
+      ${how ? html`<p class="muted small">${mpesaBadge('sm')} Customers pay to <strong>${how.summary}</strong>.</p>` : ''}
       <div class="grid-2">
         <label class="field"><span>Paid by</span><select name="method"><option value="cash">Cash</option><option value="mpesa">M-Pesa</option></select></label>
         <label class="field"><span>Amount received (${cur})</span><input name="amount" type="text" inputmode="decimal" required value="${Number(balance)}" autocomplete="off"></label>
@@ -167,7 +171,7 @@ function billPanel(ctx, { r, items, payments, wa }) {
 
   const payRows = payments.length
     ? html`<h3>Payments</h3><div class="table-wrap"><table class="table"><thead><tr><th>When</th><th>Method</th><th>Amount</th><th>Recorded by</th><th>Checked</th></tr></thead><tbody>
-        ${payments.map((p) => html`<tr><td data-label="When">${fmtDate(p.created_at)}</td><td data-label="Method">${p.method === 'mpesa' ? html`M-Pesa <span class="muted small">${p.reference}</span>` : 'Cash'}</td><td data-label="Amount">${money(p.amount, cur)}</td><td data-label="By">${p.recorded_by}</td>
+        ${payments.map((p) => html`<tr><td data-label="When">${fmtDate(p.created_at)}</td><td data-label="Method">${p.method === 'mpesa' ? html`${mpesaBadge('sm')} <span class="muted small">${p.reference}</span>` : 'Cash'}</td><td data-label="Amount">${money(p.amount, cur)}</td><td data-label="By">${p.recorded_by}</td>
           <td data-label="Checked">${p.reconciled ? html`<span class="badge pay-paid">Received</span>` : seesPrices
             ? html`<form method="post" action="/admin/payments/${p.id}/reconcile" class="inline">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">Mark received</button></form>`
             : html`<span class="badge pay-partial">Awaiting check</span>`}</td></tr>`)}

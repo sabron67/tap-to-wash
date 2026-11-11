@@ -29,7 +29,7 @@
 
     // keep the browser bar colour in step with the page
     var meta = document.querySelector('meta[name="theme-color"][data-dynamic]');
-    if (meta) meta.setAttribute('content', effective(mode) === 'dark' ? '#1c1713' : '#fbf9f4');
+    if (meta) meta.setAttribute('content', effective(mode) === 'dark' ? '#2E274D' : '#E9EEFD');
   }
 
   function save(mode) {

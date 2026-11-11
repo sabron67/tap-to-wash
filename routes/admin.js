@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { pool } = require('../config/db');
 const { getSettings, saveSettings } = require('../lib/settings');
+const { validateMpesa } = require('../lib/mpesa');
 const { rateLimit, safeEqual, adminNoCache, backPath } = require('../lib/security');
 const { audit } = require('../lib/audit');
 const { passwordProblem } = require('../lib/password');
@@ -411,7 +412,7 @@ router.get(
     const event = eventFor(r.status, r.total_amount, r.amount_paid);
     const team = ctx.can('dispatch') && event ? await recipientsFor(event) : [];
     const wa = {
-      customer: waLink(r.customer_phone, customerMessage(r, biz, trackLink)),
+      customer: waLink(r.customer_phone, customerMessage(r, biz, trackLink, ctx.settings)),
       headline: event ? HEADLINES[event] : '',
       auto: waCanSend(),
       team: team.map((p) => ({ name: p.name, role: p.role, phone: p.phone, link: p.phone ? waLink(p.phone, teamMessage(event, { ...r, items: itemsText }, biz)) : '' })),
@@ -820,6 +821,24 @@ router.post(
     live.broadcastStaff('policy', { pay_before_cleaning: on });
     flash(req, 'success', on ? 'Pay Before Cleaning is on. Payment is needed before pick-up.' : 'Pay Before Cleaning is off. Orders can be picked up now and paid on delivery.');
     res.redirect('/admin/settings#payCard');
+  })
+);
+
+router.post(
+  '/settings/mpesa',
+  need('settings'),
+  wrap(async (req, res) => {
+    const b = req.body;
+    const check = validateMpesa({ type: cleanText(b.mpesa_type, 10), number: cleanText(b.mpesa_number, 12), account: cleanText(b.mpesa_account, 40), name: cleanText(b.mpesa_name, 80) });
+    if (!check.ok) {
+      flash(req, 'error', check.error);
+      return res.redirect('/admin/settings#mpesaCard');
+    }
+    await saveSettings(check.value);
+    const v = check.value;
+    await audit(req, 'mpesa_settings', v.mpesa_type ? `M-Pesa set to ${v.mpesa_type === 'till' ? 'Till' : 'Paybill'} ${v.mpesa_number}${v.mpesa_account ? `, account ${v.mpesa_account}` : ''}` : 'M-Pesa payment details removed');
+    flash(req, 'success', v.mpesa_type ? `Customers will now be asked to pay to ${v.mpesa_type === 'till' ? 'Till' : 'Paybill'} ${v.mpesa_number}.` : 'M-Pesa payment details removed. Customers will only see the cash and M-Pesa wording.');
+    res.redirect('/admin/settings#mpesaCard');
   })
 );
 

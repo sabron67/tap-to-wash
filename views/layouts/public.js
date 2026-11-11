@@ -5,15 +5,15 @@ function head(title, settings, description) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title ? `${title} · ` : ''}${settings.business_name}</title>
 <meta name="description" content="${description || settings.tagline}">
-<meta name="theme-color" content="#1c1713" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#fbf9f4" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#fbf9f4" data-dynamic>
+<meta name="theme-color" content="#2E274D" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#E9EEFD" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#E9EEFD" data-dynamic>
 <script src="/js/boot.js"></script>
 <link rel="icon" href="/site-icon${settings.icon_v ? `?v=${settings.icon_v}` : ''}">
 ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${settings.icon_v}">` : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
 <link rel="stylesheet" href="/css/receipt.css">
 <script src="/js/toast.js" defer></script>`;

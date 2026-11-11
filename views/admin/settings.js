@@ -2,6 +2,7 @@ const { html, raw } = require('../../lib/html');
 const { adminLayout } = require('../layouts/admin');
 const { csrfField } = require('../partials/ui');
 const { icon } = require('../../lib/icons');
+const { mpesaBadge } = require('../../lib/pay-ui');
 
 function settingsPage(ctx) {
   const s = ctx.settings;
@@ -39,6 +40,27 @@ function settingsPage(ctx) {
       <button type="submit" class="switch ${s.pay_before_cleaning !== '0' ? 'on' : ''}" role="switch" aria-checked="${s.pay_before_cleaning !== '0' ? 'true' : 'false'}" aria-label="Pay Before Cleaning">
         <span class="switch-knob"></span><span class="switch-txt">${s.pay_before_cleaning !== '0' ? 'On' : 'Off'}</span>
       </button>
+    </form>
+  </section>
+
+  <section class="glass pad" id="mpesaCard">
+    <form class="stack" method="post" action="/admin/settings/mpesa" data-mpesa-form>
+      ${csrfField(ctx)}
+      <h2 class="h-with-badge">${mpesaBadge()} <span>M-Pesa payments</span></h2>
+      <p class="muted small">Choose where customers send their M-Pesa money. It works with either a Till number (Buy Goods) or a Paybill. Customers see the number and the steps on their bill page and in the WhatsApp message. The rider or cashier still records the M-Pesa code from the customer's SMS.</p>
+      <label class="field"><span>Payment method</span>
+        <select name="mpesa_type" id="mpesaType">
+          <option value="" ${!s.mpesa_type ? 'selected' : ''}>Not set up (cash and a general M-Pesa note only)</option>
+          <option value="till" ${s.mpesa_type === 'till' ? 'selected' : ''}>Till number (Buy Goods and Services)</option>
+          <option value="paybill" ${s.mpesa_type === 'paybill' ? 'selected' : ''}>Paybill</option>
+        </select>
+      </label>
+      <div data-mpesa-fields ${s.mpesa_type ? '' : 'hidden'}>
+        <label class="field"><span id="mpesaNumLabel">${s.mpesa_type === 'paybill' ? 'Paybill number' : 'Till number'}</span><input name="mpesa_number" value="${s.mpesa_number}" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="e.g. 123456"><small class="muted">Digits only, 5 to 7 digits.</small></label>
+        <label class="field" data-mpesa-account ${s.mpesa_type === 'paybill' ? '' : 'hidden'}><span>Paybill account number</span><input name="mpesa_account" value="${s.mpesa_account}" maxlength="30" autocomplete="off" placeholder="Leave empty to use the order reference"><small class="muted">Empty: each customer uses their order reference (for example TTW-ABC123) as the account, which makes every payment easy to match. Or set one fixed account for everyone.</small></label>
+        <label class="field"><span>Name customers will see on M-Pesa (optional)</span><input name="mpesa_name" value="${s.mpesa_name}" maxlength="60" autocomplete="off" placeholder="e.g. TAP TO WASH LTD"><small class="muted">Shown on the bill page so customers can check the name before they confirm.</small></label>
+      </div>
+      <button class="btn btn-primary" type="submit">Save M-Pesa details</button>
     </form>
   </section>
 

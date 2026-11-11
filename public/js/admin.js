@@ -306,3 +306,22 @@
     }
   }
 })();
+
+// Settings > M-Pesa payments: show the number field once a method is chosen, and the account field only for Paybill.
+(function () {
+  'use strict';
+  var sel = document.getElementById('mpesaType');
+  if (!sel) return;
+  var form = sel.closest('form');
+  var fields = form.querySelector('[data-mpesa-fields]');
+  var acct = form.querySelector('[data-mpesa-account]');
+  var label = document.getElementById('mpesaNumLabel');
+  function sync() {
+    var v = sel.value;
+    fields.hidden = !v;
+    acct.hidden = v !== 'paybill';
+    if (label) label.textContent = v === 'paybill' ? 'Paybill number' : 'Till number';
+  }
+  sel.addEventListener('change', sync);
+  sync();
+})();

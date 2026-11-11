@@ -24,7 +24,7 @@
 
   function editing() {
     var a = document.activeElement;
-    return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !!a.closest('main');
+    return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !!a.closest('main, .home-search');
   }
   // State locking: buttons of that order's forms are disabled at once, before the page refreshes.
   function lockForms(id) {

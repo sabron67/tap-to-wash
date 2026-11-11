@@ -4,6 +4,25 @@ const { publicLayout } = require('../layouts/public');
 const { timeline } = require('../partials/ui');
 const { pubNav } = require('../partials/pubnav');
 const { icon } = require('../../lib/icons');
+const { payInstructions } = require('../../lib/mpesa');
+const { mpesaBadge, paidTick } = require('../../lib/pay-ui');
+
+// How to pay by M-Pesa: the Till number or the Paybill (with the order reference as the account) the owner chose in Settings.
+function mpesaBox(ctx, result, balance) {
+  const how = payInstructions(ctx.settings, { ref: result.ref_code });
+  if (!how) return '';
+  return html`<div class="pay-box">
+    <h4>${mpesaBadge()} <span>Pay by M-Pesa</span></h4>
+    <dl class="pay-grid">
+      <div><dt>${how.label}</dt><dd>${how.number}</dd></div>
+      ${how.type === 'paybill' ? html`<div><dt>Account number</dt><dd>${how.account}</dd></div>` : ''}
+      <div><dt>Amount</dt><dd>${money(balance, ctx.settings.currency)}</dd></div>
+    </dl>
+    ${how.name ? html`<p class="muted small">The name shown on M-Pesa will be <strong>${how.name}</strong>.</p>` : ''}
+    <ol class="pay-steps">${how.steps.map((st) => html`<li>${st}</li>`)}</ol>
+    <p class="muted small">After paying, show the M-Pesa confirmation message to the rider or cashier so your payment is recorded.</p>
+  </div>`;
+}
 
 // The bill the customer reviews after their laundry is weighed or counted.
 function billCard(ctx, result) {
@@ -41,7 +60,8 @@ function billCard(ctx, result) {
             ? 'You can pay on delivery.'
             : 'Pay the rider in cash or by M-Pesa. Your rider will take your laundry once payment is received.'}</p>`
       : ''}
-    ${b.status === 'confirmed' && balance <= 0 && Number(b.total) > 0 ? html`<p class="muted small">${icon('circle-check')} Paid in full. Thank you.</p>` : ''}
+    ${b.status === 'confirmed' && balance > 0 ? mpesaBox(ctx, result, balance) : ''}
+    ${b.status === 'confirmed' && balance <= 0 && Number(b.total) > 0 ? html`<p class="paid-line">${paidTick()}<span><strong>Paid in full</strong>Thank you.</span></p>` : ''}
   </section>`;
 }
 

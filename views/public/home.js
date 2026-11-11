@@ -11,7 +11,6 @@ function nav(s, account) {
     <a class="brand" href="/"><span>${s.business_name}</span></a>
     <nav class="nav-links" aria-label="Main">
       <a href="#categories">Services</a>
-      <a href="#how">How it works</a>
       <a href="/track">Track order</a>
       <a href="#contact">Contact</a>
       ${account ? html`<a href="/account">My account</a>` : html`<a href="/account/login">Sign in</a>`}
@@ -177,6 +176,7 @@ function homePage(ctx, categories) {
   const s = ctx.settings;
   const mv = ctx.media || {};
   const img = (slot) => `--img:url(${mediaUrl(slot, mv)})`;
+  const servicesSlot = mv.services ? 'services' : 'hero';
   const firstName = String((ctx.personal && ctx.personal.name) || '').trim().split(/\s+/)[0] || 'Guest';
   const data = categories.map((c) => ({
     id: c.id,
@@ -213,6 +213,10 @@ function homePage(ctx, categories) {
   ${nav(s, ctx.account)}
   ${publicTabbar(ctx, 'home', true)}
 
+  ${ctx.account && ctx.recent && !['delivered', 'cancelled'].includes(ctx.recent.status)
+    ? html`<div id="liveCfg" data-kind="order" data-ref="${ctx.recent.ref_code}" hidden></div><script src="/js/live.js"></script>`
+    : ''}
+
   <header class="home-head">
     <div class="container">
       <div class="home-top">
@@ -231,8 +235,14 @@ function homePage(ctx, categories) {
         ${icon('search')}
         <input id="svcSearch" type="search" placeholder="Search laundry services" autocomplete="off" aria-label="Search laundry services" aria-controls="catGrid">
       </label>
-      <div class="home-banner" style="${raw(img('hero'))}" role="img" aria-label="Washing machines in a laundry room">
-        <div class="home-banner-txt"><b>${s.tagline}</b><span>${icon('truck')} We come to you</span></div>
+      <div class="hero-stage">
+        <div class="home-banner" style="${raw(img('hero'))}" role="img" aria-label="Washing machines in a laundry room">
+          <div class="home-banner-txt"><b>${s.tagline}</b><span>${icon('truck')} We come to you</span></div>
+        </div>
+        <div class="hero-float hf-a" aria-hidden="true"><span class="hf-ico">${icon('truck')}</span><span><b>Picked up</b><small>From your door</small></span></div>
+        <div class="hero-float hf-b" aria-hidden="true"><span class="hf-ico">${icon('circle-check')}</span><span><b>Delivered</b><small>Fresh and folded</small></span></div>
+        <span class="hero-coin hc-a" aria-hidden="true">${icon('sparkles')}</span>
+        <span class="hero-coin hc-b" aria-hidden="true">${icon('droplets')}</span>
       </div>
     </div>
   </header>
@@ -247,7 +257,7 @@ function homePage(ctx, categories) {
     </section>`
       : ''}
 
-    <section class="home-sec svc-band" id="categories" style="${raw(img('hero'))}">
+    <section class="home-sec svc-band" id="categories" style="${raw(img(servicesSlot))}">
       <div class="container">
         <div class="sec-row on-bg"><h2>Our services</h2><span class="sec-hint">Tap to select</span></div>
         ${categories.length
@@ -265,20 +275,6 @@ function homePage(ctx, categories) {
       </div>
     </section>`
       : ''}
-
-    <section class="band has-img alt" id="how" style="${raw(img('how'))}">
-      <div class="container">
-        <div class="section-head on-img rv">
-          <h2>How it works</h2>
-        </div>
-        <div class="steps-grid" data-stagger>
-          <div class="step glass"><span class="step-no">1</span><div class="step-ico">${icon('pointer')}</div><h3>Tap</h3><p>Choose what to wash and tap to wash.</p></div>
-          <div class="step glass"><span class="step-no">2</span><div class="step-ico">${icon('map-pin')}</div><h3>Share location</h3><p>Send where you are with a short description.</p></div>
-          <div class="step glass"><span class="step-no">3</span><div class="step-ico">${icon('truck')}</div><h3>We collect</h3><p>Our rider confirms by phone and picks up.</p></div>
-          <div class="step glass"><span class="step-no">4</span><div class="step-ico">${icon('sparkles')}</div><h3>Fresh delivery</h3><p>Washed, dried and folded, back at your door.</p></div>
-        </div>
-      </div>
-    </section>
 
     <footer class="footer" id="contact">
       <div class="container">

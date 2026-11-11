@@ -259,11 +259,17 @@ router.get(
   wrap(async (req, res) => {
     const ref = cleanText(req.query.ref, 20).toUpperCase();
     const phone = cleanText(req.query.phone, 20);
-    const found = ref && validPhone(phone)
-      ? await pool.query('SELECT r.id, c.phone_key FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1', [ref])
+    // Allowed when the reference code + phone match (tracking link), or when the signed-in customer's account placed the order
+    // (the order page inside the account has no phone number in it, so it used to be refused and never updated).
+    const found = ref
+      ? await pool.query('SELECT r.id, r.account_id, c.phone_key FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1', [ref])
       : { rows: [] };
-    if (!found.rows.length || found.rows[0].phone_key !== phoneKey(phone)) return res.status(403).end();
-    live.open(req, res, { kind: 'order', orderId: found.rows[0].id }); // this connection only ever receives this order's room
+    const row = found.rows[0];
+    const acc = req.session.account;
+    const byPhone = !!row && validPhone(phone) && row.phone_key === phoneKey(phone);
+    const byAccount = !!row && !!acc && row.account_id !== null && Number(row.account_id) === Number(acc.id);
+    if (!byPhone && !byAccount) return res.status(403).end();
+    live.open(req, res, { kind: 'order', orderId: row.id }); // this connection only ever receives this order's room
   })
 );
 
