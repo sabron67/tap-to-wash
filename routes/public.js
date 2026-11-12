@@ -16,6 +16,7 @@ const live = require('../lib/live');
 const stk = require('../lib/stk');
 const { BILL_ROW, billFrom, payState, loadOrderParts } = require('../lib/order-view');
 const { respondToBill } = require('../lib/customer-bill');
+const pickupSchedule = require('../lib/pickup-schedule');
 
 const router = express.Router();
 
@@ -143,6 +144,14 @@ async function siteIcon(req, res) {
 router.get(['/site-icon', '/favicon.ico', '/apple-touch-icon.png'], wrap(siteIcon));
 
 // Customer taps to wash -> this creates the request.
+// Live availability for the customer booking calendar.
+router.get('/api/pickup-slots', wrap(async (req, res) => {
+  const date = cleanText(req.query.date, 10);
+  if (!pickupSchedule.validDate(date)) return res.status(400).json({ ok: false, error: 'Choose a valid pickup date.' });
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true, slots: await pickupSchedule.availability(date) });
+}));
+
 router.post(
   '/api/requests',
   submitLimit,
@@ -168,6 +177,9 @@ router.post(
     const locationDescription = cleanMultiline(b.location_description, 500);
     const notes = cleanMultiline(b.notes, 1000);
     const preferredTime = cleanText(b.preferred_time, 80);
+    const pickupDate = cleanText(b.pickup_date, 10);
+    const pickupSlot = cleanText(b.pickup_slot, 5);
+    if (!pickupSchedule.validDate(pickupDate) || !pickupSchedule.validSlot(pickupSlot)) return fail('Choose an available pickup date and time slot.');
 
     if (name.length < 2) return fail('Please enter your name.');
     if (!validPhone(phone)) return fail('Please enter a valid phone number.');
@@ -226,9 +238,9 @@ router.post(
         await client.query('SAVEPOINT ref_try');
         try {
           const ins = await client.query(
-            `INSERT INTO requests (ref_code, customer_id, location_description, notes, latitude, longitude, location_accuracy, preferred_time, terms_version, terms_accepted_at, account_id, branch_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now(), (SELECT id FROM accounts WHERE id = $10 AND is_active), $11) RETURNING id`,
-            [candidate, cust.rows[0].id, locationDescription, notes, lat, lng, accuracy, preferredTime, Number(settings.terms_version) || 1, req.session.account ? req.session.account.id : null, branchId]
+            `INSERT INTO requests (ref_code, customer_id, location_description, notes, latitude, longitude, location_accuracy, preferred_time, pickup_scheduled_at, terms_version, terms_accepted_at, account_id, branch_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,($12::timestamp AT TIME ZONE 'Africa/Nairobi'),$9, now(), (SELECT id FROM accounts WHERE id = $10 AND is_active), $11) RETURNING id`,
+            [candidate, cust.rows[0].id, locationDescription, notes, lat, lng, accuracy, pickupSchedule.slotLabel(pickupSlot), Number(settings.terms_version) || 1, req.session.account ? req.session.account.id : null, branchId, `${pickupDate} ${pickupSlot}:00`]
           );
           requestId = ins.rows[0].id;
           ref = candidate;
@@ -239,6 +251,7 @@ router.post(
         }
       }
       if (!requestId) throw new Error('Could not generate a unique reference');
+      await pickupSchedule.reserve(client, pickupDate, pickupSlot, requestId);
 
       for (const c of cats.rows) {
         await client.query('INSERT INTO request_items (request_id, category_id, category_name, quantity) VALUES ($1,$2,$3,$4)', [
@@ -409,7 +422,8 @@ router.post(
     if (kind === 'review') {
       await pool.query(`INSERT INTO customer_reviews(request_id,customer_id,rating,comment) VALUES($1,$2,$3,$4) ON CONFLICT(request_id) DO UPDATE SET rating=EXCLUDED.rating,comment=EXCLUDED.comment,created_at=now()`,[found.rows[0].id,found.rows[0].customer_id,rating,comment]);
     } else {
-      await pool.query(`INSERT INTO customer_complaints(request_id,customer_id,subject,details) VALUES($1,$2,$3,$4)`,[found.rows[0].id,found.rows[0].customer_id,'Customer complaint',`Rating: ${rating}/5\n${comment}`]);
+      await pool.query(`INSERT INTO customer_complaints(request_id,customer_id,subject,details) VALUES($1,$2,$3,$4)`,[found.rows[0].id,found.rows[0].customer_id,'Customer complaint',`Rating: ${rating}/5
+${comment}`]);
     }
     res.redirect(`/track?ref=${encodeURIComponent(ref)}&phone=${encodeURIComponent(phone)}&feedback=sent`);
   })

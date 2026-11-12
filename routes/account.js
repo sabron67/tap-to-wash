@@ -15,6 +15,8 @@ const { requestCode, completeReset, problemMessage, TTL_MINUTES } = require('../
 const stk = require('../lib/stk');
 const { BILL_ROW, billFrom, payState, loadOrderParts } = require('../lib/order-view');
 const { respondToBill } = require('../lib/customer-bill');
+const pickupSchedule = require('../lib/pickup-schedule');
+const live = require('../lib/live');
 
 const router = express.Router();
 const MAX_FAILS = 5;
@@ -338,6 +340,50 @@ router.get(
 );
 
 // Confirm the bill (or say something looks wrong) from inside the account. The signed-in account must own the order.
+// Customers can reschedule an upcoming pickup while the request is still active.
+router.post('/requests/:ref/schedule', wrap(async (req, res, next) => {
+  const { rows } = await myOrder(req);
+  if (!rows.length) return next();
+  const r = rows[0];
+  if (!['new', 'confirmed'].includes(r.status)) {
+    flash(req, 'error', 'This pickup can no longer be rescheduled online. Please contact the team.');
+    return res.redirect(`/account/requests/${r.ref_code}`);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await pickupSchedule.reserve(client, cleanText(req.body.pickup_date, 10), cleanText(req.body.pickup_slot, 5), r.id);
+    await client.query('INSERT INTO request_events (request_id,status,note,created_by) VALUES ($1,$2,$3,$4)',
+      [r.id, r.status, `Customer rescheduled pickup to ${pickupSchedule.slotLabel(cleanText(req.body.pickup_slot, 5))}.`, 'customer']);
+    await client.query('COMMIT');
+    flash(req, 'success', 'Your pickup has been rescheduled.');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    flash(req, 'error', err.message || 'Could not reschedule this pickup.');
+  } finally { client.release(); }
+  res.redirect(`/account/requests/${r.ref_code}`);
+}));
+
+router.post('/requests/:ref/cancel', wrap(async (req, res, next) => {
+  const { rows } = await myOrder(req);
+  if (!rows.length) return next();
+  const r = rows[0];
+  if (!['new', 'confirmed'].includes(r.status)) {
+    flash(req, 'error', 'This order can no longer be cancelled online. Please contact the team.');
+    return res.redirect(`/account/requests/${r.ref_code}`);
+  }
+  const cancelled = await pool.query("UPDATE requests SET status='cancelled', updated_at=now(), pickup_scheduled_at=NULL WHERE id=$1 AND account_id=$2 AND status IN ('new','confirmed') RETURNING id",
+    [r.id, req.acc.id]);
+  if (!cancelled.rowCount) {
+    flash(req, 'error', 'This order can no longer be cancelled online. Please contact the team.');
+    return res.redirect(`/account/requests/${r.ref_code}`);
+  }
+  await pool.query("INSERT INTO request_events (request_id,status,note,created_by) VALUES ($1,'cancelled','Customer cancelled the pickup.','customer')", [r.id]);
+  live.publish(r.id, { force: true });
+  flash(req, 'success', 'Your pickup has been cancelled.');
+  res.redirect(`/account/requests/${r.ref_code}`);
+}));
+
 router.post(
   '/requests/:ref/bill',
   wrap(async (req, res, next) => {

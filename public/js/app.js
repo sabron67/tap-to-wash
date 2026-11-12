@@ -238,7 +238,7 @@
     state.items = {};
     state.lat = state.lng = state.acc = null;
     state.step = 1;
-    ['#locDesc', '#fName', '#fPhone', '#fTime', '#fNotes'].forEach((s) => ($(s).value = ''));
+    ['#locDesc', '#fName', '#fPhone', '#fNotes'].forEach((s) => ($(s).value = ''));
     if ($('#fBranch')) $('#fBranch').value = '';
     $('#fTerms').checked = false;
     clearLocation();
@@ -326,7 +326,8 @@
     });
     const when = new Date().toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
     const loc = ($('#locDesc').value || '').trim();
-    const pref = ($('#fTime').value || '').trim();
+    const dateValue = ($('#pickupDate') && $('#pickupDate').value) || '';
+    const pref = ($('#pickupSlot') && $('#pickupSlot').selectedOptions[0] ? $('#pickupSlot').selectedOptions[0].textContent : '').trim();
     const info = (ico, label, val) => '<div>' + ico + '<span><small>' + label + '</small><b>' + esc(val) + '</b></span></div>';
     const steps = ['New', 'Confirmed', 'Picked up', 'Washing', 'Ready', 'Delivered'];
     box.innerHTML =
@@ -337,7 +338,7 @@
       '<h3 class="rc-h">Order items <small>' + rows.length + (rows.length === 1 ? ' service' : ' services') + '</small></h3><ul class="rc-rows">' + rows.join('') + '</ul>' +
       '<h3 class="rc-h">Your details</h3><div class="rc-info">' +
       info(ui.user, 'Name', name) + info(ui.phone, 'Phone', phone) + info(ui.pin, 'Pick-up location' + (state.lat !== null ? ' (shared on map)' : ''), loc || 'Shared location') +
-      (pref ? info(ui.clock, 'Preferred pick-up time', pref) : '') + '</div>' +
+      (pref ? info(ui.clock, 'Pickup appointment', dateValue + ' · ' + pref) : '') + '</div>' +
       '<section class="rc-total" aria-label="Estimate">' +
       (hasPrice
         ? '<div class="rc-big" style="border-top:0;margin-top:0;padding-top:0"><span>Estimated total</span><strong>' + money(total) + '</strong></div><p class="rc-note">Final price is confirmed after weighing or inspection.</p>'
@@ -415,6 +416,7 @@
     const phone = $('#fPhone').value.trim();
     if (name.length < 2) return showError(3, 'Please enter your name.');
     if (phone.replace(/\D/g, '').length < 9) return showError(3, 'Please enter a valid phone number.');
+    if (!$('#pickupDate').value || !$('#pickupSlot').value) return showError(3, 'Choose an available pickup date and time slot.');
     if (!$('#fTerms').checked) return showError(3, 'Please accept the Terms of Service to continue.');
     showError(3, '');
 
@@ -430,7 +432,8 @@
           phone,
           location_description: $('#locDesc').value,
           notes: $('#fNotes').value,
-          preferred_time: $('#fTime').value,
+          pickup_date: $('#pickupDate').value,
+          pickup_slot: $('#pickupSlot').value,
           branch_id: $('#fBranch') ? $('#fBranch').value : '',
           latitude: state.lat,
           longitude: state.lng,
@@ -477,7 +480,7 @@
         if (byId.has(it.category_id)) state.items[it.category_id] = Math.min(999, Math.max(1, it.quantity || 1));
       });
       $('#locDesc').value = me.again.text || '';
-      $('#fTime').value = me.again.time || '';
+      
     }
   }
   if (me) {

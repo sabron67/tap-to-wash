@@ -379,3 +379,10 @@ CREATE TABLE IF NOT EXISTS mpesa_stk (
   completed_at        TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS mpesa_stk_request_idx ON mpesa_stk(request_id, created_at DESC);
+
+
+-- ---------- customer pickup booking calendar ----------
+-- pickup_scheduled_at is the canonical booked slot (stored as timestamptz).
+CREATE INDEX IF NOT EXISTS requests_pickup_slot_idx
+  ON requests(pickup_scheduled_at)
+  WHERE pickup_scheduled_at IS NOT NULL AND status NOT IN ('cancelled','delivered');

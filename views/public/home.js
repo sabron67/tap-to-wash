@@ -135,7 +135,11 @@ function wizard(signedIn, branches = []) {
           <label class="field"><span>Phone number <em>*</em></span><input id="fPhone" type="tel" maxlength="20" autocomplete="tel" inputmode="tel" placeholder="0712 345 678"></label>
         </div>
         ${branches.length ? html`<label class="field"><span>Nearest branch</span><select id="fBranch"><option value="">Any branch</option>${branches.map((b) => html`<option value="${b.id}">${b.name}${b.address ? ' - ' + b.address : ''}</option>`)}</select></label>` : ''}
-        <label class="field"><span>Preferred pick-up time</span><input id="fTime" type="text" maxlength="80" placeholder="e.g. Tomorrow morning, after 4 PM"></label>
+        <div class="grid-2 booking-fields">
+          <label class="field"><span>Pickup date <em>*</em></span><input id="pickupDate" type="date" required></label>
+          <label class="field"><span>Available time slot <em>*</em></span><select id="pickupSlot" required disabled><option value="">Choose a date first</option></select></label>
+        </div>
+        <p class="muted small" id="pickupAvailability" role="status">Choose a date to see available pickup times. Slots depend on rider availability.</p>
         <label class="field"><span>Anything we should know?</span><textarea id="fNotes" rows="2" maxlength="1000" placeholder="Stains, delicate fabrics, special care…"></textarea></label>
         ${signedIn ? '' : html`<p class="muted small guest-hint">An account is needed to book. <a class="link" href="/account/login?next=/%3Fstart%3D1">Sign in</a> or <a class="link" href="/account/signup">create an account</a>.</p>`}
         <input type="text" id="fWebsite" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
@@ -300,7 +304,7 @@ function homePage(ctx, categories) {
   ${wizard(!!ctx.account, ctx.branches || [])}
   <script type="application/json" id="app-data">${raw(json)}</script>`;
 
-  return publicLayout(ctx, { body, scripts: raw('<script src="/js/app.js"></script><script src="/js/home.js"></script><script src="/js/scroll.js"></script>'), bodyClass: 'public home' });
+  return publicLayout(ctx, { body, scripts: raw('<script src="/js/booking.js" defer></script><script src="/js/app.js"></script><script src="/js/home.js"></script><script src="/js/scroll.js"></script>'), bodyClass: 'public home' });
 }
 
 module.exports = { homePage };

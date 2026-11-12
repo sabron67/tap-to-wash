@@ -128,6 +128,24 @@ function trackPage(ctx, { ref = '', error = '', result = null, info = '' }) {
           <h3>Items</h3>
           <ul class="plain-list">${result.items.map((i) => html`<li>${i.category_name} <strong>× ${i.quantity}</strong></li>`)}</ul>
           ${result.pickup_scheduled_at || result.delivery_scheduled_at || result.dispatch_stage ? html`<h3>Collection and delivery</h3><p class="muted small">${result.dispatch_stage ? `Dispatch: ${result.dispatch_stage} · ` : ''}${result.pickup_scheduled_at ? `Pickup scheduled: ${fmtDate(result.pickup_scheduled_at)}` : ''}${result.delivery_scheduled_at ? ` · Delivery scheduled: ${fmtDate(result.delivery_scheduled_at)}` : ''}</p>` : ''}
+          ${ctx.account && ['new','confirmed'].includes(result.status) ? html`<section class="glass pad booking-manage">
+            <h3>Manage pickup appointment</h3>
+            <p class="muted small">Choose a new date and available time to reschedule. Slots depend on rider availability.</p>
+            <form method="post" action="/account/requests/${result.ref_code}/schedule" class="stack" id="rescheduleForm">
+              <input type="hidden" name="_csrf" value="${ctx.csrf || ''}">
+              <div class="grid-2">
+                <label class="field"><span>New pickup date</span><input id="pickupDate" name="pickup_date" type="date" required></label>
+                <label class="field"><span>Available time slot</span><select id="pickupSlot" name="pickup_slot" required disabled><option value="">Choose a date first</option></select></label>
+              </div>
+              <p class="muted small" id="pickupAvailability" role="status">Checking rider availability…</p>
+              <button class="btn btn-primary" type="submit">Reschedule pickup</button>
+            </form>
+            <form method="post" action="/account/requests/${result.ref_code}/cancel" data-confirm="Cancel this pickup booking?">
+              <input type="hidden" name="_csrf" value="${ctx.csrf || ''}">
+              <button class="btn btn-ghost" type="submit">Cancel pickup</button>
+            </form>
+          </section><script src="/js/booking.js" defer></script>` : ''}
+
           <h3>Updates</h3>
           <ul class="events">${result.events.map((e) => html`<li><span class="ev-dot"></span><div><strong>${STATUS_MAP[e.status] ? STATUS_MAP[e.status].label : e.status}</strong><span class="muted small"> · ${fmtDate(e.created_at)}</span>${e.note ? html`<p class="muted small">${e.note}</p>` : ''}</div></li>`)}</ul>
           <form class="glass pad feedback-form" method="post" action="/track/feedback"><h3>Feedback and support</h3><input type="hidden" name="ref" value="${result.ref_code}"><label class="field"><span>Phone number used for this order</span><input name="phone" type="tel" value="${ctx.accountPhone || ''}" autocomplete="tel" required></label><label class="field"><span>Feedback type</span><select name="kind">${result.status === 'delivered' ? html`<option value="review">Rate my laundry service</option>` : ''}<option value="complaint">Report a problem</option></select></label><label class="field"><span>Rating (1–5)</span><select name="rating"><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Poor</option><option value="1">1 - Very poor</option></select></label><label class="field"><span>Comment / issue details</span><textarea name="comment" rows="3" maxlength="1500"></textarea></label><button class="btn btn-primary" type="submit">Send feedback</button></form>

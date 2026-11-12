@@ -34,6 +34,8 @@ module.exports = function mount(router, { buildCtx, flash }) {
   router.get(
     '/notifications',
     wrap(async (req, res) => {
+      // Opening the bell/alerts page acknowledges all notifications for this signed-in staff member.
+      await pool.query('UPDATE notifications SET read_at = COALESCE(read_at, now()) WHERE admin_id = $1 AND read_at IS NULL', [req.session.admin.id]);
       const [ctx, rows] = await Promise.all([
         buildCtx(req),
         pool.query('SELECT id, title, body, created_at, read_at FROM notifications WHERE admin_id = $1 ORDER BY id DESC LIMIT 60', [req.session.admin.id]),
