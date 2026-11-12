@@ -333,6 +333,7 @@
       '<div class="rc-title"><h2 style="margin:0;font-size:1.28rem">Order receipt</h2><span class="rc-badge">Received</span></div>' +
       '<p class="rc-sub"><span>' + ui.clock + ' ' + esc(when) + '</span><span>' + count + (count === 1 ? ' item' : ' items') + '</span></p>' +
       '<div class="rc-chips" aria-label="Order progress">' + steps.map((t, i) => '<span class="rc-chip' + (i === 0 ? ' now' : '') + '">' + esc(t) + '</span>').join('') + '</div>' +
+      '<div class="rc-live" id="rcLive" role="status" aria-live="polite"><p class="rc-live-msg" id="rcLiveMsg">Sending your request…</p><a class="btn btn-primary rc-live-pay" id="rcLivePay" href="#" hidden>Pay now</a></div>' +
       '<h3 class="rc-h">Order items <small>' + rows.length + (rows.length === 1 ? ' service' : ' services') + '</small></h3><ul class="rc-rows">' + rows.join('') + '</ul>' +
       '<h3 class="rc-h">Your details</h3><div class="rc-info">' +
       info(ui.user, 'Name', name) + info(ui.phone, 'Phone', phone) + info(ui.pin, 'Pick-up location' + (state.lat !== null ? ' (shared on map)' : ''), loc || 'Shared location') +
@@ -342,6 +343,69 @@
         ? '<div class="rc-big" style="border-top:0;margin-top:0;padding-top:0"><span>Estimated total</span><strong>' + money(total) + '</strong></div><p class="rc-note">Final price is confirmed after weighing or inspection.</p>'
         : '<div class="rc-big" style="border-top:0;margin-top:0;padding-top:0"><span>Price</span><strong>To be confirmed</strong></div><p class="rc-note">We will confirm the price after weighing or inspection.</p>') +
       '<div class="rc-tags"><span class="rc-tag solid">Received</span><span class="rc-tag">Awaiting confirmation</span></div></section>';
+  }
+
+  /* ---------- live order status on the receipt (auto-confirm, payment, rider) ---------- */
+  const STEP_AT = { new: 0, confirmed: 1, rider_arrived: 1, picked_up: 2, washing: 3, ready: 4, delivered: 5 };
+  let liveSource = null;
+
+  function applyOrderState(d, ref) {
+    const box = $('#rcBody');
+    if (!box || !d) return;
+    const st = d.order_status || d.status || 'new';
+    const pay = d.payment_status || 'awaiting_bill';
+    const idx = STEP_AT[st] === undefined ? 0 : STEP_AT[st];
+    const chips = $$('.rc-chip', box);
+    chips.forEach((c, i) => { c.classList.toggle('done', i < idx); c.classList.toggle('now', i === idx); });
+    const badge = $('.rc-badge', box);
+    const tags = $$('.rc-tag', box);
+    const labels = { new: 'Received', confirmed: 'Confirmed', rider_arrived: 'Rider arrived', picked_up: 'Picked up', washing: 'Washing', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
+    const label = labels[st] || 'Received';
+    if (badge) badge.textContent = label;
+    if (tags[0]) tags[0].textContent = label;
+    if (tags[1]) tags[1].textContent = pay === 'paid' ? 'Paid' : pay === 'pending_payment' || pay === 'part_paid' ? 'Payment due' : st === 'new' ? 'Awaiting confirmation' : 'Price after weighing';
+
+    const total = d.total_price !== null && d.total_price !== undefined ? Number(d.total_price) : null;
+    const due = total !== null ? Math.max(0, total - Number(d.amount_paid || 0)) : null;
+    const msg = $('#rcLiveMsg');
+    const payBtn = $('#rcLivePay');
+    let text = 'Waiting for confirmation…';
+    let showPay = false;
+    let payLabel = 'Pay now';
+    if (st === 'cancelled') text = 'This request was cancelled.';
+    else if (st === 'new') text = 'Request received. We will confirm it shortly.';
+    else if (st === 'confirmed' || st === 'rider_arrived') {
+      if (pay === 'paid') text = 'Payment received. Thank you! Our rider has been told and will collect your laundry.';
+      else if (pay === 'part_paid' && due !== null) { text = 'Part payment received. Balance: ' + money(due) + '.'; showPay = true; }
+      else if (pay === 'pending_payment' && total !== null) { text = (st === 'rider_arrived' ? 'Your rider has arrived. ' : 'Confirmed! ') + 'Please pay ' + money(due !== null ? due : total) + ' so we can collect your laundry.'; showPay = true; }
+      else if (d.bill_status === 'awaiting_confirm' && total !== null) { text = 'Your clothes are weighed. Please check and confirm your bill of ' + money(total) + '.'; showPay = true; payLabel = 'Review my bill'; }
+      else if (d.bill_status === 'needs_price') text = 'Confirmed! A rider is assigned. We are finalising your price and will update this page.';
+      else text = (st === 'rider_arrived' ? 'Your rider has arrived. ' : 'Confirmed! A rider is on the way. ') + 'Your clothes are weighed at your door, then you confirm the bill and pay here.';
+    }
+    else if (st === 'picked_up') text = 'Picked up. Your laundry is on its way to be washed.';
+    else if (st === 'washing') text = 'Your laundry is being washed.';
+    else if (st === 'ready') text = 'Your laundry is clean and ready for delivery.';
+    else if (st === 'delivered') text = due ? 'Delivered. Balance due: ' + money(due) + '.' : 'Delivered. Thank you for choosing us!';
+    if (msg) msg.textContent = text;
+    if (payBtn) {
+      payBtn.hidden = !showPay;
+      payBtn.textContent = payLabel;
+      if (ref) payBtn.href = (me ? '/account/requests/' + encodeURIComponent(ref) : '/track?ref=' + encodeURIComponent(ref)) + '#bill';
+    }
+    const live = $('#rcLive');
+    if (live) live.classList.toggle('is-done', st === 'confirmed' && pay === 'paid');
+  }
+
+  // Keeps the receipt up to date (confirmed, paid, rider arrived ...) without a refresh.
+  function watchOrder(ref) {
+    if (!window.EventSource) return;
+    if (liveSource) liveSource.close();
+    liveSource = new EventSource('/live/order?ref=' + encodeURIComponent(ref), { withCredentials: true });
+    liveSource.addEventListener('order', (e) => {
+      let d; try { d = JSON.parse(e.data); } catch (x) { return; }
+      applyOrderState(d, ref);
+      if (d.order_status === 'delivered' || d.order_status === 'cancelled') { liveSource.close(); liveSource = null; }
+    });
   }
 
   /* ---------- submit ---------- */
@@ -382,6 +446,8 @@
       if (!res.ok || !out.ok) throw new Error(out.error || 'Something went wrong. Please try again.');
       $('#refBox').textContent = out.ref;
       renderReceipt(name, phone);
+      applyOrderState(out.confirmed ? out : { order_status: 'new' }, out.ref); // auto-confirm answers at once; the stream below keeps it live
+      watchOrder(out.ref);
       $('#trackLink').href = me ? '/account/requests/' + encodeURIComponent(out.ref) : '/track?ref=' + encodeURIComponent(out.ref);
       const wa = $('#waLink');
       if (wa && data.whatsapp) {

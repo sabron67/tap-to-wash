@@ -121,3 +121,10 @@ body.rc-solo {
   .rc-solo .rc-tag.solid { background: #000; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .rc-solo .rc-thanks { margin: 12px 8px 0; }
 }
+
+/* live status on the "Order receipt" after booking (auto-confirm, payment, rider) */
+.rc-live { margin: 14px 0 4px; padding: 12px 14px; border: 1.5px solid var(--line-2); border-radius: 14px; background: var(--surface); display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.rc-live-msg { margin: 0; font-size: .92rem; font-weight: 600; line-height: 1.45; }
+.rc-live.is-done { border-color: var(--accent); }
+.rc-live-pay[hidden] { display: none; }
+@media print { .rc-live-pay { display: none; } .rc-live { border-color: #000; background: #fff; } }

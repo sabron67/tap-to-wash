@@ -317,6 +317,7 @@ module.exports = function mountBilling(router, { flash, need }) {
       if (outcome.denied) return denied(req, res, id, 'Record payment');
       if (outcome.error) return fail(outcome.error);
       await audit(req, 'payment_recorded', `Request #${id}: ${method} ${amount}${reference ? ` ${reference}` : ''}`);
+      if (outcome.left <= 0) notifyEvent('paid', id, req.session.admin.id, (await getSettings()).business_name); // tells the assigned rider (never the person who recorded it)
       if (outcome.advanced) {
         await audit(req, 'request_status', `Request #${id} → picked_up (automatic, fully paid)`);
         notifyEvent(eventFor('picked_up', 0, 0), id, req.session.admin.id, (await getSettings()).business_name);

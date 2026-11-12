@@ -29,6 +29,20 @@ function settingsPage(ctx) {
       <button class="btn btn-primary" type="submit">Save settings</button>
     </form>
 
+  <section class="glass pad" id="confirmCard">
+    <form class="switch-row" method="post" action="/admin/settings/auto-confirm">
+      ${csrfField(ctx)}
+      <div class="switch-text">
+        <h2>Auto-confirm new requests</h2>
+        <p class="muted small">On: the moment a customer sends a request it is confirmed. The customer sees “Confirmed” on their screen straight away, orders with no per-kg service get their bill so they can pay at once, and a rider is assigned and alerted. Per-kg orders are weighed by the rider at the door first. When the bill is fully paid the assigned rider is alerted again. Off: the owner or manager confirms each request by hand.</p>
+      </div>
+      <input type="hidden" name="enabled" value="${s.auto_confirm !== '0' ? '0' : '1'}">
+      <button type="submit" class="switch ${s.auto_confirm !== '0' ? 'on' : ''}" role="switch" aria-checked="${s.auto_confirm !== '0' ? 'true' : 'false'}" aria-label="Auto-confirm new requests">
+        <span class="switch-knob"></span><span class="switch-txt">${s.auto_confirm !== '0' ? 'On' : 'Off'}</span>
+      </button>
+    </form>
+  </section>
+
   <section class="glass pad" id="payCard">
     <form class="switch-row" method="post" action="/admin/settings/pay-before-cleaning">
       ${csrfField(ctx)}

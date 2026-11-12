@@ -9,6 +9,7 @@ const { trackPage } = require('../views/public/track');
 const { termsPage } = require('../views/public/terms');
 const { privacyPage } = require('../views/public/privacy');
 const { notifyEvent } = require('../lib/notify');
+const { autoConfirm } = require('../lib/auto-confirm');
 const { toIntl, validWaNumber } = require('../lib/whatsapp');
 const { SLOTS, mediaVersions, categoryImageUrl } = require('../lib/media');
 const live = require('../lib/live');
@@ -252,7 +253,10 @@ router.post(
       await client.query('COMMIT');
       notifyEvent('new', requestId, null, settings.business_name); // alerts staff; never throws, not awaited
       live.publish(requestId, { force: true });
-      res.json({ ok: true, ref });
+      // Auto-confirm (Admin -> Settings): confirms at once, bills per-item orders, assigns and alerts a rider.
+      // Never throws; when it is off or fails the request simply stays New for staff to confirm.
+      const auto = await autoConfirm(requestId, settings.business_name);
+      res.json({ ok: true, ref, ...(auto.confirmed ? { confirmed: true, order_status: auto.status, payment_status: auto.payment_status, bill_status: auto.bill_status, total_price: auto.total } : { confirmed: false }) });
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});
       throw err;

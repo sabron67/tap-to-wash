@@ -859,6 +859,18 @@ router.post(
 );
 
 router.post(
+  '/settings/auto-confirm',
+  need('settings'),
+  wrap(async (req, res) => {
+    const on = req.body.enabled === '1';
+    await saveSettings({ auto_confirm: on ? '1' : '0' });
+    await audit(req, 'auto_confirm_toggle', on ? 'Auto-confirm new requests switched on' : 'Auto-confirm new requests switched off (staff confirm by hand)');
+    flash(req, 'success', on ? 'Auto-confirm is on. New requests are confirmed straight away and the rider is alerted.' : 'Auto-confirm is off. Staff confirm new requests by hand.');
+    res.redirect('/admin/settings#confirmCard');
+  })
+);
+
+router.post(
   '/settings/pay-before-cleaning',
   need('settings'),
   wrap(async (req, res) => {

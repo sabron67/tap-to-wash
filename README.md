@@ -213,3 +213,15 @@ After updating run `npm install` (adds `web-push`) and `npm run db:init`.
 If any of the variables are missing, STK push stays off and customers see the manual Till / Paybill steps exactly as before.
 
 How money is recorded: only Safaricom's callback can credit a payment, and it carries the M-Pesa receipt number, which is stored as the payment reference (the same unique-code rule as hand-entered codes). Each prompt is settled once, so a repeated callback or a double tap never counts twice, and a customer who taps again while a prompt is waiting gets the same prompt instead of a second charge. A payment is marked as already received/reconciled. Paying the full balance on a confirmed bill moves the order to Picked up automatically when Pay Before Cleaning is on, and staff and the customer see it live. If the callback is slow, the page asks Safaricom for the result, but only to show a cancel or failure early; it never credits money from that check. If a customer is charged but no callback ever arrives (for example a wrong `APP_URL`), the rider or cashier can still record the M-Pesa code by hand. M-Pesa cannot charge cents, so a balance with cents is rounded up to the next shilling for the prompt.
+
+## Auto-confirm, live "Confirmed" and the rider payment alert
+
+**Admin → Settings → Auto-confirm new requests** (owner; on by default). When it is on:
+
+1. The customer sends a request. The owner and manager still get the usual "New request" alert.
+2. The request is **confirmed at once**. The customer's receipt flips from *Received* to **Confirmed** without a refresh (the booking response carries the state, and the same screen then listens on the live channel for everything after that).
+3. **Per-item orders** are billed immediately, so the receipt shows the amount and a **Pay now** button (it opens the order page with the bill and the M-Pesa pay box). **Per-kg orders** keep the existing rule: the rider weighs at the door, the customer confirms the bill, then pays.
+4. A **rider is assigned** (fewest open jobs) and receives the "confirmed" alert (in the admin, phone push, WhatsApp, as set in *My account*). If no rider is active, the owner and manager get a "no rider available" alert instead.
+5. When the bill is **fully paid** (M-Pesa prompt or a payment recorded by staff) the **assigned rider is alerted again** ("Payment received - take the laundry"), the customer's receipt shows *Paid*, and with Pay Before Cleaning on the order moves to Picked up as before. Riders never see the amount.
+
+Switch it off and staff confirm each request by hand, exactly as before. If anything in auto-confirm fails, the booking is still saved as New for staff to confirm. New code: `lib/auto-confirm.js`; new alert events `paid` and `no_rider` in `lib/notify.js`. No database change; run nothing extra.
