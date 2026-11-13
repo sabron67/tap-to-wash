@@ -1,9 +1,11 @@
-// Promotion popup ad. It appears every time a page loads while a promotion is live.
-// Closing it (X, Esc or tapping outside) only hides it on the current page.
+// Promotion popup ad. Closing it (X, Esc or tapping outside) hides it for the rest of this visit:
+// it comes back only when the customer opens the website again (new tab/window session).
 (function () {
   'use strict';
   if (/^\/(admin|staff)/.test(location.pathname)) return;
 
+  function seen(id) { try { return sessionStorage.getItem('promo-closed-' + id) === '1'; } catch (e) { return false; } }
+  function mark(id) { try { sessionStorage.setItem('promo-closed-' + id, '1'); } catch (e) {} }
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; }
 
   function show(p) {
@@ -30,6 +32,7 @@
 
     var last = document.activeElement;
     function close() {
+      mark(p.id);
       document.removeEventListener('keydown', onKey);
       pop.classList.remove('in');
       setTimeout(function () { pop.remove(); if (last && last.focus) try { last.focus(); } catch (e) {} }, 250);
@@ -49,6 +52,6 @@
 
   fetch('/api/promo', { credentials: 'same-origin', cache: 'no-store' })
     .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (d) { if (d && d.promo) show(d.promo); })
+    .then(function (d) { if (d && d.promo && !seen(d.promo.id)) show(d.promo); })
     .catch(function () {});
 })();
