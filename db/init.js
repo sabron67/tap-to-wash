@@ -49,11 +49,18 @@ async function main() {
   if (admins.rows[0].n === 0) {
     const name = process.env.ADMIN_NAME || 'Administrator';
     const email = (process.env.ADMIN_EMAIL || 'admin@taptowash.local').trim().toLowerCase();
-    const password = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
+    // There is no built-in default password. If ADMIN_PASSWORD is missing a random one is made and shown ONCE below.
+    let password = process.env.ADMIN_PASSWORD || '';
+    let generated = false;
+    if (!password) {
+      password = require('crypto').randomBytes(12).toString('base64url') + 'a1!';
+      generated = true;
+    }
     const hash = await bcrypt.hash(password, 12);
-    const weak = passwordProblem(password, { email, name }) !== '';
+    const weak = generated || passwordProblem(password, { email, name }) !== '';
     await pool.query('INSERT INTO admins (name, email, password_hash, must_change_password) VALUES ($1, $2, $3, $4)', [name, email, hash, weak]);
     console.log(`[ok] Admin created: ${email}${weak ? '  (you will be asked to choose a new password at first login)' : ''}`);
+    if (generated) console.log(`[!!] ADMIN_PASSWORD was not set. Temporary password (shown once, change it at first login): ${password}`);
   } else {
     console.log('[--] Admin already exists - skipped');
     // An admin still using the well-known default password must change it.

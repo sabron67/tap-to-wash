@@ -1,7 +1,7 @@
 const { pool } = require('../config/db');
 const { wrap, cleanText, cleanMultiline, backwardBlocker } = require('../lib/helpers');
 const { audit } = require('../lib/audit');
-const { visibleStatuses } = require('../lib/roles');
+const { visibleStatuses, riderMayView } = require('../lib/roles');
 const { operationsPage } = require('../views/admin/operations');
 const { notifyEvent } = require('../lib/notify');
 const { getSettings } = require('../lib/settings');
@@ -93,7 +93,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     ]);
     if (!request.rows.length) return res.sendStatus(404);
     const vis = visibleStatuses(req.session.admin.role); // null = every status
-    if (vis && !vis.includes(request.rows[0].status)) return res.sendStatus(404);
+    if ((vis && !vis.includes(request.rows[0].status)) || !riderMayView(req.session.admin, request.rows[0])) return res.sendStatus(404);
     res.view(receiptPage(ctx, { request: request.rows[0], items: items.rows, backHref: `/admin/requests/${id}`, backLabel: 'Back' }));
   }));
 

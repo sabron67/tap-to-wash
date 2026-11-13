@@ -10,7 +10,7 @@ const { passwordProblem } = require('../lib/password');
 const { wrap, STATUS_MAP, cleanText, cleanMultiline, backwardBlocker } = require('../lib/helpers');
 const { categoryIconName } = require('../lib/icons');
 const { mediaVersions } = require('../lib/media');
-const { can, roleOf, visibleStatuses, settableStatuses } = require('../lib/roles');
+const { can, roleOf, visibleStatuses, settableStatuses, riderSql, riderMayView } = require('../lib/roles');
 const { pickupBlocker, GATED_TARGETS, autoBill, advanceIfPaid } = require('../lib/bill');
 const live = require('../lib/live');
 const { autoAssignRider } = require('../lib/dispatch');
@@ -158,7 +158,10 @@ function mountLogin(r, portal, paths) {
           ]);
           await audit(req, lock ? 'login_locked' : 'login_failed', lock ? `Locked for ${LOCK_MINUTES} minutes` : `Attempt ${fails} of ${MAX_FAILS}`, { id: a.id, email: a.email });
         } else {
-          await audit(req, 'login_failed', `Unknown email: ${email}`.slice(0, 120), { email });
+          // Never store what was typed: people often type their password into the email box. Keep a short fingerprint instead.
+          const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 120;
+          const fp = require('crypto').createHash('sha256').update(String(email)).digest('hex').slice(0, 8);
+          await audit(req, 'login_failed', `Unknown email (fingerprint ${fp})`, { email: looksLikeEmail ? email : '' });
         }
         return fail(401, 'Incorrect email or password.');
       }
@@ -345,7 +348,7 @@ router.get(
     const vis = visibleStatuses(req.session.admin.role); // null = every status
     const where = `($1 = '' OR r.status = $1)
       AND ($2 = '' OR r.ref_code ILIKE $3 OR c.name ILIKE $3 OR c.phone ILIKE $3 OR r.location_description ILIKE $3)
-      AND ($4::text[] IS NULL OR r.status = ANY($4::text[]))`;
+      AND ($4::text[] IS NULL OR r.status = ANY($4::text[]))${riderSql(req.session.admin)}`;
 
     const [ctx, count, rows, tabs] = await Promise.all([
       buildCtx(req),
@@ -359,7 +362,7 @@ router.get(
           ORDER BY r.created_at DESC LIMIT ${PAGE_SIZE} OFFSET $5`,
         [status, q, like, vis, (page - 1) * PAGE_SIZE]
       ),
-      pool.query('SELECT status, COUNT(*)::int AS n FROM requests WHERE ($1::text[] IS NULL OR status = ANY($1::text[])) GROUP BY status', [vis]),
+      pool.query(`SELECT status, COUNT(*)::int AS n FROM requests WHERE ($1::text[] IS NULL OR status = ANY($1::text[]))${riderSql(req.session.admin, 'rider_admin_id')} GROUP BY status`, [vis]),
     ]);
 
     const tabCounts = { all: 0 };
@@ -399,7 +402,7 @@ router.get(
     const vis = visibleStatuses(req.session.admin.role);
     // Rider / attendant: a job that has moved on (old notification, bookmark, or one just finished) is not an error.
     // Same message whether it moved on or never existed, so ids cannot be probed.
-    if (vis && (!reqRes.rows.length || !vis.includes(reqRes.rows[0].status))) {
+    if ((vis && (!reqRes.rows.length || !vis.includes(reqRes.rows[0].status))) || (reqRes.rows.length && !riderMayView(req.session.admin, reqRes.rows[0]))) {
       flash(req, 'warn', 'That job has moved on to another stage, so it is no longer in your list.');
       return res.redirect('/admin/requests');
     }
@@ -459,7 +462,13 @@ router.post(
       flash(req, 'error', 'Your role cannot set that status.');
       return res.redirect(`/admin/requests/${id}`);
     }
-    let before = await pool.query('SELECT status, bill_status, total_amount, amount_paid, pay_later FROM requests WHERE id = $1', [id]);
+    let before = await pool.query('SELECT status, bill_status, total_amount, amount_paid, pay_later, rider_admin_id FROM requests WHERE id = $1', [id]);
+    // Refuse early (before any billing side effect) when the job is outside this person's stages or is another rider's job.
+    if (before.rows.length && ((vis && !vis.includes(before.rows[0].status)) || !riderMayView(req.session.admin, before.rows[0]))) {
+      await audit(req, 'access_denied', `Status ${status} on request #${id}`);
+      flash(req, 'error', 'That request is not one of your jobs.');
+      return res.redirect('/admin/requests');
+    }
     // Statuses only move forward. The database trigger enforces the same rule; this gives a clear message and an audit entry.
     if (before.rows.length) {
       const bw = backwardBlocker(before.rows[0].status, status);
@@ -496,7 +505,7 @@ router.post(
       }
     }
     const upd = await pool.query(
-      'UPDATE requests SET status = $1, updated_at = now() WHERE id = $2 AND ($3::text[] IS NULL OR status = ANY($3::text[])) RETURNING id, total_amount, amount_paid',
+      `UPDATE requests SET status = $1, updated_at = now() WHERE id = $2 AND ($3::text[] IS NULL OR status = ANY($3::text[]))${riderSql(req.session.admin, 'rider_admin_id')} RETURNING id, total_amount, amount_paid`,
       [status, id, vis]
     );
     if (upd.rows.length) {
@@ -581,7 +590,7 @@ router.post(
     if (!Number.isInteger(id)) return res.redirect('/admin/requests');
     const vis = visibleStatuses(req.session.admin.role); // null = every status
     const upd = await pool.query(
-      'UPDATE requests SET admin_notes = $1, updated_at = now() WHERE id = $2 AND ($3::text[] IS NULL OR status = ANY($3::text[])) RETURNING id',
+      `UPDATE requests SET admin_notes = $1, updated_at = now() WHERE id = $2 AND ($3::text[] IS NULL OR status = ANY($3::text[]))${riderSql(req.session.admin, 'rider_admin_id')} RETURNING id`,
       [cleanMultiline(req.body.admin_notes, 2000), id, vis]
     );
     if (!upd.rows.length) {

@@ -28,8 +28,8 @@
     });
 
     // keep the browser bar colour in step with the page
-    var meta = document.querySelector('meta[name="theme-color"][data-dynamic]');
-    if (meta) meta.setAttribute('content', effective(mode) === 'dark' ? '#101F2B' : '#F5F8FA');
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', effective(mode) === 'dark' ? '#101C18' : '#F5F8F6');
   }
 
   function save(mode) {
@@ -60,7 +60,7 @@
 
   // Keep several open tabs in sync.
   window.addEventListener('storage', function (e) {
-    if (e.key === KEY) paint(stored());
+    if (e.key === KEY || e.key === null) paint(stored());
   });
 
   paint(stored());

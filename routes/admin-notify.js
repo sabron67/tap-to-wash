@@ -7,10 +7,21 @@ const { publicKey, pushToAdmin, available } = require('../lib/push');
 const { validWaNumber, mode } = require('../lib/whatsapp');
 const { notificationsPage } = require('../views/admin/notifications');
 
+// Phone alerts are only ever sent to the browsers' own push services, never to an address a staff member typed in.
+const PUSH_HOSTS = [/(^|\.)googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)push\.apple\.com$/, /(^|\.)notify\.windows\.com$/];
+const trustedPushEndpoint = (endpoint) => {
+  try {
+    const u = new URL(endpoint);
+    return u.protocol === 'https:' && !u.username && !u.password && (u.port === '' || u.port === '443') && PUSH_HOSTS.some((re) => re.test(u.hostname));
+  } catch (_) {
+    return false;
+  }
+};
+
 module.exports = function mount(router, { buildCtx, flash }) {
   // Live order updates for the signed-in staff member (Server-Sent Events). The role decides which orders arrive.
   router.get('/api/live', (req, res) => {
-    live.open(req, res, { kind: 'staff', role: req.session.admin.role });
+    live.open(req, res, { kind: 'staff', role: req.session.admin.role, adminId: req.session.admin.id });
   });
 
   // Polled every few seconds by the open admin page.
@@ -80,7 +91,7 @@ module.exports = function mount(router, { buildCtx, flash }) {
       const endpoint = String(s.endpoint || '');
       const p256dh = s.keys && String(s.keys.p256dh || '');
       const auth = s.keys && String(s.keys.auth || '');
-      if (!/^https:\/\/.{10,}/.test(endpoint) || endpoint.length > 1000 || !p256dh || !auth) return res.status(400).json({ ok: false, error: 'Invalid subscription.' });
+      if (!/^https:\/\/.{10,}/.test(endpoint) || endpoint.length > 1000 || !trustedPushEndpoint(endpoint) || !p256dh || !auth) return res.status(400).json({ ok: false, error: 'Invalid subscription.' });
       await pool.query(
         `INSERT INTO push_subscriptions (admin_id, endpoint, p256dh, auth) VALUES ($1,$2,$3,$4)
          ON CONFLICT (endpoint) DO UPDATE SET admin_id = EXCLUDED.admin_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth`,

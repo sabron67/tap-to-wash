@@ -1,4 +1,9 @@
 require('dotenv').config();
+// Render sets RENDER=true. A live site must never run in development mode (insecure cookies, no HSTS, shared rate limits).
+if (process.env.RENDER && process.env.NODE_ENV !== 'production') {
+  console.warn('NODE_ENV was not "production" on Render. Switching to production mode. Please set NODE_ENV=production in the environment.');
+  process.env.NODE_ENV = 'production';
+}
 const path = require('path');
 const express = require('express');
 const compression = require('compression');
@@ -21,6 +26,14 @@ const isProd = process.env.NODE_ENV === 'production';
 const app = express();
 
 if (isProd) app.set('trust proxy', 1);
+// Behind the host's proxy, send plain-HTTP page requests to HTTPS (requests with no proxy header, such as internal health checks, are left alone).
+if (isProd && process.env.FORCE_HTTPS !== '0') {
+  app.use((req, res, next) => {
+    if (req.headers['x-forwarded-proto'] !== 'http') return next();
+    if (req.method === 'GET' || req.method === 'HEAD') return res.redirect(301, `https://${req.headers.host}${req.originalUrl}`);
+    return res.status(403).type('text').send('HTTPS is required.');
+  });
+}
 app.disable('x-powered-by');
 
 if (!process.env.SESSION_SECRET) {

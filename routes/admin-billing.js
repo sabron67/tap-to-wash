@@ -4,7 +4,7 @@
 const { pool } = require('../config/db');
 const { wrap, cleanText, cleanMultiline, money } = require('../lib/helpers');
 const { audit } = require('../lib/audit');
-const { can, visibleStatuses } = require('../lib/roles');
+const { can, visibleStatuses, riderMayView } = require('../lib/roles');
 const { getSettings } = require('../lib/settings');
 const { notifyEvent, eventFor } = require('../lib/notify');
 const { round2, parseMeasurements, computeLines, discountFor, MPESA_CODE, cleanMpesaCode, loadBillData, needsWeighing, autoBill, advanceIfPaid } = require('../lib/bill');
@@ -25,6 +25,7 @@ module.exports = function mountBilling(router, { flash, need }) {
     if (!rows.length) return null;
     const vis = visibleStatuses(req.session.admin.role);
     if (vis && !vis.includes(rows[0].status)) return null;
+    if (!riderMayView(req.session.admin, rows[0])) return null; // another rider's job
     return rows[0];
   }
 

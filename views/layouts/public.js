@@ -5,9 +5,7 @@ function head(title, settings, description) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title ? `${title} · ` : ''}${settings.business_name}</title>
 <meta name="description" content="${description || settings.tagline}">
-<meta name="theme-color" content="#101F2B" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#F5F8FA" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#F5F8FA" data-dynamic>
+<meta name="theme-color" content="#123C32" data-dynamic>
 <script src="/js/boot.js"></script>
 <link rel="icon" href="/site-icon${settings.icon_v ? `?v=${settings.icon_v}` : ''}">
 ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${settings.icon_v}">` : ''}
@@ -15,6 +13,7 @@ ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.pn
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/customer-premium.css">
 <link rel="stylesheet" href="/css/receipt.css">
 <script src="/js/toast.js" defer></script>`;
 }

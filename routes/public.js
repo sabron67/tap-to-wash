@@ -18,7 +18,15 @@ const { BILL_ROW, billFrom, payState, loadOrderParts } = require('../lib/order-v
 const { respondToBill } = require('../lib/customer-bill');
 const pickupSchedule = require('../lib/pickup-schedule');
 
+const lookup = require('../lib/lookup-guard');
 const router = express.Router();
+
+// Tracking links hold a reference code and a phone number: never cache them and never leak them through the Referer header.
+router.use('/track', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
 
 const submitLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: +process.env.REQUEST_MAX || 30, message: 'Too many requests from this device. Please try again in a few minutes.' });
 const payLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 15, message: 'Too many payment attempts. Please try again in a few minutes.' });
@@ -292,7 +300,7 @@ router.get(
       : { rows: [] };
     const row = found.rows[0];
     const acc = req.session.account;
-    const byPhone = !!row && validPhone(phone) && row.phone_key === phoneKey(phone);
+    const byPhone = !!row && validPhone(phone) && !lookup.bad(ref, row.phone_key, phoneKey(phone));
     const byAccount = !!row && !!acc && row.account_id !== null && Number(row.account_id) === Number(acc.id);
     if (!byPhone && !byAccount) return res.status(403).end();
     live.open(req, res, { kind: 'order', orderId: row.id }); // this connection only ever receives this order's room
@@ -320,7 +328,7 @@ router.get(
     if (!ref || !validPhone(phone)) return res.view(trackPage(ctx, { ref, error: 'Enter both your reference code and phone number.' }));
 
     const found = await pool.query(`SELECT ${BILL_ROW}, c.phone_key FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1`, [ref]);
-    if (!found.rows.length || found.rows[0].phone_key !== phoneKey(phone)) {
+    if (!found.rows.length || lookup.bad(ref, found.rows[0].phone_key, phoneKey(phone))) {
       return res.view(trackPage(ctx, { ref, error: 'We could not find a request matching those details. Please check and try again.' }));
     }
 
@@ -331,7 +339,7 @@ router.get(
     pay.billAction = '/track/bill';
     pay.payAction = '/track/pay';
     pay.statusUrl = (id) => `/track/pay/${id}/status?ref=${encodeURIComponent(r.ref_code)}&phone=${encodeURIComponent(phone)}`;
-    const payErrors = { phone: 'Enter a Safaricom number like 0712 345 678.', fail: 'M-Pesa did not accept the request. Please try again, or pay using the steps below.', unavailable: 'Pay by M-Pesa prompt is not available right now. Use the steps below.', notdue: 'There is nothing to pay on this order right now.' };
+    const payErrors = { phone: 'Enter a Safaricom number like 0712 345 678.', fail: 'M-Pesa did not accept the request. Please try again, or pay using the steps below.', unavailable: 'Pay by M-Pesa prompt is not available right now. Use the steps below.', notdue: 'There is nothing to pay on this order right now.', other: 'For safety, the M-Pesa prompt can only go to the phone number on this order. To pay from another number, sign in to your account.' };
     const infoMsg = req.query.bill === 'confirmed' ? 'Thank you. Your bill is confirmed.' : req.query.bill === 'queried' ? 'Thank you. We have noted your question and will check the bill with you.' : req.query.bill === 'stale' ? 'Your bill was updated while you were looking at it. Please review it again.' : req.query.feedback === 'sent' ? 'Thank you. Your feedback has been received.' : '';
     res.view(trackPage(ctx, { ref, info: infoMsg, error: payErrors[req.query.pay] || '', result: { ref_code: r.ref_code, status: r.status, items, events, pickup_scheduled_at: r.pickup_scheduled_at, delivery_scheduled_at: r.delivery_scheduled_at, dispatch_stage: r.dispatch_stage, bill, phone, pay } }));
   })
@@ -346,7 +354,7 @@ router.post(
     const phone = cleanText(req.body.phone, 20);
     const action = req.body.action === 'dispute' ? 'dispute' : req.body.action === 'confirm' ? 'confirm' : '';
     const found = await pool.query(`SELECT r.id, r.status, r.bill_status, r.bill_version, c.phone_key, c.name FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1`, [ref]);
-    if (!found.rows.length || !validPhone(phone) || found.rows[0].phone_key !== phoneKey(phone) || !action) {
+    if (!found.rows.length || !validPhone(phone) || lookup.bad(ref, found.rows[0].phone_key, phoneKey(phone)) || !action) {
       const settings = await getSettings();
       return res.status(400).view(trackPage({ settings, account: req.session.account, accountPhone: await savedPhone(req) }, { ref, error: 'We could not verify that order. Check the reference code and phone number.' }));
     }
@@ -365,14 +373,18 @@ router.post(
     const ref = cleanText(req.body.ref, 20).toUpperCase();
     const phone = cleanText(req.body.phone, 20);
     const found = await pool.query('SELECT r.id, r.ref_code, r.status, r.bill_status, r.total_amount, r.amount_paid, c.phone_key FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1', [ref]);
-    if (!found.rows.length || !validPhone(phone) || found.rows[0].phone_key !== phoneKey(phone)) {
+    if (!found.rows.length || !validPhone(phone) || lookup.bad(ref, found.rows[0].phone_key, phoneKey(phone))) {
       const settings = await getSettings();
       return res.status(400).view(trackPage({ settings, account: req.session.account, accountPhone: await savedPhone(req) }, { ref, error: 'We could not verify that order. Check the reference code and phone number.' }));
     }
     const r = found.rows[0];
     const back = (q) => res.redirect(`/track?ref=${encodeURIComponent(ref)}&phone=${encodeURIComponent(phone)}&${q}#bill`);
     if (!stk.enabled()) return back('pay=unavailable');
-    const out = await stk.startPush(r, cleanText(req.body.msisdn, 20) || phone);
+    // The prompt may only go to the phone number on the order. Paying from another number is done from the customer's own account,
+    // so a stranger holding a reference code cannot make someone else's phone buzz with payment prompts.
+    const asked = cleanText(req.body.msisdn, 20);
+    if (asked && phoneKey(asked) !== phoneKey(phone)) return back('pay=other');
+    const out = await stk.startPush(r, phone);
     if (out.ok) return back(`stk=${out.stk.id}`);
     return back(`pay=${!stk.normalizePhone(req.body.msisdn || phone) ? 'phone' : stk.cannotPay(r) ? 'notdue' : 'fail'}`);
   })
@@ -388,7 +400,7 @@ router.get(
     const phone = cleanText(req.query.phone, 20);
     res.set('Cache-Control', 'no-store');
     const found = await pool.query('SELECT r.id, c.phone_key FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.ref_code = $1', [ref]);
-    const owns = found.rows.length && validPhone(phone) && found.rows[0].phone_key === phoneKey(phone) && Number.isInteger(id)
+    const owns = found.rows.length && validPhone(phone) && !lookup.bad(ref, found.rows[0].phone_key, phoneKey(phone)) && Number.isInteger(id)
       ? await pool.query('SELECT id FROM mpesa_stk WHERE id = $1 AND request_id = $2', [id, found.rows[0].id])
       : { rows: [] };
     if (!owns.rows.length) return res.status(404).json({ ok: false });
@@ -407,7 +419,7 @@ router.post(
     const rating = Number(req.body.rating);
     const comment = cleanMultiline(req.body.comment, 1500);
     const found = await pool.query(`SELECT r.id,r.customer_id,r.status,c.phone_key FROM requests r JOIN customers c ON c.id=r.customer_id WHERE r.ref_code=$1`, [ref]);
-    if (!found.rows.length || !validPhone(phone) || found.rows[0].phone_key !== phoneKey(phone)) {
+    if (!found.rows.length || !validPhone(phone) || lookup.bad(ref, found.rows[0].phone_key, phoneKey(phone))) {
       const settings = await getSettings();
       return res.status(400).view(trackPage({settings,account:req.session.account,accountPhone:await savedPhone(req)},{ref,error:'We could not verify that order. Check the reference code and phone number.'}));
     }

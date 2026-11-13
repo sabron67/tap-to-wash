@@ -302,7 +302,7 @@ function homePage(ctx, categories) {
   </div>
 
   ${wizard(!!ctx.account, ctx.branches || [])}
-  <script type="application/json" id="app-data">${raw(json)}</script>`;
+  <script type="application/json" id="app-data">${raw(json.replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'))}</script>`;
 
   return publicLayout(ctx, { body, scripts: raw('<script src="/js/booking.js" defer></script><script src="/js/app.js"></script><script src="/js/home.js"></script><script src="/js/scroll.js"></script>'), bodyClass: 'public home' });
 }
