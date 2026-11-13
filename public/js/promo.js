@@ -1,5 +1,6 @@
-// Promotion popup ad. Closing it (X, Esc or tapping outside) hides it for the rest of this visit:
-// it comes back only when the customer opens the website again (new tab/window session).
+// Promotion popup ad. It appears on every page load while a promotion is live, until the customer closes it
+// (X, Esc or tapping outside). After that it stays closed for the rest of the visit and comes back
+// only when the customer opens the website again (new tab/window).
 (function () {
   'use strict';
   if (/^\/(admin|staff)/.test(location.pathname)) return;
