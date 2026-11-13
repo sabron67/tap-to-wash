@@ -2,6 +2,7 @@
   "name": "tap-to-wash",
   "version": "1.0.0",
   "description": "Tap to Wash - laundry services website with admin panel (Node.js + PostgreSQL)",
+  "author": "Sabron",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

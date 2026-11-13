@@ -28,11 +28,19 @@ Payments are intentionally manual for now (admin records the total and amount pa
 
 ## Operations centre
 
+**Admin → Inventory** (owner and manager only; cashiers, riders and attendants cannot open it or see costs):
+
+- **Supplies:** detergents, packaging etc. with unit, category, supplier, reorder level and average cost. Low-stock alerts.
+- **Receive stock:** enter quantity and total cost paid; the system keeps a weighted-average cost per unit.
+- **Use / lost / stock count:** record supplies used, damaged or lost, or correct stock after a count. Every movement keeps its cost at the time.
+- **Profit calculator:** revenue collected − refunds paid − supplies used − expenses = net profit, for any date range, plus margin. Supplies are counted when used, not when bought, so record stock purchases here and not again under Expenses.
+- Excel exports with live formulas: stock list, movements, and a profit workbook (Profit, Movements and Stock sheets; supply costs are SUMIFS formulas).
+
 **Admin → Operations** holds the day-to-day tools:
 
 - **Pickup and delivery:** assign a rider, pickup and delivery slots and a dispatch stage. Pickup/delivery changes are added to the request history.
 - **Quality control:** record stain, count, damage and packaging checks and whether the order passed.
-- **Expenses and stock:** record operating costs, add supplies, adjust stock with a reason, see low-stock alerts. CSV exports for expenses, inventory, reviews and complaints.
+- **Expenses:** record operating costs (rent, salaries, water, fuel). Excel exports (with live formulas) for expenses, reviews and complaints.
 - **Customer care:** log and follow up complaints, record refunds and read customer reviews (customers rate or complain from the tracking page).
 - **Discount codes:** percentage or fixed codes with expiry and use limits, switched on/off from the list. Staff apply a code in the billing form of a request.
 - **Receipts:** print or save a receipt as PDF from any request page.

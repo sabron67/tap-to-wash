@@ -1002,6 +1002,7 @@ require('./admin-notify')(router, { buildCtx, flash, need });
 require('./admin-accounts')(router, { flash, need, customersView });
 require('./admin-whatsapp')(router, { buildCtx, flash, need });
 require('./admin-operations')(router, { buildCtx, flash, need });
+require('./admin-inventory')(router, { buildCtx, flash, need });
 require('./admin-billing')(router, { flash, need });
 
 module.exports = router;

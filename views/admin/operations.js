@@ -31,7 +31,7 @@ function operationsPage(ctx, d) {
   const refundStatuses = [['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected'], ['paid', 'Paid']];
   const net = Number(d.counts.month_revenue || 0) - Number(d.counts.month_expenses || 0);
 
-  const jumps = [['dispatch', 'Dispatch'], ['quality', 'Quality'], ['finance', 'Expenses'], ['inventory', 'Stock'], ['customers', 'Customer care'], ['promos', 'Promotions']];
+  const jumps = [['dispatch', 'Dispatch'], ['quality', 'Quality'], ['finance', 'Expenses'], ['customers', 'Customer care'], ['promos', 'Promotions']];
   if (d.branchesOn) jumps.push(['branches', 'Branches']);
 
   const body = html`
@@ -39,10 +39,9 @@ function operationsPage(ctx, d) {
     <p class="muted">Day-to-day control: pickup and delivery, quality checks, expenses, stock, customer care and promotions${d.branchesOn ? ', plus your branches' : ''}.</p>
     <nav class="ops-jumps" aria-label="Sections">${jumps.map((j) => html`<a href="#${j[0]}">${j[1]}</a>`)}</nav>
     <div class="ops-jumps">
-      <a href="/admin/operations/export.csv?type=expenses">Export expenses CSV</a>
-      <a href="/admin/operations/export.csv?type=inventory">Export inventory CSV</a>
-      <a href="/admin/operations/export.csv?type=reviews">Export reviews CSV</a>
-      <a href="/admin/operations/export.csv?type=complaints">Export complaints CSV</a>
+      <a href="/admin/operations/export.xlsx?type=expenses">Export expenses (Excel)</a>
+      <a href="/admin/operations/export.xlsx?type=reviews">Export reviews (Excel)</a>
+      <a href="/admin/operations/export.xlsx?type=complaints">Export complaints (Excel)</a>
     </div>
   </div>
   <section class="stats ops-stats">
@@ -63,16 +62,12 @@ function operationsPage(ctx, d) {
     ${table(['Request', 'Checked by', 'Result', 'Checks', 'Notes', 'Date'], d.inspections.map((x) => html`<tr><td>${x.ref_code}</td><td>${x.checked_by_name || 'Staff'}</td><td>${x.passed ? (String(x.notes || '').startsWith('OVERRIDE') ? html`<span class="badge pay-partial">Passed (override)</span>` : 'Passed') : 'Rework'}</td><td>${[x.stain_check, x.count_check, x.damage_check, x.packaging_check].filter(Boolean).length}/4</td><td>${x.notes || '—'}</td><td>${fmtDate(x.created_at)}</td></tr>`))}
   `)}
 
-  ${section('finance', 'Expenses', 'Record operating costs. Profit estimate = collected revenue minus recorded expenses.', html`
+  ${section('finance', 'Expenses', 'Record operating costs such as rent, salaries, water and fuel. Record stock purchases under Inventory instead, so they are not counted twice.', html`
     ${form('expense', html`${select('category', 'Category', ['Detergents', 'Water', 'Electricity', 'Rent', 'Fuel and delivery', 'Salaries', 'Repairs', 'Packaging', 'Other'].map((c) => [c, c]))}${field('description', 'Description')}${field('amount', 'Amount', 'number', true, 'min="0.01" step="0.01"')}${field('spent_on', 'Date', 'date', false)}`, 'Record expense')}
     ${table(['Date', 'Category', 'Description', 'Amount'], d.expenses.map((x) => html`<tr><td>${x.spent_on instanceof Date ? x.spent_on.toISOString().slice(0, 10) : x.spent_on}</td><td>${x.category}</td><td>${x.description}</td><td>${money(x.amount, cur)}</td></tr>`))}
   `)}
 
-  ${section('inventory', 'Stock and supplies', 'Track stock levels and record supplies received or used. Low stock is flagged in the list.', html`
-    ${form('inventory', html`${field('name', 'Supply name')}${field('unit', 'Unit', 'text', true, 'value="litres"')}${field('quantity', 'Opening quantity', 'number', true, 'step="0.01" min="0"')}${field('reorder_level', 'Reorder level', 'number', true, 'step="0.01" min="0"')}${field('unit_cost', 'Unit cost', 'number', false, 'step="0.01" min="0"')}`, 'Add supply')}
-    ${d.inventory.length ? form('stock', html`${select('inventory_item_id', 'Supply', d.inventory.map((x) => [x.id, `${x.name} (${x.quantity} ${x.unit})`]))}${field('quantity_change', 'Change (+ received / − used)', 'number', true, 'step="0.01"')}${field('reason', 'Reason')}`, 'Update stock') : ''}
-    ${table(['Supply', 'Quantity', 'Reorder level', 'Unit cost', 'Stock status'], d.inventory.map((x) => html`<tr><td>${x.name}</td><td>${x.quantity} ${x.unit}</td><td>${x.reorder_level}</td><td>${money(x.unit_cost, cur)}</td><td>${Number(x.quantity) <= Number(x.reorder_level) ? html`<strong>Reorder</strong>` : 'OK'}</td></tr>`))}
-  `)}
+  ${ctx.can('inventory') ? section('inventory', 'Stock and supplies', 'Stock, supply costs and the profit calculator now have their own page.', html`<p><a class="btn btn-primary" href="/admin/inventory">Open Inventory</a></p>`) : ''}
 
   ${section('customers', 'Customer care and refunds', 'Log complaints, follow them up, record refunds and read customer reviews.', html`
     ${form('complaint', html`${select('request_id', 'Related order (optional)', [['', 'No order selected'], ...requestOptions], false)}${field('subject', 'Complaint subject')}${field('details', 'Details', 'text', false)}`, 'Log complaint')}

@@ -9,6 +9,7 @@ const NAV = [
   ['dashboard', '/admin', 'layout-dashboard', 'Dashboard', 'dashboard'],
   ['requests', '/admin/requests', 'clipboard-list', 'Requests', 'requests'],
   ['operations', '/admin/operations', 'washing-machine', 'Operations', 'operations'],
+  ['inventory', '/admin/inventory', 'package', 'Inventory', 'inventory'],
   ['categories', '/admin/categories', 'tag', 'Categories', 'categories'],
   ['customers', '/admin/customers', 'users', 'Customers', 'customers'],
   ['reports', '/admin/reports', 'file-spreadsheet', 'Reports', 'reports'],

@@ -401,3 +401,28 @@ CREATE TABLE IF NOT EXISTS promotions (
   CHECK(ends_at > starts_at)
 );
 CREATE INDEX IF NOT EXISTS promotions_window_idx ON promotions(starts_at, ends_at);
+
+
+-- ---------- Inventory and profit (owner and manager only) ----------
+-- inventory_items.unit_cost is the weighted-average cost per unit; it is re-calculated every time stock is bought.
+-- inventory_movements keeps a cost snapshot of every movement so profit history never changes when prices change later.
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS category  TEXT    NOT NULL DEFAULT 'General';
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS supplier  TEXT    NOT NULL DEFAULT '';
+ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- kind: opening | purchase | usage | waste | adjustment  (old rows stay 'adjustment' with no cost, so they never change your profit)
+ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS kind        TEXT          NOT NULL DEFAULT 'adjustment'
+  CHECK (kind IN ('opening','purchase','usage','waste','adjustment'));
+ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS unit_cost   NUMERIC(14,4) NOT NULL DEFAULT 0;
+ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS supplier    TEXT          NOT NULL DEFAULT '';
+ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS reference   TEXT          NOT NULL DEFAULT '';
+ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS occurred_on DATE          NOT NULL DEFAULT CURRENT_DATE;
+CREATE INDEX IF NOT EXISTS inventory_moves_date_idx ON inventory_movements(occurred_on DESC, id DESC);
+CREATE INDEX IF NOT EXISTS inventory_moves_kind_idx ON inventory_movements(kind, occurred_on);
+
+-- Average cost needs more than 2 decimals (e.g. KES 1,000 for 3 litres = 333.3333 per litre), or stock value drifts.
+DO $$ BEGIN
+  IF (SELECT numeric_scale FROM information_schema.columns WHERE table_name = 'inventory_items' AND column_name = 'unit_cost' LIMIT 1) = 2 THEN
+    ALTER TABLE inventory_items ALTER COLUMN unit_cost TYPE NUMERIC(14,4);
+  END IF;
+END $$;

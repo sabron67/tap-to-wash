@@ -8,8 +8,10 @@ const { getSettings } = require('../lib/settings');
 const { receiptPage } = require('../views/admin/receipt');
 const { pickupBlocker, autoBill } = require('../lib/bill');
 const { generateCode } = require('../lib/promo');
+const { sendWorkbook } = require('../lib/xlsx-export');
+const { expenseSheets, reviewsSheet, complaintsSheet } = require('../lib/export-sheets');
 
-// Kept: dispatch, quality control, expenses, stock, complaints and refunds, reviews, promotions, branches, receipts.
+// Kept: dispatch, quality control, expenses, complaints and refunds, reviews, promotions, branches, receipts.
 // Removed as unnecessary: garment-level tracking, machines and wash batches, customer packages (subscriptions), loyalty points.
 
 const DISPATCH_STAGES = ['unassigned', 'scheduled', 'picked_up', 'out_for_delivery', 'delivered'];
@@ -34,7 +36,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
   router.get('/operations', need('operations'), wrap(async (req, res) => {
     const ctx = await buildCtx(req);
     const branchesOn = ctx.settings.branches_enabled === '1';
-    const [requests, riders, dispatch, inspections, expenses, inventory, complaints, refunds, branches, reviews, counts, promotions] = await Promise.all([
+    const [requests, riders, dispatch, inspections, expenses, complaints, refunds, branches, reviews, counts, promotions] = await Promise.all([
       pool.query(`SELECT r.id, r.ref_code, c.name AS customer_name FROM requests r JOIN customers c ON c.id = r.customer_id ORDER BY r.created_at DESC LIMIT 250`),
       pool.query(`SELECT id, name, email, phone FROM admins WHERE is_active AND role = 'rider' ORDER BY name`),
       pool.query(`SELECT r.id, r.ref_code, r.status, r.dispatch_stage, r.pickup_scheduled_at, r.delivery_scheduled_at, c.name AS customer_name, a.name AS rider_name, b.name AS branch_name
@@ -44,7 +46,6 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
                    ORDER BY r.updated_at DESC LIMIT 100`),
       pool.query(`SELECT qi.*, r.ref_code, a.name AS checked_by_name FROM quality_inspections qi JOIN requests r ON r.id = qi.request_id LEFT JOIN admins a ON a.id = qi.checked_by ORDER BY qi.created_at DESC LIMIT 50`),
       pool.query(`SELECT * FROM expenses ORDER BY spent_on DESC, id DESC LIMIT 100`),
-      pool.query(`SELECT * FROM inventory_items ORDER BY name`),
       pool.query(`SELECT cc.*, r.ref_code, c.name AS customer_name FROM customer_complaints cc LEFT JOIN requests r ON r.id = cc.request_id LEFT JOIN customers c ON c.id = COALESCE(cc.customer_id, r.customer_id) ORDER BY cc.created_at DESC LIMIT 100`),
       pool.query(`SELECT rf.*, r.ref_code FROM refunds rf JOIN requests r ON r.id = rf.request_id ORDER BY rf.created_at DESC LIMIT 50`),
       branchesOn ? pool.query(`SELECT b.*, (SELECT COUNT(*)::int FROM requests r WHERE r.branch_id = b.id) AS orders FROM branches b ORDER BY b.name`) : { rows: [] },
@@ -53,7 +54,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
         (SELECT COUNT(*) FROM customer_complaints WHERE status IN ('open','investigating'))::int AS open_complaints,
         (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE date_trunc('month', spent_on::timestamp) = date_trunc('month', CURRENT_DATE::timestamp)) AS month_expenses,
         ((SELECT COALESCE(SUM(amount_paid), 0) FROM requests WHERE date_trunc('month', created_at) = date_trunc('month', now())) + (SELECT COALESCE(SUM(amount_paid), 0) FROM deleted_requests WHERE date_trunc('month', created_at) = date_trunc('month', now()))) AS month_revenue,
-        (SELECT COUNT(*) FROM inventory_items WHERE quantity <= reorder_level)::int AS low_stock`),
+        (SELECT COUNT(*) FROM inventory_items WHERE is_active AND quantity <= reorder_level)::int AS low_stock`),
       pool.query(`SELECT p.*, to_char(p.starts_at AT TIME ZONE 'Africa/Nairobi', 'DD Mon YYYY HH24:MI') AS starts_txt, to_char(p.ends_at AT TIME ZONE 'Africa/Nairobi', 'DD Mon YYYY HH24:MI') AS ends_txt,
                          CASE WHEN now() < p.starts_at THEN 'scheduled' WHEN now() > p.ends_at THEN 'ended' ELSE 'live' END AS state,
                          (SELECT COUNT(*)::int FROM requests r WHERE r.discount_code = p.code) AS orders,
@@ -62,30 +63,30 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     ]);
     res.view(operationsPage(ctx, {
       requests: requests.rows, riders: riders.rows, dispatch: dispatch.rows, inspections: inspections.rows, expenses: expenses.rows,
-      inventory: inventory.rows, complaints: complaints.rows, refunds: refunds.rows,
+      complaints: complaints.rows, refunds: refunds.rows,
       branches: branches.rows, branchesOn, reviews: reviews.rows, counts: counts.rows[0], promotions: promotions.rows,
     }));
   }));
 
-  router.get('/operations/export.csv', need('operations'), wrap(async (req, res) => {
-    const exports = {
-      expenses: { name: 'expenses', sql: 'SELECT spent_on, category, description, amount FROM expenses ORDER BY spent_on DESC', headers: ['Date', 'Category', 'Description', 'Amount'] },
-      inventory: { name: 'inventory', sql: 'SELECT name, unit, quantity, reorder_level, unit_cost FROM inventory_items ORDER BY name', headers: ['Supply', 'Unit', 'Quantity', 'Reorder level', 'Unit cost'] },
-      reviews: { name: 'reviews', sql: 'SELECT r.ref_code, c.name, c.phone, cr.rating, cr.comment, cr.created_at FROM customer_reviews cr JOIN requests r ON r.id = cr.request_id JOIN customers c ON c.id = cr.customer_id ORDER BY cr.created_at DESC', headers: ['Order', 'Customer', 'Phone', 'Rating', 'Comment', 'Date'] },
-      complaints: { name: 'complaints', sql: 'SELECT cc.subject, cc.details, cc.status, cc.resolution, cc.created_at, c.name, c.phone FROM customer_complaints cc LEFT JOIN customers c ON c.id = cc.customer_id ORDER BY cc.created_at DESC', headers: ['Subject', 'Details', 'Status', 'Resolution', 'Date', 'Customer', 'Phone'] },
-    };
-    const spec = exports[req.query.type];
-    if (!spec) return res.status(400).send('Choose a valid export type.');
-    const result = await pool.query({ text: spec.sql, rowMode: 'array' });
-    // Neutralise spreadsheet formulas (=, +, -, @) in text so a customer's comment cannot run in Excel.
-    const csvCell = (v) => {
-      let s = v instanceof Date ? v.toISOString() : String(v ?? '');
-      if (/^[=+\-@\t\r]/.test(s) && typeof v === 'string') s = "'" + s;
-      return `"${s.replace(/"/g, '""')}"`;
-    };
-    const lines = [spec.headers, ...result.rows].map((row) => row.map(csvCell).join(','));
-    await audit(req, 'operations_export', spec.name);
-    res.type('text/csv; charset=utf-8').set('Content-Disposition', `attachment; filename="taptowash-${spec.name}.csv"`).send('﻿' + lines.join('\r\n'));
+  router.get('/operations/export.xlsx', need('operations'), wrap(async (req, res) => {
+    const day = (col) => `to_char((${col} AT TIME ZONE 'Africa/Nairobi')::date, 'YYYY-MM-DD')`;
+    const type = req.query.type;
+    let book, file;
+    if (type === 'expenses') {
+      const r = await pool.query(`SELECT to_char(spent_on, 'YYYY-MM-DD') AS day, category, description, amount FROM expenses ORDER BY spent_on DESC, id DESC`);
+      book = { title: 'Expenses', sheets: expenseSheets(r.rows, (await getSettings()).currency) };
+      file = 'taptowash-expenses.xlsx';
+    } else if (type === 'reviews') {
+      const r = await pool.query(`SELECT r.ref_code, c.name, c.phone, cr.rating, cr.comment, ${day('cr.created_at')} AS day FROM customer_reviews cr JOIN requests r ON r.id = cr.request_id JOIN customers c ON c.id = cr.customer_id ORDER BY cr.created_at DESC`);
+      book = { title: 'Customer reviews', sheets: [reviewsSheet(r.rows)] };
+      file = 'taptowash-reviews.xlsx';
+    } else if (type === 'complaints') {
+      const r = await pool.query(`SELECT cc.subject, cc.details, cc.status, cc.resolution, ${day('cc.created_at')} AS day, c.name, c.phone FROM customer_complaints cc LEFT JOIN customers c ON c.id = cc.customer_id ORDER BY cc.created_at DESC`);
+      book = { title: 'Customer complaints', sheets: [complaintsSheet(r.rows)] };
+      file = 'taptowash-complaints.xlsx';
+    } else return res.status(400).send('Choose a valid export type.');
+    await audit(req, 'operations_export', type);
+    await sendWorkbook(res, file, book);
   }));
 
   router.get('/requests/:id/receipt', need('billing'), wrap(async (req, res) => {
@@ -170,7 +171,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     back(res, 'quality');
   }));
 
-  // ---------- expenses and stock ----------
+  // ---------- expenses (stock and supply costs now live in routes/admin-inventory.js, owner and manager only) ----------
   router.post('/operations/expense', need('operations'), wrap(async (req, res) => {
     const amount = num(req.body.amount, 0);
     const category = cleanText(req.body.category, 60);
@@ -180,42 +181,6 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     await audit(req, 'expense_recorded', `${category}: ${amount}`);
     flash(req, 'success', 'Expense recorded.');
     back(res, 'finance');
-  }));
-
-  router.post('/operations/inventory', need('operations'), wrap(async (req, res) => {
-    const name = cleanText(req.body.name, 100);
-    const quantity = num(req.body.quantity, 0);
-    const reorder = num(req.body.reorder_level, 0);
-    const cost = num(req.body.unit_cost || 0, 0);
-    if (!name || quantity === null || reorder === null || cost === null) { flash(req, 'error', 'Enter valid inventory details.'); return back(res, 'inventory'); }
-    await pool.query(`INSERT INTO inventory_items(name, unit, quantity, reorder_level, unit_cost) VALUES($1,$2,$3,$4,$5)`, [name, cleanText(req.body.unit, 30) || 'pcs', quantity, reorder, cost]);
-    await audit(req, 'inventory_item_added', name);
-    flash(req, 'success', 'Supply added.');
-    back(res, 'inventory');
-  }));
-
-  router.post('/operations/stock', need('operations'), wrap(async (req, res) => {
-    const id = posInt(req.body.inventory_item_id);
-    const delta = Number(req.body.quantity_change);
-    const reason = cleanText(req.body.reason, 200);
-    if (!id || !Number.isFinite(delta) || delta === 0 || !reason) { flash(req, 'error', 'Enter a valid stock adjustment and reason.'); return back(res, 'inventory'); }
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const u = await client.query('UPDATE inventory_items SET quantity = quantity + $1, updated_at = now() WHERE id = $2 AND quantity + $1 >= 0 RETURNING id', [delta, id]);
-      if (!u.rowCount) throw new Error('Stock adjustment would make the quantity negative or the item does not exist.');
-      await client.query(`INSERT INTO inventory_movements(inventory_item_id, quantity_change, reason, recorded_by) VALUES($1,$2,$3,$4)`, [id, delta, reason, req.session.admin.id]);
-      await client.query('COMMIT');
-    } catch (e) {
-      await client.query('ROLLBACK').catch(() => {});
-      flash(req, 'error', e.message);
-      return back(res, 'inventory');
-    } finally {
-      client.release();
-    }
-    await audit(req, 'stock_adjusted', `Inventory #${id}: ${delta}`);
-    flash(req, 'success', 'Stock updated.');
-    back(res, 'inventory');
   }));
 
   // ---------- customer care ----------
