@@ -3,7 +3,8 @@ const path = require('path');
 const { pool } = require('../config/db');
 const { getSettings } = require('../lib/settings');
 const { rateLimit } = require('../lib/security');
-const { wrap, phoneKey, validPhone, genRef, cleanText, cleanMultiline } = require('../lib/helpers');
+const { livePromotion } = require('../lib/promo');
+const { wrap, money, phoneKey, validPhone, genRef, cleanText, cleanMultiline } = require('../lib/helpers');
 const { homePage } = require('../views/public/home');
 const { trackPage } = require('../views/public/track');
 const { termsPage } = require('../views/public/terms');
@@ -160,6 +161,19 @@ router.get('/api/pickup-slots', wrap(async (req, res) => {
   res.json({ ok: true, slots: await pickupSchedule.availability(date) });
 }));
 
+// The promotion running right now (for the popup ad). Nothing personal in it, so it is safe to serve to anyone.
+router.get(
+  '/api/promo',
+  wrap(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const p = await livePromotion();
+    if (!p) return res.json({ ok: true, promo: null });
+    const settings = await getSettings();
+    const off = p.discount_type === 'percent' ? `${Number(p.value)}% OFF` : `${money(p.value, settings.currency)} OFF`;
+    res.json({ ok: true, promo: { id: p.id, title: p.title, message: p.message, off, ends_at: p.ends_at } });
+  })
+);
+
 router.post(
   '/api/requests',
   submitLimit,
@@ -246,8 +260,9 @@ router.post(
         await client.query('SAVEPOINT ref_try');
         try {
           const ins = await client.query(
-            `INSERT INTO requests (ref_code, customer_id, location_description, notes, latitude, longitude, location_accuracy, preferred_time, pickup_scheduled_at, terms_version, terms_accepted_at, account_id, branch_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,($12::timestamp AT TIME ZONE 'Africa/Nairobi'),$9, now(), (SELECT id FROM accounts WHERE id = $10 AND is_active), $11) RETURNING id`,
+            `INSERT INTO requests (ref_code, customer_id, location_description, notes, latitude, longitude, location_accuracy, preferred_time, pickup_scheduled_at, terms_version, terms_accepted_at, account_id, branch_id, discount_code)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,($12::timestamp AT TIME ZONE 'Africa/Nairobi'),$9, now(), (SELECT id FROM accounts WHERE id = $10 AND is_active), $11,
+                     COALESCE((SELECT code FROM promotions WHERE starts_at <= now() AND ends_at >= now() ORDER BY created_at DESC LIMIT 1), '')) RETURNING id`,
             [candidate, cust.rows[0].id, locationDescription, notes, lat, lng, accuracy, pickupSchedule.slotLabel(pickupSlot), Number(settings.terms_version) || 1, req.session.account ? req.session.account.id : null, branchId, `${pickupDate} ${pickupSlot}:00`]
           );
           requestId = ins.rows[0].id;

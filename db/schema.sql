@@ -386,3 +386,18 @@ CREATE INDEX IF NOT EXISTS mpesa_stk_request_idx ON mpesa_stk(request_id, create
 CREATE INDEX IF NOT EXISTS requests_pickup_slot_idx
   ON requests(pickup_scheduled_at)
   WHERE pickup_scheduled_at IS NOT NULL AND status NOT IN ('cancelled','delivered');
+
+-- ---------- Promotions: timed popup ads + an automatic discount for every request made while one is running ----------
+CREATE TABLE IF NOT EXISTS promotions (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL DEFAULT '',
+  code TEXT NOT NULL UNIQUE,                       -- auto-generated (PROMO-XXXXXX); stamped on each request made during the promotion
+  discount_type TEXT NOT NULL CHECK(discount_type IN ('percent','fixed')),
+  value NUMERIC(12,2) NOT NULL CHECK(value > 0),
+  starts_at TIMESTAMPTZ NOT NULL,
+  ends_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK(ends_at > starts_at)
+);
+CREATE INDEX IF NOT EXISTS promotions_window_idx ON promotions(starts_at, ends_at);

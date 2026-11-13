@@ -550,7 +550,6 @@ router.post(
     const id = parseInt(req.params.id, 10);
     const subtotal = Number(req.body.total_amount);
     const paid = Number(req.body.amount_paid);
-    const code = cleanText(req.body.discount_code,40).toUpperCase();
     if (!Number.isInteger(id)) return res.redirect('/admin/requests');
     const bs = await pool.query('SELECT bill_status FROM requests WHERE id = $1', [id]);
     if (!bs.rows.length || bs.rows[0].bill_status !== 'legacy') {
@@ -561,19 +560,10 @@ router.post(
       flash(req, 'error', 'Please enter valid amounts (0 or more).');
       return res.redirect(`/admin/requests/${id}`);
     }
-    let discount = 0;
-    if (code) {
-      const found = await pool.query(`SELECT * FROM discounts WHERE code=$1 AND is_active AND (starts_at IS NULL OR starts_at<=CURRENT_DATE) AND (ends_at IS NULL OR ends_at>=CURRENT_DATE) AND (max_uses IS NULL OR uses<max_uses)`,[code]);
-      const request = await pool.query('SELECT customer_id,discount_code FROM requests WHERE id=$1',[id]);
-      const previousOrders = request.rows.length ? await pool.query(`SELECT COUNT(*)::int AS n FROM requests WHERE customer_id=$1 AND id<>$2 AND status<>'cancelled'`,[request.rows[0].customer_id,id]) : {rows:[{n:0}]};
-      if (!found.rows.length || previousOrders.rows[0].n + 1 < Number(found.rows[0].min_orders)) {
-        flash(req,'error','That discount code is invalid, expired, exhausted or the customer does not meet its minimum-order requirement.');
-        return res.redirect(`/admin/requests/${id}`);
-      }
-      const d=found.rows[0]; discount=d.discount_type==='percent' ? subtotal*Number(d.value)/100 : Number(d.value);
-      discount=Math.min(subtotal,Math.max(0,discount));
-      if (request.rows[0].discount_code !== code) await pool.query('UPDATE discounts SET uses=uses+1 WHERE id=$1',[d.id]);
-    }
+    // Discounts now come only from promotions; a legacy order keeps whatever discount it already has.
+    const cur = await pool.query('SELECT discount_code, discount_amount FROM requests WHERE id=$1',[id]);
+    const code = cur.rows[0] ? cur.rows[0].discount_code : '';
+    const discount = cur.rows[0] ? Math.min(subtotal, Number(cur.rows[0].discount_amount) || 0) : 0;
     const total=Math.max(0,subtotal-discount);
     await pool.query('UPDATE requests SET subtotal_amount=$1,discount_code=$2,discount_amount=$3,total_amount=$4,amount_paid=$5,updated_at=now() WHERE id=$6',[subtotal,code,discount,total,paid,id]);
     await audit(req, 'request_billing', `Request #${id}: subtotal ${subtotal}, discount ${discount}, total ${total}, paid ${paid}`);

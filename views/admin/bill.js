@@ -134,8 +134,8 @@ function billPanel(ctx, { r, items, payments, wa }) {
     seesPrices && (['needs_price', 'awaiting_confirm', 'disputed'].includes(bs) || autoConfirmed) && weighed
       ? html`<form method="post" action="/admin/requests/${r.id}/bill/recalc" class="row-form bill-inline">
         ${csrfField(ctx)}
-        <input name="discount_code" maxlength="40" placeholder="Discount code (optional)" value="${r.discount_code || ''}" aria-label="Discount code">
-        <button class="btn btn-ghost btn-sm" type="submit">${bs === 'needs_price' ? 'Recalculate after pricing' : 'Apply code and recalculate'}</button>
+        <input type="hidden" name="discount_code" value="${r.discount_code || ''}">
+        <button class="btn btn-ghost btn-sm" type="submit">${bs === 'needs_price' ? 'Recalculate after pricing' : 'Recalculate'}</button>
       </form>`
       : '';
 

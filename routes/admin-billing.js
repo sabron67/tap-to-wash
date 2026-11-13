@@ -8,6 +8,7 @@ const { can, visibleStatuses, riderMayView } = require('../lib/roles');
 const { getSettings } = require('../lib/settings');
 const { notifyEvent, eventFor } = require('../lib/notify');
 const { round2, parseMeasurements, computeLines, discountFor, MPESA_CODE, cleanMpesaCode, loadBillData, needsWeighing, autoBill, advanceIfPaid } = require('../lib/bill');
+const { isPromoCode } = require('../lib/promo');
 
 const OPEN_BILL = ['none', 'needs_price', 'awaiting_confirm', 'disputed']; // can still be weighed / repriced
 const POST_CONFIRM_STATUSES = ['confirmed', 'rider_arrived', 'picked_up', 'washing', 'ready']; // managers may re-weigh in these
@@ -70,12 +71,11 @@ module.exports = function mountBilling(router, { flash, need }) {
     if (calc.missing) {
       status = 'needs_price';
       subtotal = 0;
-      useCode = '';
+      useCode = isPromoCode(code) ? code : ''; // keep a running promotion's code so it applies once the price is set
     } else {
       const d = await discountFor(client, code, calc.subtotal, r.id, r.customer_id);
       if (d.error) return { error: d.error };
       discount = d.discount;
-      if (d.row && r.discount_code !== code) await client.query('UPDATE discounts SET uses = uses + 1 WHERE id = $1', [d.row.id]);
     }
     const total = round2(Math.max(0, subtotal - discount));
     await client.query(

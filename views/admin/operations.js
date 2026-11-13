@@ -31,12 +31,12 @@ function operationsPage(ctx, d) {
   const refundStatuses = [['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected'], ['paid', 'Paid']];
   const net = Number(d.counts.month_revenue || 0) - Number(d.counts.month_expenses || 0);
 
-  const jumps = [['dispatch', 'Dispatch'], ['quality', 'Quality'], ['finance', 'Expenses'], ['inventory', 'Stock'], ['customers', 'Customer care'], ['growth', 'Discounts']];
+  const jumps = [['dispatch', 'Dispatch'], ['quality', 'Quality'], ['finance', 'Expenses'], ['inventory', 'Stock'], ['customers', 'Customer care'], ['promos', 'Promotions']];
   if (d.branchesOn) jumps.push(['branches', 'Branches']);
 
   const body = html`
   <div class="ops-intro">
-    <p class="muted">Day-to-day control: pickup and delivery, quality checks, expenses, stock, customer care and discount codes${d.branchesOn ? ', plus your branches' : ''}.</p>
+    <p class="muted">Day-to-day control: pickup and delivery, quality checks, expenses, stock, customer care and promotions${d.branchesOn ? ', plus your branches' : ''}.</p>
     <nav class="ops-jumps" aria-label="Sections">${jumps.map((j) => html`<a href="#${j[0]}">${j[1]}</a>`)}</nav>
     <div class="ops-jumps">
       <a href="/admin/operations/export.csv?type=expenses">Export expenses CSV</a>
@@ -84,9 +84,19 @@ function operationsPage(ctx, d) {
     ${table(['Order', 'Customer', 'Rating', 'Comment', 'Date'], d.reviews.map((x) => html`<tr><td>${x.ref_code}</td><td>${x.customer_name}</td><td>${x.rating}/5</td><td>${x.comment || '—'}</td><td>${fmtDate(x.created_at)}</td></tr>`))}
   `)}
 
-  ${section('growth', 'Discount codes', 'Create promotional codes. Staff apply a code in the billing form on the request page.', html`
-    ${form('discount', html`${field('code', 'Code')}${field('description', 'Description', 'text', false)}${select('discount_type', 'Discount type', [['percent', 'Percentage'], ['fixed', 'Fixed amount']])}${field('value', 'Discount value', 'number', true, 'min="0.01" step="0.01"')}${field('min_orders', 'Minimum orders', 'number', true, 'min="1" value="1"')}${field('ends_at', 'Expiry date', 'date', false)}${field('max_uses', 'Maximum uses', 'number', false, 'min="1"')}`, 'Create discount')}
-    ${table(['Code', 'Discount', 'Minimum orders', 'Uses', 'Status'], d.discounts.map((x) => html`<tr><td><strong>${x.code}</strong></td><td>${x.discount_type === 'percent' ? `${x.value}%` : money(x.value, cur)}</td><td>${x.min_orders}</td><td>${x.uses}${x.max_uses ? ` / ${x.max_uses}` : ''}</td><td>${toggleForm('discount-status', x)}</td></tr>`))}
+  ${section('promos', 'Promotions', 'Show a popup ad to customers and give every request made during the promotion an automatic discount. The code is generated for you and applied to the bill; customers never type it.', html`
+    ${form('promotion', html`${field('title', 'Headline (shown on the ad)', 'text', true, 'maxlength="80" placeholder="Weekend Fresh Deal"')}
+      <label class="field"><span>Message (optional)</span><textarea name="message" rows="2" maxlength="300" placeholder="Book a pick-up today and the discount is applied to your bill automatically."></textarea></label>
+      ${select('discount_type', 'Discount type', [['percent', 'Percentage'], ['fixed', 'Fixed amount']])}${field('value', 'Discount value', 'number', true, 'min="0.01" step="0.01"')}
+      ${field('starts_at', 'Starts (Nairobi time)', 'datetime-local')}${field('ends_at', 'Ends (Nairobi time)', 'datetime-local')}`, 'Create promotion')}
+    ${table(['Promotion', 'Discount', 'Runs', 'Code', 'Requests', 'Given', 'Status', ''], (d.promotions || []).map((x) => html`<tr>
+      <td><strong>${x.title}</strong>${x.message ? html`<div class="muted small">${x.message}</div>` : ''}</td>
+      <td>${x.discount_type === 'percent' ? `${Number(x.value)}%` : money(x.value, cur)}</td>
+      <td class="small">${x.starts_txt}<br>to ${x.ends_txt}</td>
+      <td><code>${x.code}</code></td><td>${x.orders}</td><td>${money(x.given, cur)}</td>
+      <td>${x.state === 'live' ? 'Live now' : x.state === 'scheduled' ? 'Scheduled' : 'Ended'}</td>
+      <td><div class="inline-form">${x.state === 'live' ? html`<form method="post" action="/admin/operations/promotion-end" class="inline" data-confirm="End “${x.title}” now? The popup stops and new requests no longer get the discount.">${csrfField(ctx)}<input type="hidden" name="id" value="${x.id}"><button class="btn btn-ghost btn-sm" type="submit">End now</button></form>` : ''}
+        ${Number(x.orders) === 0 ? html`<form method="post" action="/admin/operations/promotion-delete" class="inline" data-confirm="Delete “${x.title}”? This cannot be undone.">${csrfField(ctx)}<input type="hidden" name="id" value="${x.id}"><button class="btn btn-danger btn-sm" type="submit">Delete</button></form>` : ''}</div></td></tr>`), 'No promotions yet.')}
   `)}
 
   ${d.branchesOn ? section('branches', 'Branches', 'Add outlets and switch each one on or off. Only active branches appear to customers when they tap to wash.', html`

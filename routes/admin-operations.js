@@ -7,8 +7,9 @@ const { notifyEvent } = require('../lib/notify');
 const { getSettings } = require('../lib/settings');
 const { receiptPage } = require('../views/admin/receipt');
 const { pickupBlocker, autoBill } = require('../lib/bill');
+const { generateCode } = require('../lib/promo');
 
-// Kept: dispatch, quality control, expenses, stock, complaints and refunds, reviews, discount codes, branches, receipts.
+// Kept: dispatch, quality control, expenses, stock, complaints and refunds, reviews, promotions, branches, receipts.
 // Removed as unnecessary: garment-level tracking, machines and wash batches, customer packages (subscriptions), loyalty points.
 
 const DISPATCH_STAGES = ['unassigned', 'scheduled', 'picked_up', 'out_for_delivery', 'delivered'];
@@ -33,7 +34,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
   router.get('/operations', need('operations'), wrap(async (req, res) => {
     const ctx = await buildCtx(req);
     const branchesOn = ctx.settings.branches_enabled === '1';
-    const [requests, riders, dispatch, inspections, expenses, inventory, complaints, refunds, discounts, branches, reviews, counts] = await Promise.all([
+    const [requests, riders, dispatch, inspections, expenses, inventory, complaints, refunds, branches, reviews, counts, promotions] = await Promise.all([
       pool.query(`SELECT r.id, r.ref_code, c.name AS customer_name FROM requests r JOIN customers c ON c.id = r.customer_id ORDER BY r.created_at DESC LIMIT 250`),
       pool.query(`SELECT id, name, email, phone FROM admins WHERE is_active AND role = 'rider' ORDER BY name`),
       pool.query(`SELECT r.id, r.ref_code, r.status, r.dispatch_stage, r.pickup_scheduled_at, r.delivery_scheduled_at, c.name AS customer_name, a.name AS rider_name, b.name AS branch_name
@@ -46,7 +47,6 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
       pool.query(`SELECT * FROM inventory_items ORDER BY name`),
       pool.query(`SELECT cc.*, r.ref_code, c.name AS customer_name FROM customer_complaints cc LEFT JOIN requests r ON r.id = cc.request_id LEFT JOIN customers c ON c.id = COALESCE(cc.customer_id, r.customer_id) ORDER BY cc.created_at DESC LIMIT 100`),
       pool.query(`SELECT rf.*, r.ref_code FROM refunds rf JOIN requests r ON r.id = rf.request_id ORDER BY rf.created_at DESC LIMIT 50`),
-      pool.query(`SELECT * FROM discounts ORDER BY created_at DESC LIMIT 100`),
       branchesOn ? pool.query(`SELECT b.*, (SELECT COUNT(*)::int FROM requests r WHERE r.branch_id = b.id) AS orders FROM branches b ORDER BY b.name`) : { rows: [] },
       pool.query(`SELECT cr.*, r.ref_code, c.name AS customer_name FROM customer_reviews cr JOIN requests r ON r.id = cr.request_id JOIN customers c ON c.id = cr.customer_id ORDER BY cr.created_at DESC LIMIT 100`),
       pool.query(`SELECT
@@ -54,11 +54,16 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
         (SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE date_trunc('month', spent_on::timestamp) = date_trunc('month', CURRENT_DATE::timestamp)) AS month_expenses,
         ((SELECT COALESCE(SUM(amount_paid), 0) FROM requests WHERE date_trunc('month', created_at) = date_trunc('month', now())) + (SELECT COALESCE(SUM(amount_paid), 0) FROM deleted_requests WHERE date_trunc('month', created_at) = date_trunc('month', now()))) AS month_revenue,
         (SELECT COUNT(*) FROM inventory_items WHERE quantity <= reorder_level)::int AS low_stock`),
+      pool.query(`SELECT p.*, to_char(p.starts_at AT TIME ZONE 'Africa/Nairobi', 'DD Mon YYYY HH24:MI') AS starts_txt, to_char(p.ends_at AT TIME ZONE 'Africa/Nairobi', 'DD Mon YYYY HH24:MI') AS ends_txt,
+                         CASE WHEN now() < p.starts_at THEN 'scheduled' WHEN now() > p.ends_at THEN 'ended' ELSE 'live' END AS state,
+                         (SELECT COUNT(*)::int FROM requests r WHERE r.discount_code = p.code) AS orders,
+                         (SELECT COALESCE(SUM(r.discount_amount), 0) FROM requests r WHERE r.discount_code = p.code) AS given
+                    FROM promotions p ORDER BY p.starts_at DESC LIMIT 50`),
     ]);
     res.view(operationsPage(ctx, {
       requests: requests.rows, riders: riders.rows, dispatch: dispatch.rows, inspections: inspections.rows, expenses: expenses.rows,
-      inventory: inventory.rows, complaints: complaints.rows, refunds: refunds.rows, discounts: discounts.rows,
-      branches: branches.rows, branchesOn, reviews: reviews.rows, counts: counts.rows[0],
+      inventory: inventory.rows, complaints: complaints.rows, refunds: refunds.rows,
+      branches: branches.rows, branchesOn, reviews: reviews.rows, counts: counts.rows[0], promotions: promotions.rows,
     }));
   }));
 
@@ -257,36 +262,57 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     back(res, 'customers');
   }));
 
-  // ---------- discount codes ----------
-  router.post('/operations/discount', need('operations'), wrap(async (req, res) => {
-    const code = cleanText(req.body.code, 40).toUpperCase();
-    const value = num(req.body.value, 0);
+  // ---------- promotions (popup ad + automatic discount for requests made while it runs) ----------
+  router.post('/operations/promotion', need('operations'), wrap(async (req, res) => {
+    const title = cleanText(req.body.title, 80);
+    const message = cleanMultiline(req.body.message, 300);
     const type = req.body.discount_type;
-    const min = Math.max(1, Math.floor(Number(req.body.min_orders)) || 1);
-    if (!code || value === null || value <= 0 || !['percent', 'fixed'].includes(type) || (type === 'percent' && value > 100)) {
-      flash(req, 'error', 'Enter a valid discount. Percentage discounts cannot exceed 100%.');
-      return back(res, 'growth');
+    const value = num(req.body.value, 0);
+    const starts = dateOrNull(req.body.starts_at);
+    const ends = dateOrNull(req.body.ends_at);
+    if (title.length < 3 || !['percent', 'fixed'].includes(type) || value === null || value <= 0 || (type === 'percent' && value > 100)) {
+      flash(req, 'error', 'Enter a title and a valid discount. Percentage discounts cannot exceed 100%.');
+      return back(res, 'promos');
     }
-    try {
-      await pool.query(`INSERT INTO discounts(code, description, discount_type, value, min_orders, ends_at, max_uses) VALUES($1,$2,$3,$4,$5,$6,$7)`,
-        [code, cleanText(req.body.description, 200), type, value, min, req.body.ends_at || null, req.body.max_uses ? Math.max(1, Math.floor(Number(req.body.max_uses)) || 1) : null]);
-    } catch (e) {
-      if (e.code === '23505') { flash(req, 'error', 'That discount code already exists.'); return back(res, 'growth'); }
-      throw e;
+    if (!starts || !ends || ends <= starts) {
+      flash(req, 'error', 'Choose a start and an end time, with the end after the start.');
+      return back(res, 'promos');
     }
-    await audit(req, 'discount_created', code);
-    flash(req, 'success', 'Discount code created.');
-    back(res, 'growth');
+    let code = '';
+    for (let i = 0; i < 5 && !code; i++) {
+      const candidate = generateCode();
+      try {
+        await pool.query(`INSERT INTO promotions(title, message, code, discount_type, value, starts_at, ends_at) VALUES($1,$2,$3,$4,$5,$6,$7)`, [title, message, candidate, type, value, starts, ends]);
+        code = candidate;
+      } catch (e) {
+        if (e.code !== '23505') throw e; // code clash: generate another
+      }
+    }
+    if (!code) { flash(req, 'error', 'Could not generate a promotion code. Please try again.'); return back(res, 'promos'); }
+    await audit(req, 'promotion_created', `${title} (${code})`);
+    flash(req, 'success', `Promotion created. Code ${code} is applied automatically to requests made during it.`);
+    back(res, 'promos');
   }));
 
-  router.post('/operations/discount-status', need('operations'), wrap(async (req, res) => {
+  // End now: the popup stops and no new request gets the discount. Requests already made keep theirs.
+  router.post('/operations/promotion-end', need('operations'), wrap(async (req, res) => {
     const id = posInt(req.body.id);
-    if (!id) { flash(req, 'error', 'Invalid discount.'); return back(res, 'growth'); }
-    const on = req.body.active === '1';
-    await pool.query('UPDATE discounts SET is_active = $1 WHERE id = $2', [on, id]);
-    await audit(req, 'discount_status', `Discount #${id}: ${on ? 'active' : 'inactive'}`);
-    flash(req, 'success', on ? 'Discount activated.' : 'Discount switched off.');
-    back(res, 'growth');
+    if (!id) { flash(req, 'error', 'Invalid promotion.'); return back(res, 'promos'); }
+    await pool.query('UPDATE promotions SET ends_at = GREATEST(now(), starts_at + interval \'1 second\') WHERE id = $1 AND ends_at > now()', [id]);
+    await audit(req, 'promotion_ended', `Promotion #${id}`);
+    flash(req, 'success', 'Promotion ended.');
+    back(res, 'promos');
+  }));
+
+  router.post('/operations/promotion-delete', need('operations'), wrap(async (req, res) => {
+    const id = posInt(req.body.id);
+    if (!id) { flash(req, 'error', 'Invalid promotion.'); return back(res, 'promos'); }
+    const used = await pool.query('SELECT 1 FROM requests r JOIN promotions p ON p.code = r.discount_code WHERE p.id = $1 LIMIT 1', [id]);
+    if (used.rowCount) { flash(req, 'error', 'Requests already received this discount, so it cannot be deleted. Use End now instead.'); return back(res, 'promos'); }
+    await pool.query('DELETE FROM promotions WHERE id = $1', [id]);
+    await audit(req, 'promotion_deleted', `Promotion #${id}`);
+    flash(req, 'success', 'Promotion deleted.');
+    back(res, 'promos');
   }));
 
   // ---------- branches (visible only while multi-branch mode is on in Settings) ----------

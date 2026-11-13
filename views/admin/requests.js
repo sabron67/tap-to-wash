@@ -143,8 +143,7 @@ function requestDetailPage(ctx, { r, items, payments = [], events, estimate, wa,
           <label class="field"><span>Subtotal before discount (${cur})</span><input type="number" step="0.01" min="0" name="total_amount" value="${r.subtotal_amount || r.total_amount}" id="totalInput"></label>
           <label class="field"><span>Paid so far (${cur})</span><input type="number" step="0.01" min="0" name="amount_paid" value="${r.amount_paid}"></label>
         </div>
-        <label class="field"><span>Discount code (optional)</span><input name="discount_code" value="${r.discount_code || ''}" maxlength="40" placeholder="Enter active promotion code"></label>
-        <div class="row-between">
+                <div class="row-between">
           ${estimate > 0 ? html`<button type="button" class="link-btn" data-fill="#totalInput" data-value="${estimate}">Use estimate: ${money(estimate, cur)}</button>` : html`<span class="muted small">Set prices on categories to get estimates.</span>`}
           <span class="muted small">Current discount: ${money(r.discount_amount || 0, cur)} · Balance: <strong>${money(balance, cur)}</strong></span>
         </div>
