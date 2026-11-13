@@ -28,6 +28,8 @@ Payments are intentionally manual for now (admin records the total and amount pa
 
 ## Operations centre
 
+**Admin → Reports → Business figures** (owner and manager): enter your real machines, load size, rent, wages, water, power, prices and VAT once. They are stored in the `business_figures` table (one row per figure, created and filled with sample values by `npm run db:init`). The Excel report's Inputs sheet is filled from them; anything not set is marked "Sample figure".
+
 **Admin → Inventory** (owner and manager only; cashiers, riders and attendants cannot open it or see costs):
 
 - **Supplies:** detergents, packaging etc. with unit, category, supplier, reorder level and average cost. Low-stock alerts.

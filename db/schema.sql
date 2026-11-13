@@ -426,3 +426,55 @@ DO $$ BEGIN
     ALTER TABLE inventory_items ALTER COLUMN unit_cost TYPE NUMERIC(14,4);
   END IF;
 END $$;
+
+-- ---------- Business figures (used by the Excel report's Inputs sheet; edited under Reports > Business figures) ----------
+-- value holds the figure (percentages as fractions, 16% = 0.16). is_set = FALSE means "still the sample value".
+CREATE TABLE IF NOT EXISTS business_figures (
+  key        TEXT PRIMARY KEY,
+  section    TEXT          NOT NULL,
+  label      TEXT          NOT NULL,
+  kind       TEXT          NOT NULL DEFAULT 'money' CHECK (kind IN ('int','dec','money','pct')),
+  value      NUMERIC(14,4),
+  sample     NUMERIC(14,4),
+  is_set     BOOLEAN       NOT NULL DEFAULT FALSE,
+  sort_order INTEGER       NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ   NOT NULL DEFAULT now(),
+  updated_by INTEGER       REFERENCES admins(id) ON DELETE SET NULL
+);
+INSERT INTO business_figures (key, section, label, kind, value, sample, sort_order)
+SELECT v.key, v.section, v.label, v.kind, v.sample, v.sample, v.sort_order FROM (VALUES
+  ('price_kg', 'Pricing', 'Average selling price per kg', 'money', NULL::numeric, 1),
+  ('vat', 'Pricing', 'VAT rate (%)', 'pct', 0.16, 2),
+  ('discount', 'Pricing', 'Standard discount on quotes (%)', 'pct', 0, 3),
+  ('delivery_fee', 'Pricing', 'Delivery fee charged per order', 'money', 100, 4),
+  ('target', 'Pricing', 'Target profit margin (%)', 'pct', 0.3, 5),
+  ('machines', 'Capacity', 'Number of washing machines', 'int', 2, 6),
+  ('cap_kg', 'Capacity', 'Capacity of one load (kg)', 'dec', 10, 7),
+  ('loads_day', 'Capacity', 'Loads per machine per day', 'dec', 6, 8),
+  ('days', 'Capacity', 'Working days per month', 'int', 26, 9),
+  ('util', 'Capacity', 'Expected utilisation of capacity (%)', 'pct', 0.7, 10),
+  ('exp_kg', 'Capacity', 'Expected kilograms washed per month', 'dec', 1500, 11),
+  ('kg_order', 'Capacity', 'Average kg per order', 'dec', 6, 12),
+  ('water_l_load', 'Variable costs', 'Water used per load (litres)', 'dec', 60, 13),
+  ('water_m3', 'Variable costs', 'Water price ( per cubic metre)', 'money', 150, 14),
+  ('kwh_load', 'Variable costs', 'Electricity per load (kWh)', 'dec', 2.5, 15),
+  ('kwh_price', 'Variable costs', 'Electricity price ( per kWh)', 'money', 28, 16),
+  ('det_load', 'Variable costs', 'Detergent and softener per load', 'money', 25, 17),
+  ('pack_kg', 'Variable costs', 'Packaging per kg', 'money', 5, 18),
+  ('del_order', 'Variable costs', 'Delivery cost per order', 'money', 150, 19),
+  ('fee_pct', 'Variable costs', 'Payment fees (% of sales)', 'pct', 0.01, 20),
+  ('rent', 'Fixed costs per month', 'Rent', 'money', 20000, 21),
+  ('wages', 'Fixed costs per month', 'Wages and salaries', 'money', 30000, 22),
+  ('util_fixed', 'Fixed costs per month', 'Fixed utilities and internet', 'money', 3000, 23),
+  ('marketing', 'Fixed costs per month', 'Marketing', 'money', 2000, 24),
+  ('maint', 'Fixed costs per month', 'Machine repairs and servicing', 'money', 2000, 25),
+  ('other_fixed', 'Fixed costs per month', 'Other fixed costs', 'money', 2000, 26),
+  ('machine_cost', 'Equipment', 'Cost of one machine', 'money', 150000, 27),
+  ('life', 'Equipment', 'Useful life of a machine (months)', 'int', 60, 28)
+) AS v(key, section, label, kind, sample, sort_order)
+ON CONFLICT (key) DO NOTHING;
+
+-- Carry over any figures saved by the earlier version (stored as fig_<key> in settings), then remove the old rows.
+UPDATE business_figures b SET value = s.value::numeric, is_set = TRUE, updated_at = now()
+  FROM settings s WHERE s.key = 'fig_' || b.key AND NOT b.is_set AND s.value ~ '^[0-9]+(\.[0-9]+)?$';
+DELETE FROM settings WHERE key LIKE 'fig\_%';

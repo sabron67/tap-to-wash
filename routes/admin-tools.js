@@ -6,6 +6,7 @@ const { wrap, cleanText } = require('../lib/helpers');
 const { audit } = require('../lib/audit');
 const { SLOTS, mediaVersions } = require('../lib/media');
 const { buildWorkbook } = require('../lib/report');
+const { getFigures, saveFigures } = require('../lib/figures');
 const { reportsPage } = require('../views/admin/reports');
 const { photosPage } = require('../views/admin/photos');
 const { activityPage } = require('../views/admin/activity');
@@ -61,7 +62,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     wrap(async (req, res) => {
       const { from, to, today } = await resolveRange(req.query);
       const DR = RANGE.replace(/\br\./g, 'd.');
-      const [ctx, k, del] = await Promise.all([
+      const [ctx, k, del, figures] = await Promise.all([
         buildCtx(req),
         pool.query(
           `SELECT COUNT(*)::int AS requests,
@@ -74,9 +75,26 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
         ),
         // Deleted requests: their money still counts as billed and collected.
         pool.query(`SELECT COALESCE(SUM(d.total_amount), 0) AS billed, COALESCE(SUM(d.amount_paid), 0) AS collected FROM deleted_requests d WHERE ${DR}`, [from, to]),
+        getFigures(),
       ]);
       const kpi = { ...k.rows[0], billed: Number(k.rows[0].billed) + Number(del.rows[0].billed), collected: Number(k.rows[0].collected) + Number(del.rows[0].collected) };
-      res.view(reportsPage(ctx, { from, to, kpi, presets: presets(today) }));
+      res.view(reportsPage(ctx, { from, to, kpi, presets: presets(today), figures }));
+    })
+  );
+
+  // Business figures used by the report's Inputs sheet (owner and manager, same permission as Reports).
+  router.post(
+    '/reports/figures',
+    need('reports'),
+    wrap(async (req, res) => {
+      const r = await saveFigures(req.body, req.session.admin.id);
+      if (r.problems.length) {
+        flash(req, 'error', `Nothing was saved. ${r.problems.slice(0, 3).join(' ')}${r.problems.length > 3 ? ` (and ${r.problems.length - 3} more)` : ''}`);
+      } else {
+        await audit(req, 'report_figures_saved', `${r.saved} business figures saved`);
+        flash(req, 'success', 'Business figures saved. The next Excel report will use them.');
+      }
+      res.redirect('/admin/reports#figures');
     })
   );
 
@@ -86,7 +104,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     wrap(async (req, res) => {
       const { from, to } = await resolveRange(req.query);
       const DR = RANGE.replace(/\br\./g, 'd.');
-      const [settings, reqs, itemRows, custs, cats, delRows] = await Promise.all([
+      const [settings, reqs, itemRows, custs, cats, delRows, figures] = await Promise.all([
         getSettings(),
         pool.query(
           `SELECT r.ref_code, to_char((r.created_at AT TIME ZONE 'Africa/Nairobi')::date, 'YYYY-MM-DD') AS day, r.status, r.location_description,
@@ -116,6 +134,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
              FROM deleted_requests d WHERE ${DR} AND d.amount_paid > 0 ORDER BY d.created_at DESC LIMIT 1000`,
           [from, to]
         ),
+        getFigures(),
       ]);
       reqs.rows.push(...delRows.rows); // money earned on deleted requests stays in the report
       const truncated = { requests: reqs.rows.length > 5000, items: itemRows.rows.length > 10000, customers: custs.rows.length > 2000 };
@@ -128,6 +147,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
         customers: custs.rows.slice(0, 2000),
         categories: cats.rows,
         truncated,
+        figures,
       });
       const buf = await wb.xlsx.writeBuffer();
       await audit(req, 'report_download', `Excel report ${from} to ${to}`);
