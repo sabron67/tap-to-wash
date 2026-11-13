@@ -16,7 +16,8 @@ ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.pn
 <link rel="stylesheet" href="/css/style.css">
 <link rel="stylesheet" href="/css/customer-premium.css">
 <link rel="stylesheet" href="/css/receipt.css">
-<script src="/js/toast.js" defer></script>`;
+<script src="/js/toast.js" defer></script>
+<script src="/js/dialog.js" defer></script>`;
 }
 
 function publicLayout(ctx, { title = '', body, scripts = '', bodyClass = '' }) {

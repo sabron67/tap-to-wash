@@ -68,12 +68,7 @@
     setInterval(tick, 3000);
   }
 
-  // Confirm before destructive actions
-  document.querySelectorAll('form[data-confirm]').forEach(function (form) {
-    form.addEventListener('submit', function (e) {
-      if (!window.confirm(form.getAttribute('data-confirm'))) e.preventDefault();
-    });
-  });
+  // Confirm before destructive actions: handled by /js/dialog.js (themed dialog)
 
   // "Use estimate" style helpers
   document.querySelectorAll('[data-fill]').forEach(function (btn) {

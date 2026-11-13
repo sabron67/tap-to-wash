@@ -381,7 +381,7 @@ textarea { resize: vertical; }
 .flash.hide { opacity: 0; transform: translateY(-10px) scale(.98); pointer-events: none; }
 @keyframes tc-in { from { opacity: 0; transform: translateY(-14px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes tc-run { from { transform: scaleX(1); } to { transform: scaleX(0); } }
-@media (max-width: 560px) { .flash.toast-card { right: 50%; transform: translateX(50%); } .flash.toast-card.hide { transform: translateX(50%) translateY(-10px); } @keyframes tc-in { from { opacity: 0; transform: translateX(50%) translateY(-14px); } to { opacity: 1; transform: translateX(50%); } } }
+@media (max-width: 560px) { .flash.toast-card { left: .65rem; right: .65rem; width: auto; } }
 @media (prefers-reduced-motion: reduce) { .flash.toast-card, .tc-bar { animation: none; } }
 
 /* Inline messages (forms): same icon-chip look, so errors read well without colour */
@@ -1095,7 +1095,25 @@ button, a, input, select, summary, .cat-card, .pick { touch-action: manipulation
 .bill-ok { align-items: center; }
 
 /* official M-Pesa logo file (public/img/mpesa.*): on a white chip so it reads on dark mode too */
-img.mpesa-badge.logo { box-sizing: content-box; background: #fff; padding: .12rem .45rem; border-radius: 7px; object-fit: contain; }
+/* The logo file is trimmed to the artwork, and its size is fixed here so it can never stretch in a flex row. */
+img.mpesa-badge.logo { box-sizing: border-box; flex: none; height: 1.9rem; width: auto; max-width: none; aspect-ratio: 640 / 242; padding: .22rem .5rem; background: #fff; border: 1px solid var(--line); border-radius: 8px; object-fit: contain; }
+img.mpesa-badge.logo.sm { height: 1.45rem; padding: .14rem .38rem; border-radius: 6px; }
+.pay-box h4 > span, .h-with-badge > span { min-width: 0; }
+
+/* ---------- themed confirm dialog (replaces the browser's window.confirm) ---------- */
+.dlg { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 1rem; animation: fade .16s ease; }
+.dlg.out { opacity: 0; transition: opacity .16s ease; }
+.dlg-backdrop { position: absolute; inset: 0; background: var(--overlay); }
+.dlg-card { position: relative; width: min(24rem, 100%); padding: 1.5rem 1.3rem 1.2rem; text-align: center; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-up); animation: rise-in .2s var(--ease); }
+.dlg-icon { display: inline-grid; place-items: center; width: 3.1rem; height: 3.1rem; margin-bottom: .7rem; border-radius: 50%; color: var(--accent-ink); background: color-mix(in srgb, var(--brand) 18%, var(--surface)); }
+.dlg-icon.is-danger { color: var(--err-line); background: var(--err-bg); }
+.dlg-icon .ic { width: 1.5rem; height: 1.5rem; }
+.dlg-card h3 { margin: 0 0 .35rem; font-size: 1.2rem; letter-spacing: -.02em; }
+.dlg-card p { margin: 0 0 1.2rem; color: var(--muted); font-size: .95rem; overflow-wrap: anywhere; }
+.dlg-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.dlg-actions .btn { min-height: 46px; white-space: normal; }
+@media (max-width: 560px) { .dlg { place-items: end center; padding: .6rem .6rem calc(.6rem + env(safe-area-inset-bottom)); } }
+@media (prefers-reduced-motion: reduce) { .dlg, .dlg-card { animation: none; } }
 
 /* ---------- sharper home: layered hero, floating cards, soft blobs, tinted service rows ---------- */
 .home-head { overflow: clip; }

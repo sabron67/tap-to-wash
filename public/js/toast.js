@@ -52,6 +52,31 @@
     start();
   }
 
+  // window.ttwToast('Message', 'error' | 'success' | 'warn' | 'info') shows a themed toast from any script.
+  window.ttwToast = function (message, type) {
+    var el = document.createElement('div');
+    el.className = 'flash ' + (type || 'info');
+    el.textContent = message;
+    document.body.appendChild(el);
+    build(el);
+    positionToasts();
+  };
+
+  // Replace the browser's own "Please fill out this field" bubble with a themed toast.
+  var shown = false;
+  document.addEventListener('invalid', function (e) {
+    var field = e.target;
+    e.preventDefault(); // hides the native bubble
+    if (shown) return;
+    shown = true;
+    setTimeout(function () { shown = false; }, 600);
+    var wrap = field.closest && field.closest('label, .field');
+    var label = wrap && wrap.querySelector('span') ? wrap.querySelector('span').textContent.replace('*', '').trim() : (field.getAttribute('aria-label') || field.placeholder || field.name || '');
+    var why = field.validationMessage || 'This field needs attention.';
+    try { field.focus({ preventScroll: false }); } catch (err) { /* hidden field */ }
+    window.ttwToast(label ? label + ': ' + why : why, 'error');
+  }, true);
+
   function init() {
     var messages = Array.prototype.slice.call(document.querySelectorAll('.flash'));
     messages.forEach(build);

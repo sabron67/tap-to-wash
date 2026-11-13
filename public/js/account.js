@@ -1,10 +1,6 @@
 (function () {
   'use strict';
-  document.querySelectorAll('form[data-confirm]').forEach(function (form) {
-    form.addEventListener('submit', function (e) {
-      if (!window.confirm(form.getAttribute('data-confirm'))) e.preventDefault();
-    });
-  });
+  // data-confirm forms are handled by /js/dialog.js (themed dialog)
   document.querySelectorAll('table.table').forEach(function (t) {
     var heads = Array.prototype.map.call(t.querySelectorAll('thead th'), function (th) { return th.textContent.trim(); });
     t.querySelectorAll('tbody tr').forEach(function (tr) {
