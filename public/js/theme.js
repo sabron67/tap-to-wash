@@ -14,11 +14,6 @@
     }
   }
 
-  function effective(mode) {
-    if (mode === 'light' || mode === 'dark') return mode;
-    return media && media.matches ? 'dark' : 'light';
-  }
-
   function paint(mode) {
     if (mode === 'system') root.removeAttribute('data-theme');
     else root.setAttribute('data-theme', mode);
@@ -27,9 +22,15 @@
       b.setAttribute('aria-pressed', b.getAttribute('data-theme-set') === mode ? 'true' : 'false');
     });
 
-    // keep the browser bar colour in step with the page
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', effective(mode) === 'dark' ? '#101C18' : '#F5F8F6');
+    // keep the browser bar colour in step with the page: a manual choice sets both
+    // theme-color tags to that colour, System restores the per-scheme defaults
+    document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+      var light = m.getAttribute('data-light');
+      var dark = m.getAttribute('data-dark');
+      var own = light || dark;
+      if (mode === 'system') m.setAttribute('content', own);
+      else m.setAttribute('content', mode === 'dark' ? '#0C1511' : '#F3FAF6');
+    });
   }
 
   function save(mode) {

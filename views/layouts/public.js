@@ -5,13 +5,14 @@ function head(title, settings, description) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title ? `${title} · ` : ''}${settings.business_name}</title>
 <meta name="description" content="${description || settings.tagline}">
-<meta name="theme-color" content="#123C32" data-dynamic>
+<meta name="theme-color" content="#F3FAF6" media="(prefers-color-scheme: light)" data-light="#F3FAF6">
+<meta name="theme-color" content="#0C1511" media="(prefers-color-scheme: dark)" data-dark="#0C1511">
 <script src="/js/boot.js"></script>
 <link rel="icon" href="/site-icon${settings.icon_v ? `?v=${settings.icon_v}` : ''}">
 ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${settings.icon_v}">` : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
 <link rel="stylesheet" href="/css/customer-premium.css">
 <link rel="stylesheet" href="/css/receipt.css">

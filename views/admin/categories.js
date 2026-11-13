@@ -49,7 +49,7 @@ function categoriesPage(ctx, { rows, versions = {} }) {
   <section class="cat-admin">
     ${rows.length
       ? rows.map(
-          (c) => html`<article class="glass pad cat-admin-card ${c.is_active ? '' : 'is-off'}" style="--c:#087F8C">
+          (c) => html`<article class="glass pad cat-admin-card ${c.is_active ? '' : 'is-off'}" style="--c:var(--accent)">
             <div class="cat-admin-top">
               <img class="category-admin-thumb" src="${categoryImageUrl(c, versions)}" alt="${c.name}" loading="lazy">
               <div class="grow">

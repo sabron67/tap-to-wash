@@ -1,13 +1,13 @@
 /* Receipt look (app-style): banner -> rounded sheet -> status chips -> item rows -> total card -> pill buttons.
    Used by the standalone receipt page (body.rc-solo) and the "Request received" screen after ordering (.rc-embed).
-   Colours come from the site theme variables; .rc-solo uses the TapToWash forest green and fresh mint palette. */
+   Colours come from the site theme variables; .rc-solo uses the Tap to Wash green and mint-white palette. */
 body.rc-solo {
   color-scheme: light;
-  --bg: #F5F8F6; --bg-alt: #EAF5EE; --surface: #ffffff; --surface-2: #F1F7F3; --line: #DCE8E1; --line-2: #C4D6CB;
-  --text: #172B26; --muted: #718078; --accent: #123C32; --accent-h: #1B5949; --accent-ink: #17634E; --on-accent: #FFFFFF; --focus: #39A935;
-  --footer-bg: #123C32; --footer-tx: #F5FBF7; --shadow-up: 0 12px 30px rgba(18, 60, 50, .12); --ease: cubic-bezier(.22, .61, .36, 1);
+  --bg: #F3FAF6; --bg-alt: #E6F5EC; --surface: #ffffff; --surface-2: #EDF7F1; --line: #DDEBE2; --line-2: #C5DACD;
+  --text: #0B3331; --muted: #566D66; --accent: #00893A; --accent-h: #00742F; --accent-ink: #006F2E; --on-accent: #FFFFFF; --focus: #00A63E;
+  --footer-bg: #0B3331; --footer-tx: #EAF5EE; --shadow-up: 0 12px 30px rgba(11, 51, 49, .14); --ease: cubic-bezier(.22, .61, .36, 1);
   margin: 0; background: var(--bg-alt); color: var(--text);
-  font: 15px/1.5 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; -webkit-font-smoothing: antialiased;
+  font: 15px/1.5 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; -webkit-font-smoothing: antialiased;
 }
 .rc, .rc * { box-sizing: border-box; }
 .rc { text-align: left; background: var(--bg); color: var(--text); }
@@ -79,7 +79,7 @@ body.rc-solo {
 .rc-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 .rc-actions > * { flex: 1 1 auto; }
 .rc-solo .rc-actions { position: sticky; bottom: 0; margin: 0; background: var(--surface); border-top: 1px solid var(--line); padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: auto 1fr; }
-.rc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; border-radius: 999px; padding: 13px 18px; font: 600 .92rem/1 'Poppins', system-ui, sans-serif; text-decoration: none; cursor: pointer; border: 1.5px solid var(--accent); }
+.rc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; border-radius: 999px; padding: 13px 18px; font: 600 .92rem/1 'Inter', system-ui, sans-serif; text-decoration: none; cursor: pointer; border: 1.5px solid var(--accent); }
 .rc-btn.ghost { background: var(--surface); color: var(--accent-h); }
 .rc-btn.primary { background: var(--accent); color: var(--on-accent); }
 .rc-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }

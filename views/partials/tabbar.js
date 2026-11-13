@@ -9,8 +9,8 @@ function publicTabbar(ctx, active = '', onHome = false) {
     ${tab('home', '/', 'house', 'Home')}
     ${tab('services', '/#categories', 'shirt', 'Services')}
     ${onHome
-      ? html`<button type="button" class="tab-item tab-main" data-open-wizard aria-label="Tap to wash">${icon('droplets')}<span>Order</span></button>`
-      : html`<a class="tab-item tab-main" href="/?start=1" aria-label="Tap to wash">${icon('droplets')}<span>Order</span></a>`}
+      ? html`<button type="button" class="tab-item tab-main" data-open-wizard aria-label="New order">${icon('plus')}<span>New order</span></button>`
+      : html`<a class="tab-item tab-main" href="/?start=1" aria-label="New order">${icon('plus')}<span>New order</span></a>`}
     ${tab('track', '/track', 'map-pin', 'Track')}
     ${ctx.account ? tab('account', '/account', 'user-round', 'Account') : tab('account', '/account/login', 'user-round', 'Sign in')}
   </nav>`;

@@ -19,7 +19,7 @@ function receiptPage(ctx, { request, items, backHref, backLabel }) {
 
   const priced = (i) => i.price != null && Number(i.price) > 0;
   const weighed = (i) => i.measured_qty != null && i.line_total != null;
-  return html`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="robots" content="noindex,nofollow"><title>Receipt ${request.ref_code}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/receipt.css"></head><body class="rc-solo"><div class="rc">
+  return html`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="robots" content="noindex,nofollow"><title>Receipt ${request.ref_code}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/css/receipt.css"></head><body class="rc-solo"><div class="rc">
   <header class="rc-banner">
     <div class="rc-brand"><span class="rc-mark">${icon('washing-machine')}</span><div><b>${s.business_name}</b>${s.address ? html`<small>${s.address}</small>` : ''}${s.phone || s.email ? html`<small>${[s.phone, s.email].filter(Boolean).join(' · ')}</small>` : ''}</div></div>
     <span class="rc-ref">${request.ref_code}</span>

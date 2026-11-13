@@ -22,7 +22,7 @@ function nav(s, account) {
 
 function categoryCard(c, currency) {
   const price = c.price !== null && c.price !== undefined ? `Start from ${money(c.price, currency)} / ${c.unit}` : 'Price on request';
-  return html`<article class="cat-card svc-card" data-id="${c.id}" data-name="${String(c.name).toLowerCase()}" style="--c:#087F8C" tabindex="0" role="button" aria-pressed="false" aria-label="Select ${c.name}">
+  return html`<article class="cat-card svc-card" data-id="${c.id}" data-name="${String(c.name).toLowerCase()}" style="--c:var(--accent)" tabindex="0" role="button" aria-pressed="false" aria-label="Select ${c.name}">
     <div class="svc-pic"><img class="svc-photo" src="${c.imageUrl || '/img/categories/default.webp'}" alt="${c.name}" loading="lazy" decoding="async"><span class="cat-icon svc-fallback-icon">${icon(categoryIconName(c.icon))}</span></div>
     <div class="svc-body">
       <h3>${c.name}</h3>
@@ -188,7 +188,7 @@ function homePage(ctx, categories) {
     description: c.description,
     icon: svg(categoryIconName(c.icon)),
     imageUrl: c.imageUrl || '/img/categories/default.webp',
-    color: '#087F8C',
+    color: 'var(--accent)',
     price: c.price === null ? null : Number(c.price),
     unit: c.unit,
   }));
