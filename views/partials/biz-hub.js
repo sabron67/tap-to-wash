@@ -9,9 +9,10 @@ function bizHub(ctx, { active, from, to, presets, snap }) {
   const range = `from=${from}&to=${to}`;
   const tabs = [
     ['reports', '/admin/reports', 'file-spreadsheet', 'Reports', 'reports'],
+    ['takings', '/admin/takings', 'wallet', 'Daily takings', 'reports'],
     ['inventory', '/admin/inventory', 'package', 'Inventory & profit', 'inventory'],
   ].filter((t) => ctx.can(t[4]));
-  const base = active === 'reports' ? '/admin/reports' : '/admin/inventory';
+  const base = { reports: '/admin/reports', takings: '/admin/takings' }[active] || '/admin/inventory';
   const tile = (href, ic, label, value, tone, hint = '') =>
     html`<a class="hub-tile tone-${tone}" href="${href}"><span class="hub-ico">${icon(ic)}</span><span class="hub-val">${value}</span><span class="hub-lab">${label}</span>${hint ? html`<span class="hub-hint">${hint}</span>` : ''}</a>`;
   const showInv = ctx.can('inventory');

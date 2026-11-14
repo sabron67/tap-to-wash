@@ -9,6 +9,9 @@ const { buildWorkbook } = require('../lib/report');
 const { snapshot } = require('../lib/finance');
 const { getFigures, saveFigures } = require('../lib/figures');
 const { reportsPage } = require('../views/admin/reports');
+const { takingsPage } = require('../views/admin/takings');
+const { getTakings } = require('../lib/takings');
+const { sendWorkbook } = require('../lib/xlsx-export');
 const { photosPage } = require('../views/admin/photos');
 const { activityPage } = require('../views/admin/activity');
 
@@ -56,6 +59,67 @@ async function resolveRange(q) {
 }
 
 module.exports = function mount(router, { buildCtx, flash, need }) {
+  /* ---------- daily takings ---------- */
+  router.get(
+    '/takings',
+    need('reports'),
+    wrap(async (req, res) => {
+      const { from, to, today } = await resolveRange(req.query);
+      const [ctx, data, snap] = await Promise.all([buildCtx(req), getTakings(from, to), snapshot(from, to)]);
+      res.view(takingsPage(ctx, { from, to, presets: presets(today), snap, data }));
+    })
+  );
+
+  router.get(
+    '/takings/download',
+    need('reports'),
+    wrap(async (req, res) => {
+      const { from, to } = await resolveRange(req.query);
+      const [settings, data] = await Promise.all([getSettings(), getTakings(from, to)]);
+      const cur = settings.currency;
+      const sub = `${settings.business_name || 'Tap to Wash'} - ${from} to ${to} - amounts in ${cur}`;
+      const days = [...data.days].sort((a, b) => (a.day < b.day ? -1 : 1));
+      await audit(req, 'takings_download', `Daily takings ${from} to ${to}`);
+      await sendWorkbook(res, `Daily takings ${from} to ${to}.xlsx`, {
+        title: 'Daily takings',
+        sheets: [
+          {
+            name: 'Daily takings', title: 'Daily takings by payment method', subtitle: sub, landscape: false,
+            columns: [
+              { header: 'Date', width: 16, type: 'date' },
+              { header: 'M-Pesa', width: 16, type: 'money' },
+              { header: 'Cash', width: 16, type: 'money' },
+              { header: 'Total received', width: 18, type: 'money', formula: (r) => `=B${r}+C${r}`, result: (v) => Number(v[1]) + Number(v[2]) },
+              { header: 'Unpaid (orders made that day)', width: 22, type: 'money', wrap: true },
+            ],
+            rows: days.map((d) => [d.day, d.mpesa, d.cash, 0, d.unpaid]),
+            totals: [{ col: 1, kind: 'sum' }, { col: 2, kind: 'sum' }, { col: 3, kind: 'sum' }, { col: 4, kind: 'sum' }],
+          },
+          {
+            name: 'Payments', title: 'Payments received', subtitle: sub, landscape: true,
+            columns: [
+              { header: 'Time', width: 18, type: 'text' }, { header: 'Order', width: 16, type: 'text' }, { header: 'Customer', width: 24, type: 'text' },
+              { header: 'Method', width: 12, type: 'text' }, { header: 'M-Pesa code', width: 16, type: 'text' }, { header: 'Recorded by', width: 20, type: 'text' },
+              { header: 'Amount', width: 14, type: 'money' },
+            ],
+            rows: data.payments.map((p) => [p.at, p.ref_code, p.customer, p.method === 'mpesa' ? 'M-Pesa' : 'Cash', p.method === 'mpesa' ? p.reference : '', p.recorded_by, p.amount]),
+            totals: [{ col: 6, kind: 'sum' }],
+          },
+          {
+            name: 'Unpaid orders', title: 'Unpaid orders', subtitle: sub, landscape: true,
+            columns: [
+              { header: 'Order date', width: 14, type: 'date' }, { header: 'Order', width: 16, type: 'text' }, { header: 'Customer', width: 24, type: 'text' },
+              { header: 'Phone', width: 16, type: 'text' }, { header: 'Billed', width: 14, type: 'money' }, { header: 'Paid', width: 14, type: 'money' },
+              { header: 'Balance', width: 14, type: 'money', formula: (r) => `=MAX(E${r}-F${r},0)`, result: (v) => Math.max(0, Number(v[4]) - Number(v[5])) },
+            ],
+            rows: data.unpaidOrders.map((o) => [o.day, o.ref_code, o.customer, o.phone, o.total_amount, o.amount_paid, 0]),
+            totals: [{ col: 4, kind: 'sum' }, { col: 5, kind: 'sum' }, { col: 6, kind: 'sum' }],
+          },
+        ],
+      });
+    })
+  );
+
   /* ---------- reports ---------- */
   router.get(
     '/reports',
