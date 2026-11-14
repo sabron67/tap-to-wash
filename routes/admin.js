@@ -134,6 +134,10 @@ function mountLogin(r, portal, paths) {
     wrap(async (req, res, next) => {
       const email = cleanText(req.body.email, 120).toLowerCase();
       const password = String(req.body.password || '').slice(0, 200);
+      // Signing in means accepting the Terms of Service: refuse before anything else (and without counting a failed attempt).
+      if (req.body.accept !== '1') {
+        return res.status(400).view(loginPage(await buildCtx(req), { error: 'Please accept the Terms of Service to sign in.', email, portal }));
+      }
       const { rows } = await pool.query(
         'SELECT id, name, email, role, is_active, password_hash, failed_attempts, locked_until, must_change_password, totp_enabled FROM admins WHERE email = $1',
         [email]
@@ -183,10 +187,10 @@ function mountLogin(r, portal, paths) {
       if (a.totp_enabled) {
         // Password is right but the account has two-step verification: hold the sign-in until the code is checked.
         // Nothing is granted yet; the pending state lives in this browser's session only and expires in 5 minutes.
-        req.session.pending2fa = { id: a.id, portal, at: Date.now(), tries: 0 };
+        req.session.pending2fa = { id: a.id, portal, at: Date.now(), tries: 0, terms: true };
         return req.session.save((e) => (e ? next(e) : res.redirect(portal === 'staff' ? '/staff/login/2fa' : '/admin/login/2fa')));
       }
-      return finishLogin(req, res, next, a, portal);
+      return finishLogin(req, res, next, a, portal, ' - accepted the Terms');
     })
   );
 
@@ -231,7 +235,7 @@ function mountLogin(r, portal, paths) {
         return res.status(401).view(challengePage(await buildCtx(req), { portal, email: a.email, error: 'That code is not right or has already been used. Try the next code from your app.' }));
       }
       if (how === 'recovery') await audit(req, 'twofa_recovery_used', 'Signed in with a recovery code', { id: a.id, email: a.email });
-      return finishLogin(req, res, next, a, portal, how === 'recovery' ? ' (recovery code)' : ' (two-step)');
+      return finishLogin(req, res, next, a, portal, (how === 'recovery' ? ' (recovery code)' : ' (two-step)') + (p.terms ? ' - accepted the Terms' : ''));
     })
   );
 }

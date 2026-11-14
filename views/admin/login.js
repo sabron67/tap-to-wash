@@ -18,7 +18,7 @@ function loginPage(ctx, { error = '', email = '', portal = 'admin' } = {}) {
 <body class="admin login-page">
 <div class="theme-float">${themeSwitch()}</div>
 <main class="login-wrap">
-  <form class="login-card glass-strong" method="post" action="${c.action}">
+  <form class="login-card glass-strong" method="post" action="${c.action}" data-terms-gate>
     ${csrfField(ctx)}
     <h1>${s.business_name}</h1>
     <p class="muted">${c.sub}</p>
@@ -26,14 +26,17 @@ function loginPage(ctx, { error = '', email = '', portal = 'admin' } = {}) {
     ${error ? html`<div class="flash error">${error}</div>` : ''}
     <label class="field"><span>Email</span><input type="email" name="email" value="${email}" required autocomplete="username" autofocus></label>
     <label class="field"><span>Password</span><input type="password" name="password" required autocomplete="current-password"></label>
+    <label class="check"><input type="checkbox" name="accept" value="1" required><span>I accept the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and have read the <a href="/privacy" target="_blank" rel="noopener">Privacy Notice</a>.</span></label>
     <p class="forgot-row"><a class="link" href="/admin/forgot">Forgot password?</a></p>
     <button class="btn btn-primary btn-block btn-lg" type="submit">Sign in</button>
+    <p class="terms-hint muted small" data-terms-hint>Tick the box above to sign in.</p>
     <p class="muted small center"><a class="link" href="${c.other}">${c.otherText}</a></p>
     <a class="back-link" href="/">${icon('arrow-left')} Back to website</a>
   </form>
 </main>
 <script src="/js/theme.js"></script>
 <script src="/js/password.js"></script>
+<script src="/js/terms-gate.js"></script>
 </body>
 </html>`;
 }

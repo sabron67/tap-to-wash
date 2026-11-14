@@ -126,6 +126,10 @@ router.post(
   wrap(async (req, res, next) => {
     const email = cleanText(req.body.email, 120).toLowerCase();
     const password = String(req.body.password || '').slice(0, 200);
+    // Signing in means accepting the Terms of Service: refuse before anything else (and without counting a failed attempt).
+    if (req.body.accept !== '1') {
+      return res.status(400).view(authPage(await pubCtx(req), { mode: 'login', error: 'Please accept the Terms of Service to sign in.', values: { email }, next: safeNext(req.body.next) }));
+    }
     const { rows } = await pool.query('SELECT id, name, email, is_active, password_hash, failed_attempts, locked_until FROM accounts WHERE email = $1', [email]);
     const a = rows[0];
     const match = await bcrypt.compare(password, a ? a.password_hash : DUMMY_HASH);
@@ -141,7 +145,8 @@ router.post(
       return fail(401, 'Incorrect email or password.');
     }
     if (!a.is_active) return fail(403, 'This account has been disabled. Please contact us.');
-    await pool.query('UPDATE accounts SET failed_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = $1', [a.id]);
+    const termsNow = Number((await getSettings()).terms_version) || 1;
+    await pool.query('UPDATE accounts SET failed_attempts = 0, locked_until = NULL, last_login_at = now(), terms_version = $2, accepted_at = now() WHERE id = $1', [a.id, termsNow]);
     startSession(req, res, next, a, req.body.remember === '1', safeNext(req.body.next) || '/account');
   })
 );

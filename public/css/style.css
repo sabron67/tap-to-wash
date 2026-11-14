@@ -1223,3 +1223,8 @@ img.mpesa-badge.logo.sm { height: 1.45rem; padding: .14rem .38rem; border-radius
 .seo-copy p, .seo-list { color: var(--muted); font-size: .92rem; max-width: 70ch; }
 .seo-list { padding-left: 1.2rem; display: grid; gap: .3rem; }
 .seo-list strong { color: var(--text); }
+
+/* Sign-in: Terms tick-box and the hint shown while it is unticked */
+.login-card .check, .login-card .terms-hint { text-align: left; }
+.terms-hint { margin: .5rem 0 0; }
+.btn[disabled][type="submit"] { cursor: not-allowed; }

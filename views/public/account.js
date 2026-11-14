@@ -12,7 +12,7 @@ const shell = (ctx, title, active, inner) =>
   publicLayout(ctx, {
     title,
     bodyClass: 'public',
-    scripts: html`<script src="/js/account.js"></script>`,
+    scripts: html`<script src="/js/account.js"></script><script src="/js/terms-gate.js"></script>`,
     body: html`${pubNav(ctx, active)}<main class="container narrow section" style="padding-top:calc(var(--nav-h) + 2.5rem)">${inner}</main>`,
   });
 
@@ -23,9 +23,9 @@ function authPage(ctx, { mode = 'login', error = '', values = {}, next = '' }) {
   <div class="section-head">
     <span class="pill">${icon('user-round')} Customer account</span>
     <h2>${signup ? 'Create your account' : 'Welcome back'}</h2>
-    <p class="muted">${signup ? 'Keep your orders, details and addresses in one place. It is optional - you can always order as a guest.' : 'Sign in to see your orders and order faster.'}</p>
+    <p class="muted">${signup ? 'Keep your orders, details and addresses in one place. You need an account to send a laundry request.' : 'Sign in to see your orders and order faster.'}</p>
   </div>
-  <form class="glass pad stack" method="post" action="/account/${signup ? 'signup' : 'login'}">
+  <form class="glass pad stack" method="post" action="/account/${signup ? 'signup' : 'login'}" data-terms-gate>
     ${csrfField(ctx)}
     <input type="hidden" name="next" value="${next}">
     ${signup ? html`<label class="field"><span>Your name <em>*</em></span><input name="name" value="${v('name')}" maxlength="80" required autocomplete="name"></label>` : ''}
@@ -35,13 +35,15 @@ function authPage(ctx, { mode = 'login', error = '', values = {}, next = '' }) {
     ${signup
       ? html`<label class="field"><span>Repeat password <em>*</em></span><input type="password" name="confirm" required minlength="10" autocomplete="new-password"></label>
          <label class="check"><input type="checkbox" name="accept" value="1" required><span>I accept the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and have read the <a href="/privacy" target="_blank" rel="noopener">Privacy Notice</a>. <em>*</em></span></label>`
-      : html`<label class="check"><input type="checkbox" name="remember" value="1"><span>Keep me signed in on this device</span></label>`}
+      : html`<label class="check"><input type="checkbox" name="remember" value="1"><span>Keep me signed in on this device</span></label>
+         <label class="check"><input type="checkbox" name="accept" value="1" required><span>I accept the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and have read the <a href="/privacy" target="_blank" rel="noopener">Privacy Notice</a>. <em>*</em></span></label>`}
+    <p class="terms-hint muted small" data-terms-hint>Tick the box above to ${signup ? 'create your account' : 'sign in'}.</p>
     ${error ? html`<p class="err show" role="alert">${error}</p>` : ''}
     ${!signup && ctx.flash && ctx.flash.type === 'success' ? html`<div class="flash success" role="status">${ctx.flash.msg}</div>` : ''}
     ${signup ? '' : html`<p class="forgot-row"><a class="link" href="/account/forgot">Forgot password?</a></p>`}
     <button class="btn btn-primary btn-block" type="submit">${signup ? 'Create account' : 'Sign in'}</button>
     <p class="muted small center">${signup ? html`Already have an account? <a class="link" href="/account/login">Sign in</a>` : html`New here? <a class="link" href="/account/signup">Create an account</a>`}<br>
-    <a class="link" href="/">Continue as a guest</a></p>
+    <a class="link" href="/">Back to website</a></p>
   </form>`;
   return shell(ctx, signup ? 'Create account' : 'Sign in', 'account', inner);
 }
