@@ -423,6 +423,7 @@
     state.sending = true;
     nextBtn.disabled = true;
     nextBtn.textContent = 'Sending…';
+    if (window.ttwBusy) window.ttwBusy(nextBtn, true);
     try {
       const res = await fetch('/api/requests', {
         method: 'POST',
@@ -461,6 +462,7 @@
       goStep('done');
     } catch (err) {
       showError(3, err.message);
+      if (window.ttwBusy) window.ttwBusy(nextBtn, false);
       nextBtn.disabled = false;
       nextBtn.innerHTML = ui.send + ' Send my request';
     } finally {

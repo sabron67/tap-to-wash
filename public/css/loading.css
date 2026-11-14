@@ -1,0 +1,64 @@
+/* Loading states: spinner, busy buttons, page-load bar, and upload / download progress cards.
+   Flat colours from the site theme (light and dark), black-and-white friendly, no inline styles (the CSP blocks them). */
+
+/* ---- Spinner: a ring with a rounded moving arc ---- */
+.ttw-spin { display: inline-block; width: 1.1em; height: 1.1em; flex: none; vertical-align: -.18em; color: inherit; }
+.ttw-spin svg { display: block; width: 100%; height: 100%; animation: ttw-rot .8s linear infinite; }
+.ttw-spin circle { fill: none; stroke: currentColor; stroke-width: 3; }
+.ttw-spin .trk { opacity: .22; }
+.ttw-spin .arc { stroke-linecap: round; stroke-dasharray: 20 60; animation: ttw-dash 1.4s ease-in-out infinite; }
+.ttw-spin.lg { width: 2.4rem; height: 2.4rem; color: var(--accent); }
+@keyframes ttw-rot { to { transform: rotate(360deg); } }
+@keyframes ttw-dash { 0% { stroke-dasharray: 6 74; } 50% { stroke-dasharray: 44 36; } 100% { stroke-dasharray: 6 74; } }
+
+/* ---- Busy buttons and links: spinner in place of the icon, no double clicks ---- */
+.is-busy { position: relative; pointer-events: none; cursor: progress; opacity: .85; }
+.is-busy > svg { display: none; } /* the button's own icon makes way for the spinner */
+.is-busy .ttw-spin { margin-right: .45rem; }
+
+/* ---- Page-load bar (new page opening) ---- */
+#ttwLoad { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 90; pointer-events: none; opacity: 0; overflow: hidden; transition: opacity .2s; }
+#ttwLoad.on { opacity: 1; }
+#ttwLoad i { position: absolute; top: 0; bottom: 0; left: 0; width: 40%; background: var(--accent); border-radius: 0 3px 3px 0; animation: ttw-bar 1.1s ease-in-out infinite; }
+@keyframes ttw-bar { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+
+/* ---- "Loading…" pill, shown only if a page is slow ---- */
+#ttwPill { position: fixed; left: 50%; top: 14px; z-index: 91; display: none; align-items: center; gap: .55rem; padding: .5rem .9rem; border-radius: 999px; background: var(--surface); color: var(--text); border: 1px solid var(--line); box-shadow: var(--shadow-up); font-weight: 600; font-size: .88rem; transform: translateX(-50%); }
+#ttwPill.on { display: inline-flex; animation: ttw-pop .2s ease-out; }
+#ttwPill .ttw-spin { color: var(--accent); }
+@keyframes ttw-pop { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* ---- Transfer cards: upload and download progress ---- */
+#ttwTransfers { position: fixed; right: 16px; bottom: 16px; z-index: 92; display: grid; gap: 10px; width: min(360px, calc(100vw - 32px)); pointer-events: none; }
+.ttw-xfer { pointer-events: auto; display: grid; grid-template-columns: auto 1fr auto; gap: .2rem .75rem; align-items: center; padding: .85rem .95rem; border-radius: 16px; background: var(--surface); color: var(--text); border: 1px solid var(--line); box-shadow: var(--shadow-up); animation: ttw-up .22s ease-out; }
+.ttw-xfer.hide { opacity: 0; transform: translateY(8px); transition: opacity .3s, transform .3s; }
+.ttw-xfer .ico { grid-row: 1 / span 3; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--surface-2); color: var(--accent-ink); }
+.ttw-xfer .ico svg { width: 20px; height: 20px; }
+.ttw-xfer .ttl { font-weight: 700; font-size: .92rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ttw-xfer .sub { grid-column: 2; font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ttw-xfer .x { grid-column: 3; grid-row: 1; width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.ttw-xfer .x:hover { background: var(--surface-2); color: var(--text); }
+.ttw-xfer .x svg { width: 16px; height: 16px; }
+.ttw-xfer .bar { grid-column: 2 / span 2; height: 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; position: relative; }
+.ttw-xfer .bar b { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); border-radius: 999px; transition: width .15s linear; }
+.ttw-xfer .bar b::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, rgba(255,255,255,.28) 0 6px, transparent 6px 12px); animation: ttw-stripe 1s linear infinite; }
+.ttw-xfer.wait .bar b { width: 38%; transition: none; animation: ttw-slide 1.2s ease-in-out infinite; }
+.ttw-xfer.done .bar b { width: 100%; }
+.ttw-xfer.done .bar b::after, .ttw-xfer.fail .bar b::after { animation: none; background: none; }
+.ttw-xfer.done .ico { color: var(--accent); }
+.ttw-xfer.fail { border-color: #b3261e; }
+.ttw-xfer.fail .ico { color: #b3261e; }
+.ttw-xfer.fail .bar b { background: #b3261e; width: 100%; }
+@keyframes ttw-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes ttw-stripe { to { background-position: 24px 0; } }
+@keyframes ttw-slide { 0% { margin-left: -38%; } 100% { margin-left: 100%; } }
+
+/* Keep the cards above the phone tab bar */
+@media (max-width: 900px) { #ttwTransfers { bottom: 84px; right: 12px; left: 12px; width: auto; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ttw-spin svg, .ttw-spin .arc, #ttwLoad i, .ttw-xfer .bar b::after, .ttw-xfer.wait .bar b { animation-duration: 3s; }
+  .ttw-xfer, #ttwPill.on { animation: none; }
+}
+/* Printing: never print the progress furniture */
+@media print { #ttwLoad, #ttwPill, #ttwTransfers { display: none !important; } }

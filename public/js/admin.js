@@ -78,6 +78,13 @@
     });
   });
 
+  // Uploads show a live progress card (see /js/loading.js); falls back to a plain request if that script is missing.
+  function sendImage(url, blob, type, label) {
+    var headers = { 'Content-Type': type, 'X-CSRF-Token': (document.getElementById('csrfToken') || {}).value || '' };
+    if (window.ttwUpload) return window.ttwUpload(url, blob, { headers: headers, title: label || 'Uploading picture…' });
+    return fetch(url, { method: 'POST', credentials: 'same-origin', headers: headers, body: blob }).then(function (r) { return r.json().catch(function () { return {}; }); });
+  }
+
   // Category photos: resize locally and store against the selected category.
   document.querySelectorAll('[data-category-image-upload]').forEach(function (btn) {
     var id = btn.getAttribute('data-category-image-upload');
@@ -104,11 +111,10 @@
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
           canvas.toBlob(function (blob) {
             if (!blob) return show('Could not prepare that image.');
-            btn.disabled = true;
-            fetch(BASE + '/admin/categories/' + id + '/image', { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'X-CSRF-Token': tokenEl ? tokenEl.value : '' }, body: blob })
-              .then(function (r) { return r.json().catch(function () { return {}; }); })
-              .then(function (out) { if (out.ok) window.location.reload(); else { btn.disabled = false; show(out.error || 'Upload failed.'); } })
-              .catch(function () { btn.disabled = false; show('Upload failed. Check your connection.'); });
+            btn.disabled = true; if (window.ttwBusy) window.ttwBusy(btn, true);
+            sendImage(BASE + '/admin/categories/' + id + '/image', blob, 'image/jpeg', 'Uploading category photo…')
+              .then(function (out) { if (out.ok) window.location.reload(); else { btn.disabled = false; if (window.ttwBusy) window.ttwBusy(btn, false); show(out.error || 'Upload failed.'); } })
+              .catch(function () { btn.disabled = false; if (window.ttwBusy) window.ttwBusy(btn, false); show('Upload failed. Check your connection.'); });
           }, 'image/jpeg', 0.86);
         };
         img.src = reader.result;
@@ -147,11 +153,10 @@
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         canvas.toBlob(function (blob) {
           if (!blob) return show('Could not prepare that picture.');
-          btn.disabled = true;
-          fetch(BASE + '/admin/photos/' + slot, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'X-CSRF-Token': tokenEl ? tokenEl.value : '' }, body: blob })
-            .then(function (r) { return r.json().catch(function () { return {}; }); })
-            .then(function (out) { if (out.ok) window.location.reload(); else { btn.disabled = false; show(out.error || 'Upload failed.'); } })
-            .catch(function () { btn.disabled = false; show('Upload failed. Check your connection.'); });
+          btn.disabled = true; if (window.ttwBusy) window.ttwBusy(btn, true);
+          sendImage(BASE + '/admin/photos/' + slot, blob, 'image/jpeg', 'Uploading background picture…')
+            .then(function (out) { if (out.ok) window.location.reload(); else { btn.disabled = false; if (window.ttwBusy) window.ttwBusy(btn, false); show(out.error || 'Upload failed.'); } })
+            .catch(function () { btn.disabled = false; if (window.ttwBusy) window.ttwBusy(btn, false); show('Upload failed. Check your connection.'); });
         }, 'image/jpeg', 0.82);
       };
       img.onerror = function () { show('That picture could not be read.'); };
@@ -187,11 +192,10 @@
           c.drawImage(img, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
           canvas.toBlob(function (blob) {
             if (!blob) return favShow('Could not prepare that picture.');
-            favBtn.disabled = true;
-            fetch(BASE + '/admin/settings/favicon', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/png', 'X-CSRF-Token': tokenEl ? tokenEl.value : '' }, body: blob })
-              .then(function (r) { return r.json().catch(function () { return {}; }); })
-              .then(function (out) { if (out.ok) window.location.reload(); else { favBtn.disabled = false; favShow(out.error || 'Upload failed.'); } })
-              .catch(function () { favBtn.disabled = false; favShow('Upload failed. Check your connection.'); });
+            favBtn.disabled = true; if (window.ttwBusy) window.ttwBusy(favBtn, true);
+            sendImage(BASE + '/admin/settings/favicon', blob, 'image/png', 'Uploading site icon…')
+              .then(function (out) { if (out.ok) window.location.reload(); else { favBtn.disabled = false; if (window.ttwBusy) window.ttwBusy(favBtn, false); favShow(out.error || 'Upload failed.'); } })
+              .catch(function () { favBtn.disabled = false; if (window.ttwBusy) window.ttwBusy(favBtn, false); favShow('Upload failed. Check your connection.'); });
           }, 'image/png');
         };
         img.onerror = function () { favShow('That picture could not be read.'); };
