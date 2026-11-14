@@ -1,0 +1,80 @@
+/* Home page: "Laundry and washing service" section with the booking illustration and the three How-it-works steps.
+   Flat colours from the site theme (light and dark). Phone first, then tablet and desktop. */
+
+.about-how { padding-block: clamp(1.5rem, 4vw, 3rem); }
+.about-grid { display: grid; gap: clamp(1.4rem, 3vw, 2.4rem); align-items: start; }
+.about-main { min-width: 0; }
+.about-main h2 { font-size: clamp(1.25rem, 2.4vw, 1.7rem); line-height: 1.2; }
+.about-main p { max-width: 62ch; }
+.about-main .seo-list { max-width: none; padding-left: 0; list-style: none; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: .5rem .9rem; }
+.about-main .seo-list li { position: relative; padding: .55rem .8rem .55rem 2rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); line-height: 1.35; }
+.about-main .seo-list li::before { content: ""; position: absolute; left: .8rem; top: .95rem; width: .5rem; height: .5rem; border-radius: 50%; background: var(--accent); }
+
+/* ---- Steps ---- */
+.how-title { margin-top: 1.8rem !important; }
+.how-steps { list-style: none; margin: .6rem 0 0; padding: 0; display: grid; gap: .8rem; counter-reset: none; }
+.how-steps li { position: relative; display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: .85rem; padding: .95rem 1rem; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); min-width: 0; }
+.how-num { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-weight: 800; font-size: .95rem; flex: none; }
+.how-ico { display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 12px; background: var(--surface-2); color: var(--accent-ink); flex: none; }
+.how-ico svg { width: 1.35rem; height: 1.35rem; }
+.how-steps li > div { display: grid; gap: .15rem; min-width: 0; }
+.how-steps strong { font-size: 1rem; color: var(--text); }
+.how-steps li > div > span { font-size: .9rem; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+/* Phones: a vertical line joins the numbers */
+.how-steps li:not(:last-child)::after { content: ""; position: absolute; left: calc(1rem + 1rem - 1px); top: calc(100% - .1rem); height: calc(.8rem + .2rem); width: 2px; background: var(--accent); opacity: .45; }
+
+/* ---- CTA card with the illustration ---- */
+.about-cta { border-radius: 22px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow-up); overflow: hidden; min-width: 0; }
+.cta-art { display: block; width: 100%; height: auto; max-height: 300px; }
+.cta-body { padding: 1.1rem 1.2rem 1.3rem; display: grid; gap: .5rem; }
+.cta-body h3 { margin: 0; font-size: 1.15rem; }
+.cta-body p { margin: 0; font-size: .92rem; color: var(--muted); max-width: none; }
+.cta-actions { display: grid; gap: .6rem; margin-top: .5rem; }
+.cta-actions .btn { width: 100%; padding: .9rem 1.2rem; font-size: 1rem; }
+.cta-actions .btn svg { width: 1.1rem; height: 1.1rem; }
+
+/* Illustration colours (follow light and dark themes) */
+.a-bg { fill: var(--surface-2); }
+.a-route { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 2 9; opacity: .8; }
+.a-pulse { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; animation: a-pulse 2.4s ease-out infinite; }
+.a-pulse.p2 { animation-delay: 1.2s; }
+@keyframes a-pulse { 0% { opacity: .6; transform: scale(.7); } 100% { opacity: 0; transform: scale(1.7); } }
+.a-phone { fill: var(--surface); stroke: light-dark(#0B3331, #8E9C95); stroke-width: 3; }
+.a-notch { fill: var(--line); }
+.a-line { fill: var(--line); }
+.a-line.short { opacity: .7; }
+.a-pin { fill: var(--accent); }
+.a-pin-dot { fill: var(--surface); }
+.a-btn { fill: var(--accent); }
+.a-tick { fill: none; stroke: var(--on-accent); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+.a-mach { fill: var(--surface); stroke: light-dark(#0B3331, #8E9C95); stroke-width: 3; }
+.a-panel { fill: var(--surface-2); }
+.a-dial { fill: var(--accent); }
+.a-door { fill: var(--surface-2); stroke: light-dark(#0B3331, #8E9C95); stroke-width: 3; }
+.a-glass { fill: var(--accent); opacity: .25; }
+.a-bubble { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+.a-fold.f1 { fill: var(--accent); }
+.a-fold.f2 { fill: var(--accent); opacity: .55; }
+.a-van-body, .a-van-cab { fill: var(--accent); stroke: light-dark(#0B3331, #8E9C95); stroke-width: 2.5; }
+.a-wheel { fill: light-dark(#0B3331, #8E9C95); }
+.a-van { animation: a-drive 3.2s ease-in-out infinite alternate; }
+@keyframes a-drive { from { transform: translate(0, 0); } to { transform: translate(6px, -3px); } }
+
+/* ---- Tablet: steps side by side with a connecting line ---- */
+@media (min-width: 640px) {
+  .how-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+  .how-steps li { grid-template-columns: 1fr; justify-items: start; align-items: start; align-content: start; gap: .6rem; padding: 1.1rem 1rem 1.2rem; }
+  .how-steps li > .how-num { position: absolute; top: .8rem; right: .8rem; }
+  .how-steps li:not(:last-child)::after { left: 100%; top: 50%; height: 2px; width: 1rem; }
+}
+/* ---- Desktop: text on the left, sticky booking card on the right ---- */
+@media (min-width: 960px) {
+  .about-grid { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
+  .about-cta { position: sticky; top: 5.5rem; }
+}
+@media (max-width: 420px) {
+  .how-steps li { padding: .8rem .8rem; gap: .65rem; }
+  .how-ico { width: 2.3rem; height: 2.3rem; }
+}
+@media (prefers-reduced-motion: reduce) { .a-pulse, .a-van { animation: none; } .a-pulse { opacity: .25; } }
+@media print { .about-cta .cta-actions, .a-pulse { display: none; } .how-steps li, .about-cta { box-shadow: none; border-color: #000; break-inside: avoid; } }

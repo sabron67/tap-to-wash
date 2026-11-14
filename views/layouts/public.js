@@ -21,7 +21,7 @@ ${canonical ? html`<meta property="og:url" content="${canonical}"><meta property
 <meta name="twitter:description" content="${seo.description || description || settings.tagline}">
 ${seo.jsonLd ? raw(`<script type="application/ld+json">${JSON.stringify(seo.jsonLd).replace(/</g, '\\u003c')}</script>`) : ''}
 <meta name="theme-color" content="#F3FAF6" media="(prefers-color-scheme: light)" data-light="#F3FAF6">
-<meta name="theme-color" content="#0C1511" media="(prefers-color-scheme: dark)" data-dark="#0C1511">
+<meta name="theme-color" content="#101513" media="(prefers-color-scheme: dark)" data-dark="#101513">
 <script src="/js/boot.js"></script>
 <link rel="icon" href="/site-icon${settings.icon_v ? `?v=${settings.icon_v}` : ''}">
 ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${settings.icon_v}">` : ''}
@@ -30,6 +30,7 @@ ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.pn
 <link rel="stylesheet" href="/css/receipt.css">
 <link rel="stylesheet" href="/css/promo.css">
 <link rel="stylesheet" href="/css/loading.css">
+<link rel="stylesheet" href="/css/how-it-works.css">
 <script src="/js/loading.js" defer></script>
 <script src="/js/toast.js" defer></script>
 <script src="/js/dialog.js" defer></script>

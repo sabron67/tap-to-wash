@@ -283,13 +283,65 @@ function homePage(ctx, categories) {
       : ''}
 
 
-    <section class="home-sec seo-copy" id="about-laundry">
-      <div class="container">
-        <h2>Laundry and washing service with pick-up and delivery</h2>
-        <p>${s.about} ${s.business_name} washes, dries, irons and folds your clothes, and we collect them from your door and bring them back clean. Book online in a few taps and track your laundry until it is delivered.</p>
-        ${categories.length ? html`<h3>What we wash and clean</h3><ul class="seo-list">${categories.map((c) => html`<li><strong>${c.name}</strong>${c.description ? html` – ${c.description}` : ''}</li>`)}</ul>` : ''}
-        <h3>How it works</h3>
-        <ol class="seo-list"><li>Choose the washing or cleaning services you need.</li><li>Share your location and pick-up time.</li><li>We collect, wash and deliver your laundry fresh and folded.</li></ol>
+    <section class="home-sec seo-copy about-how" id="about-laundry">
+      <div class="container about-grid">
+        <div class="about-main">
+          <h2>Laundry and washing service with pick-up and delivery</h2>
+          <p>${s.about} ${s.business_name} washes, dries, irons and folds your clothes, and we collect them from your door and bring them back clean. Book online in a few taps and track your laundry until it is delivered.</p>
+          ${categories.length ? html`<h3>What we wash and clean</h3><ul class="seo-list">${categories.map((c) => html`<li><strong>${c.name}</strong>${c.description ? html` – ${c.description}` : ''}</li>`)}</ul>` : ''}
+
+          <h3 class="how-title">How it works</h3>
+          <ol class="how-steps">
+            <li><span class="how-num" aria-hidden="true">1</span><span class="how-ico" aria-hidden="true">${icon('shirt')}</span><div><strong>Choose</strong><span>Choose the washing or cleaning services you need.</span></div></li>
+            <li><span class="how-num" aria-hidden="true">2</span><span class="how-ico" aria-hidden="true">${icon('map-pin')}</span><div><strong>Share</strong><span>Share your location and pick-up time.</span></div></li>
+            <li><span class="how-num" aria-hidden="true">3</span><span class="how-ico" aria-hidden="true">${icon('package-check')}</span><div><strong>Relax</strong><span>We collect, wash and deliver your laundry fresh and folded.</span></div></li>
+          </ol>
+        </div>
+
+        <aside class="about-cta" aria-label="Book your laundry pick-up">
+          <svg class="cta-art" viewBox="0 0 360 250" role="img" aria-label="Tap to book on your phone, we collect your laundry, wash it and bring it back folded">
+            <rect class="a-bg" x="0" y="0" width="360" height="250" rx="22"/>
+            <path class="a-route" d="M156 168 C 190 64, 236 64, 262 112"/>
+            <circle class="a-pulse" cx="95" cy="168" r="26"/>
+            <circle class="a-pulse p2" cx="95" cy="168" r="26"/>
+            <g>
+              <rect class="a-phone" x="46" y="30" width="100" height="196" rx="18"/>
+              <rect class="a-notch" x="80" y="38" width="32" height="6" rx="3"/>
+              <rect class="a-line" x="60" y="62" width="72" height="9" rx="4.5"/>
+              <rect class="a-line short" x="60" y="80" width="48" height="7" rx="3.5"/>
+              <path class="a-pin" d="M96 118c-9 0-15 6.5-15 14.5 0 10 15 23 15 23s15-13 15-23c0-8-6-14.5-15-14.5z"/>
+              <circle class="a-pin-dot" cx="96" cy="132" r="5"/>
+              <rect class="a-btn" x="60" y="182" width="72" height="28" rx="14"/>
+              <path class="a-tick" d="M85 196l7 7 14-14"/>
+            </g>
+            <g>
+              <rect class="a-mach" x="226" y="98" width="100" height="118" rx="14"/>
+              <rect class="a-panel" x="236" y="108" width="80" height="18" rx="6"/>
+              <circle class="a-dial" cx="250" cy="117" r="4.5"/>
+              <circle class="a-door" cx="276" cy="168" r="33"/>
+              <circle class="a-glass" cx="276" cy="168" r="24"/>
+              <path class="a-bubble" d="M262 172c8-10 16 10 28 0"/>
+            </g>
+            <g>
+              <rect class="a-fold f1" x="236" y="224" width="80" height="9" rx="4.5"/>
+              <rect class="a-fold f2" x="242" y="215" width="68" height="9" rx="4.5"/>
+            </g>
+            <g class="a-van">
+              <rect class="a-van-body" x="164" y="122" width="40" height="22" rx="6"/>
+              <rect class="a-van-cab" x="188" y="128" width="16" height="16" rx="4"/>
+              <circle class="a-wheel" cx="174" cy="146" r="5"/>
+              <circle class="a-wheel" cx="195" cy="146" r="5"/>
+            </g>
+          </svg>
+          <div class="cta-body">
+            <h3>Ready when you are</h3>
+            <p>Tap, pick a time and we come to your door. Pay by M-Pesa when your bill is ready.</p>
+            <div class="cta-actions">
+              <button class="btn btn-primary btn-lg" type="button" data-open-wizard>${icon('sparkles')} Tap to wash</button>
+              <a class="btn btn-light btn-lg" href="/track">${icon('search')} Track an order</a>
+            </div>
+          </div>
+        </aside>
       </div>
     </section>
 

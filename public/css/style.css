@@ -17,27 +17,27 @@
   --nav-h: 68px;
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
-  --bg:         light-dark(#F3FAF6, #0C1511);
-  --bg-alt:     light-dark(#E6F5EC, #111E18);
-  --surface:    light-dark(#FFFFFF, #15231C);
-  --surface-2:  light-dark(#EDF7F1, #1C2D24);
-  --line:       light-dark(#DDEBE2, #26382E);
-  --line-2:     light-dark(#C5DACD, #36503F);
-  --text:       light-dark(#0B3331, #EAF5EE);
-  --muted:      light-dark(#566D66, #9FB5A8);
-  --accent:     light-dark(#00893A, #2FD46C);
-  --accent-h:   light-dark(#00742F, #52E287);
-  --accent-ink: light-dark(#006F2E, #52E287);
-  --brand:      light-dark(#00B341, #2FD46C);
-  --on-accent:  light-dark(#FFFFFF, #04200F);
-  --link:       light-dark(#00742F, #52E287);
-  --focus:      light-dark(#00A63E, #52E287);
+  --bg:         light-dark(#F3FAF6, #101513);
+  --bg-alt:     light-dark(#E6F5EC, #141A17);
+  --surface:    light-dark(#FFFFFF, #1A211E);
+  --surface-2:  light-dark(#EDF7F1, #212A26);
+  --line:       light-dark(#DDEBE2, #2B3630);
+  --line-2:     light-dark(#C5DACD, #3B4942);
+  --text:       light-dark(#0B3331, #E8EEEA);
+  --muted:      light-dark(#566D66, #A3B0A9);
+  --accent:     light-dark(#00893A, #4FA874);
+  --accent-h:   light-dark(#00742F, #62BA88);
+  --accent-ink: light-dark(#006F2E, #8CCBA4);
+  --brand:      light-dark(#00B341, #4FA874);
+  --on-accent:  light-dark(#FFFFFF, #07140D);
+  --link:       light-dark(#00742F, #8CCBA4);
+  --focus:      light-dark(#00A63E, #8CCBA4);
   --info:       light-dark(#3030C9, #A9AEFF);
-  --ok:         light-dark(#00742F, #52E287);
+  --ok:         light-dark(#00742F, #8CCBA4);
   --err-bg:     light-dark(#FDECEC, #3A1E21);
   --err-line:   light-dark(#C8323B, #FF8C94);
   --err-text:   light-dark(#8C1D25, #FFD5D8);
-  --footer-bg:  light-dark(#0B3331, #07100C);
+  --footer-bg:  light-dark(#0B3331, #0A0E0C);
   --footer-tx:  #EAF5EE;
   --overlay:    light-dark(rgba(8, 40, 30, .5), rgba(2, 8, 5, .78));
   --img-op: .5;
@@ -328,7 +328,7 @@ textarea { resize: vertical; }
 /* ---------- badges ---------- */
 .badge { display: inline-flex; align-items: center; gap: .3rem; padding: .25rem .7rem; border-radius: 999px; font-size: .76rem; font-weight: 600; white-space: nowrap; color: var(--text);
   background: color-mix(in srgb, var(--bc, #94a3b8) 18%, var(--surface)); border: 1.5px solid var(--bc, #94a3b8); }
-.badge.pay-paid { --bc: light-dark(#00893A, #2FD46C); }
+.badge.pay-paid { --bc: light-dark(#00893A, #4FA874); }
 .badge.pay-partial { --bc: light-dark(#B7791F, #F2B84B); }
 .badge.pay-unpaid { --bc: light-dark(#C8323B, #FF8C94); }
 .badge.pay-unpriced { --bc: light-dark(#6B7C74, #9FB5A8); }
