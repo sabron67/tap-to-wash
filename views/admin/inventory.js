@@ -3,6 +3,8 @@ const { html } = require('../../lib/html');
 const { adminLayout } = require('../layouts/admin');
 const { csrfField } = require('../partials/ui');
 const { money } = require('../../lib/helpers');
+const { icon } = require('../../lib/icons');
+const { bizHub } = require('../partials/biz-hub');
 
 const KINDS = { opening: 'Opening stock', purchase: 'Bought', usage: 'Used', waste: 'Damaged / lost', adjustment: 'Stock count' };
 const CATEGORIES = ['Detergents', 'Softeners and stain removers', 'Packaging', 'Hangers and tags', 'Cleaning supplies', 'Other'];
@@ -34,37 +36,24 @@ function inventoryPage(ctx, d) {
 
   const noStock = !active.length;
   const body = html`
+  ${bizHub(ctx, { active: 'inventory', from, to, presets: d.presets, snap: d.snap })}
   <div class="ops-intro">
-    <p class="muted">Stock, supply costs and profit. This page is visible to the <strong>owner and manager only</strong>; other staff cannot open it, see costs or export it.</p>
+    <p class="muted">Stock, supply costs and profit for the period above. Revenue comes from the same payments as your <a class="link" href="/admin/reports?${range}">Reports</a>, so the two always agree. Visible to the <strong>owner and manager only</strong>.</p>
     <nav class="ops-jumps" aria-label="Sections">
       ${[['profit', 'Profit'], ['receive', 'Receive stock'], ['use', 'Use / count'], ['items', 'Supplies'], ['history', 'History']].map((j) => html`<a href="#${j[0]}">${j[1]}</a>`)}
     </nav>
     <div class="ops-jumps">
-      <a href="/admin/inventory/export.xlsx?type=stock">Export stock list (Excel)</a>
-      <a href="/admin/inventory/export.xlsx?type=movements&${range}">Export movements (Excel)</a>
-      <a href="/admin/inventory/export.xlsx?type=profit&${range}">Export profit workbook (Excel)</a>
+      <a href="/admin/inventory/export.xlsx?type=stock">${icon('download')} Stock list (Excel)</a>
+      <a href="/admin/inventory/export.xlsx?type=movements&${range}">${icon('download')} Movements (Excel)</a>
+      <a href="/admin/inventory/export.xlsx?type=profit&${range}">${icon('download')} Profit workbook (Excel)</a>
+      ${ctx.can('reports') ? html`<a href="/admin/reports/download?${range}">${icon('download')} Full business report (Excel)</a>` : ''}
     </div>
   </div>
 
-  <section class="stats ops-stats">
-    <div class="stat glass"><span class="stat-val">${money(d.stockValue, cur)}</span><span class="stat-label">Stock on hand (at cost)</span></div>
-    <div class="stat glass"><span class="stat-val">${d.low.length}</span><span class="stat-label">Low-stock alerts</span></div>
-    <div class="stat glass"><span class="stat-val">${money(p.suppliesCost, cur)}</span><span class="stat-label">Supplies used (selected period)</span></div>
-    <div class="stat glass"><span class="stat-val">${money(p.net, cur)}</span><span class="stat-label">Net profit (selected period)</span></div>
-  </section>
-
-  ${d.low.length ? html`<section class="glass pad ops-section"><h2>Reorder now</h2><p class="muted small">At or below the reorder level.</p>
+  ${d.low.length ? html`<section class="glass pad ops-section" id="reorder"><h2>Reorder now</h2><p class="muted small">At or below the reorder level.</p>
     ${table(['Supply', 'In stock', 'Reorder level', 'Supplier'], d.low.map((x) => html`<tr><td>${x.name}</td><td>${qty(x.quantity)} ${x.unit}</td><td>${qty(x.reorder_level)} ${x.unit}</td><td>${x.supplier || '—'}</td></tr>`))}</section>` : ''}
 
   ${section('profit', 'Profit calculator', 'Profit = money collected, less refunds paid, less supplies used, less other expenses. Supplies are counted when used, not when bought.', html`
-    <div class="presets">
-      ${d.presets.map(([label, f, t]) => html`<a class="tab ${f === from && t === to ? 'active' : ''}" href="/admin/inventory?from=${f}&to=${t}">${label}</a>`)}
-    </div>
-    <form class="row-form" method="get" action="/admin/inventory">
-      <label class="field" style="margin:0"><span>From</span><input type="date" name="from" value="${from}" required></label>
-      <label class="field" style="margin:0"><span>To</span><input type="date" name="to" value="${to}" required></label>
-      <button class="btn btn-ghost" type="submit" style="align-self:flex-end">Update</button>
-    </form>
     <div class="table-wrap"><table class="table">
       <thead><tr><th>${from} to ${to}</th><th style="text-align:right">${cur}</th></tr></thead>
       <tbody>

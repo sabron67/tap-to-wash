@@ -35,7 +35,8 @@ function buildConfig(env = process.env) {
     }
     ssl = { ca: fs.readFileSync(caFile, 'utf8'), rejectUnauthorized: true };
   } else if (useSsl) {
-    ssl = isTrue(env.PGSSL_STRICT) ? true : { rejectUnauthorized: false };
+    // Certificates are verified by default; PGSSL_INSECURE=true is an explicit opt-out for a provider without a CA file.
+    ssl = isTrue(env.PGSSL_INSECURE) ? { rejectUnauthorized: false } : true;
   }
 
   return { connectionString: url, ssl, ...poolSettings(env) };

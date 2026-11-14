@@ -14,7 +14,7 @@ function privacyPage(ctx) {
       <div class="terms-body">${renderTerms(s.privacy_text, s.business_name)}</div>
     </article>
   </main>`;
-  return publicLayout(ctx, { title: 'Privacy Notice', body, bodyClass: 'public' });
+  return publicLayout(ctx, { title: 'Privacy Notice', body, bodyClass: 'public', seo: { canonical: require('../../lib/seo').abs('/privacy') } });
 }
 
 module.exports = { privacyPage };

@@ -235,3 +235,13 @@ How money is recorded: only Safaricom's callback can credit a payment, and it ca
 5. When the bill is **fully paid** (M-Pesa prompt or a payment recorded by staff) the **assigned rider is alerted again** ("Payment received - take the laundry"), the customer's receipt shows *Paid*, and with Pay Before Cleaning on the order moves to Picked up as before. Riders never see the amount.
 
 Switch it off and staff confirm each request by hand, exactly as before. If anything in auto-confirm fails, the booking is still saved as New for staff to confirm. New code: `lib/auto-confirm.js`; new alert events `paid` and `no_rider` in `lib/notify.js`. No database change; run nothing extra.
+
+## Two-step verification (admin and staff)
+
+Every owner and staff account can turn on an authenticator-app code (Google/Microsoft Authenticator, Authy, 1Password) under **My account → Two-step verification**. After the password, sign-in asks for the 6-digit code. Customers are not affected.
+
+- **Recovery:** 8 one-time recovery codes are shown once at setup (new ones under My account, needs the password). A code can also be a recovery code at sign-in.
+- **Require for everyone:** Admin → Settings → *Require two-step verification*. People without it are sent to set it up before using anything else.
+- **Lost phone:** the owner resets a person under Admin → Staff (*Reset 2-step*). If the owner is locked out, run `npm run 2fa:reset -- owner@example.com` on the server.
+- Wrong codes count toward the 15-minute account lock; a used code cannot be replayed. Authenticator secrets are encrypted in the database with `TOTP_KEY` (or `SESSION_SECRET`). **Set a stable `TOTP_KEY` before people enrol**: changing the key later makes existing codes unreadable (use the reset above).
+- Run `npm run db:init` once (adds the new columns).

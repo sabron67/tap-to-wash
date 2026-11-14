@@ -4,6 +4,8 @@ if (process.env.RENDER && process.env.NODE_ENV !== 'production') {
   console.warn('NODE_ENV was not "production" on Render. Switching to production mode. Please set NODE_ENV=production in the environment.');
   process.env.NODE_ENV = 'production';
 }
+const { runStartupChecks } = require('./lib/startup-checks');
+runStartupChecks();
 const path = require('path');
 const express = require('express');
 const compression = require('compression');
@@ -35,14 +37,6 @@ if (isProd && process.env.FORCE_HTTPS !== '0') {
   });
 }
 app.disable('x-powered-by');
-
-if (!process.env.SESSION_SECRET) {
-  if (isProd) {
-    console.error('SESSION_SECRET must be set in production.');
-    process.exit(1);
-  }
-  console.warn('WARNING: SESSION_SECRET is not set - using an insecure development default.');
-}
 
 app.use(compression()); // gzip html/css/js/svg: much smaller downloads on phones
 app.use(securityHeaders);
@@ -93,7 +87,7 @@ const buildSession = (name, cookiePath) =>
   session({
     store: storeView(sessionStore),
     name,
-    secret: process.env.SESSION_SECRET || 'dev-only-secret-change-me',
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     rolling: true, // idle timeout: the cookie is renewed on every request and expires after 2 hours of inactivity

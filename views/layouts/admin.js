@@ -27,6 +27,7 @@ function adminLayout(ctx, { title, active, body }) {
 <head>
 ${head(`${title} · Admin`, s)}
 <meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="/css/admin-hub.css">
 </head>
 <body class="admin">
 <div class="shell">

@@ -4,8 +4,9 @@ const { adminLayout } = require('../layouts/admin');
 const { csrfField } = require('../partials/ui');
 const { roleOf } = require('../../lib/roles');
 const { icon } = require('../../lib/icons');
+const { twofaCard } = require('./twofa');
 
-function accountPage(ctx, { lastLogin, prefs, alerts, waMode }) {
+function accountPage(ctx, { lastLogin, prefs, alerts, waMode, twofa = { enabled: false, left: 0, required: false } }) {
   const role = roleOf(ctx.role);
   const body = html`
   ${ctx.admin.mustChange ? html`<div class="notice"><strong>Please choose your own password.</strong> You are using a temporary or default password. The rest of the admin area unlocks once you change it.</div>` : ''}
@@ -26,6 +27,7 @@ function accountPage(ctx, { lastLogin, prefs, alerts, waMode }) {
       <button class="btn btn-primary" type="submit">Update password</button>
     </form>
   </section>
+${twofaCard(ctx, twofa)}
 <form class="glass pad stack" method="post" action="/admin/account/notifications" style="margin-top:1.25rem">
     ${csrfField(ctx)}
     <h2>Job alerts</h2>

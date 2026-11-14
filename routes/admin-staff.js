@@ -18,7 +18,7 @@ async function activeOwnersExcluding(id) {
 module.exports = function mount(router, { buildCtx, flash, need }) {
   const list = () =>
     pool.query(
-      `SELECT id, name, email, phone, role, is_active, last_login_at, (locked_until IS NOT NULL AND locked_until > now()) AS locked, must_change_password
+      `SELECT id, name, email, phone, role, is_active, last_login_at, (locked_until IS NOT NULL AND locked_until > now()) AS locked, must_change_password, totp_enabled
          FROM admins ORDER BY is_active DESC, role, name`
     );
 
@@ -50,6 +50,19 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
       await audit(req, 'staff_add', `${email} as ${role}`);
       const [ctx, rows] = await Promise.all([buildCtx(req), list()]);
       res.view(staffPage(ctx, { rows: rows.rows, created: { name, email, role, password, phone, what: 'created' } }));
+    })
+  );
+
+  // Lost phone and no recovery codes: the owner removes the second step; the person sets it up again after signing in.
+  router.post(
+    '/staff/:id/2fa-reset',
+    need('staff'),
+    wrap(async (req, res) => {
+      const id = parseInt(req.params.id, 10);
+      const r = await pool.query(`UPDATE admins SET totp_enabled = FALSE, totp_secret = NULL, totp_last_step = NULL, totp_recovery = '[]'::jsonb WHERE id = $1 AND id <> $2 RETURNING email`, [id, req.session.admin.id]);
+      if (r.rows.length) await audit(req, 'twofa_reset', `Two-step verification reset for ${r.rows[0].email}`);
+      flash(req, r.rows.length ? 'success' : 'error', r.rows.length ? 'Two-step verification was reset for that person.' : 'Nothing was changed.');
+      res.redirect('/admin/staff');
     })
   );
 

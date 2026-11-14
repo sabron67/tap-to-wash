@@ -43,6 +43,20 @@ function settingsPage(ctx) {
     </form>
   </section>
 
+  <section class="glass pad" id="twofaCard">
+    <form class="switch-row" method="post" action="/admin/settings/require-2fa">
+      ${csrfField(ctx)}
+      <div class="switch-text">
+        <h2>Require two-step verification</h2>
+        <p class="muted small">On: every owner and staff account must set up an authenticator app before using the admin area. Off: each person can choose. A person who loses their phone can use a recovery code, or you can reset them under Staff.</p>
+      </div>
+      <input type="hidden" name="enabled" value="${s.require_2fa === '1' ? '0' : '1'}">
+      <button type="submit" class="switch ${s.require_2fa === '1' ? 'on' : ''}" role="switch" aria-checked="${s.require_2fa === '1' ? 'true' : 'false'}" aria-label="Require two-step verification">
+        <span class="switch-knob"></span><span class="switch-txt">${s.require_2fa === '1' ? 'On' : 'Off'}</span>
+      </button>
+    </form>
+  </section>
+
   <section class="glass pad" id="payCard">
     <form class="switch-row" method="post" action="/admin/settings/pay-before-cleaning">
       ${csrfField(ctx)}

@@ -6,6 +6,7 @@ const { wrap, cleanText } = require('../lib/helpers');
 const { audit } = require('../lib/audit');
 const { SLOTS, mediaVersions } = require('../lib/media');
 const { buildWorkbook } = require('../lib/report');
+const { snapshot } = require('../lib/finance');
 const { getFigures, saveFigures } = require('../lib/figures');
 const { reportsPage } = require('../views/admin/reports');
 const { photosPage } = require('../views/admin/photos');
@@ -62,7 +63,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     wrap(async (req, res) => {
       const { from, to, today } = await resolveRange(req.query);
       const DR = RANGE.replace(/\br\./g, 'd.');
-      const [ctx, k, del, figures] = await Promise.all([
+      const [ctx, k, del, figures, snap] = await Promise.all([
         buildCtx(req),
         pool.query(
           `SELECT COUNT(*)::int AS requests,
@@ -76,9 +77,10 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
         // Deleted requests: their money still counts as billed and collected.
         pool.query(`SELECT COALESCE(SUM(d.total_amount), 0) AS billed, COALESCE(SUM(d.amount_paid), 0) AS collected FROM deleted_requests d WHERE ${DR}`, [from, to]),
         getFigures(),
+        snapshot(from, to),
       ]);
       const kpi = { ...k.rows[0], billed: Number(k.rows[0].billed) + Number(del.rows[0].billed), collected: Number(k.rows[0].collected) + Number(del.rows[0].collected) };
-      res.view(reportsPage(ctx, { from, to, kpi, presets: presets(today), figures }));
+      res.view(reportsPage(ctx, { from, to, kpi, presets: presets(today), figures, snap }));
     })
   );
 

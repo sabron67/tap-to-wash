@@ -26,64 +26,7 @@ const addDays = (ymd, n) => {
 };
 const round2 = (n) => Math.round(n * 100) / 100;
 
-// Same Nairobi-day range the Reports page uses, so profit here matches the rest of the system.
-const REQ_RANGE = `created_at >= ($1::date)::timestamp AT TIME ZONE 'Africa/Nairobi' AND created_at < (($2::date + 1)::timestamp AT TIME ZONE 'Africa/Nairobi')`;
-
-async function todayNairobi() {
-  const { rows } = await pool.query(`SELECT to_char(now() AT TIME ZONE 'Africa/Nairobi', 'YYYY-MM-DD') AS d`);
-  return rows[0].d;
-}
-
-function presets(today) {
-  const m = today.slice(0, 7);
-  const firstThis = `${m}-01`;
-  const lastPrev = addDays(firstThis, -1);
-  return [
-    ['This month', firstThis, today],
-    ['Last month', `${lastPrev.slice(0, 7)}-01`, lastPrev],
-    ['Last 30 days', addDays(today, -29), today],
-    ['This year', `${today.slice(0, 4)}-01-01`, today],
-  ];
-}
-
-async function resolveRange(query) {
-  const today = await todayNairobi();
-  let from = validYmd(query.from) ? query.from : `${today.slice(0, 7)}-01`;
-  let to = validYmd(query.to) ? query.to : today;
-  if (from > to) [from, to] = [to, from];
-  return { from, to, today };
-}
-
-// Profit for a period. Supplies are counted when they are USED (not when bought), so buying stock never looks like a loss.
-async function profitFor(from, to) {
-  const [rev, del, refunds, exp, moves] = await Promise.all([
-    pool.query(`SELECT COALESCE(SUM(amount_paid), 0) AS v FROM requests WHERE ${REQ_RANGE}`, [from, to]),
-    pool.query(`SELECT COALESCE(SUM(amount_paid), 0) AS v FROM deleted_requests WHERE ${REQ_RANGE}`, [from, to]),
-    pool.query(`SELECT COALESCE(SUM(amount), 0) AS v FROM refunds WHERE status = 'paid' AND ${REQ_RANGE}`, [from, to]),
-    pool.query(`SELECT COALESCE(SUM(amount), 0) AS v FROM expenses WHERE spent_on BETWEEN $1::date AND $2::date`, [from, to]),
-    pool.query(
-      `SELECT
-         COALESCE(SUM(-quantity_change * unit_cost) FILTER (WHERE kind = 'usage'), 0)      AS used,
-         COALESCE(SUM(-quantity_change * unit_cost) FILTER (WHERE kind = 'waste'), 0)      AS waste,
-         COALESCE(SUM(-quantity_change * unit_cost) FILTER (WHERE kind = 'adjustment'), 0) AS adjust,
-         COALESCE(SUM(quantity_change * unit_cost)  FILTER (WHERE kind = 'purchase'), 0)   AS purchases
-       FROM inventory_movements WHERE occurred_on BETWEEN $1::date AND $2::date`,
-      [from, to]
-    ),
-  ]);
-  const revenue = Number(rev.rows[0].v) + Number(del.rows[0].v);
-  const m = moves.rows[0];
-  const used = Number(m.used), waste = Number(m.waste), adjust = Number(m.adjust), purchases = Number(m.purchases);
-  const refundsPaid = Number(refunds.rows[0].v);
-  const expenses = Number(exp.rows[0].v);
-  const suppliesCost = used + waste + adjust;
-  const gross = revenue - refundsPaid - suppliesCost;
-  const net = gross - expenses;
-  return {
-    revenue, refundsPaid, used, waste, adjust, suppliesCost, gross, expenses, net, purchases,
-    margin: revenue > 0 ? (net / revenue) * 100 : null,
-  };
-}
+const { REQ_RANGE, todayNairobi, presets, resolveRange, profitFor, snapshot } = require('../lib/finance');
 
 module.exports = function mount(router, { buildCtx, flash, need }) {
   const back = (res, hash, qs = '') => res.redirect('/admin/inventory' + qs + (hash ? '#' + hash : ''));
@@ -95,7 +38,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
   router.get('/inventory', need('inventory'), wrap(async (req, res) => {
     const { from, to, today } = await resolveRange(req.query);
     const ctx = await buildCtx(req);
-    const [items, moves, byItem, profit] = await Promise.all([
+    const [items, moves, byItem, profit, snap] = await Promise.all([
       pool.query(`SELECT *, (quantity * unit_cost) AS value FROM inventory_items ORDER BY is_active DESC, name`),
       pool.query(
         `SELECT m.*, i.name AS item_name, i.unit, a.name AS by_name
@@ -113,10 +56,11 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
         [from, to]
       ),
       profitFor(from, to),
+      snapshot(from, to),
     ]);
     const stockValue = items.rows.filter((x) => x.is_active).reduce((a, x) => a + Number(x.value), 0);
     const low = items.rows.filter((x) => x.is_active && Number(x.quantity) <= Number(x.reorder_level));
-    res.view(inventoryPage(ctx, { from, to, today, presets: presets(today), items: items.rows, moves: moves.rows, byItem: byItem.rows, profit, stockValue, low }));
+    res.view(inventoryPage(ctx, { from, to, today, presets: presets(today), items: items.rows, moves: moves.rows, byItem: byItem.rows, profit, stockValue, low, snap }));
   }));
 
   // ---------- items ----------

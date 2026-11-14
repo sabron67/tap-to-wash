@@ -478,3 +478,17 @@ ON CONFLICT (key) DO NOTHING;
 UPDATE business_figures b SET value = s.value::numeric, is_set = TRUE, updated_at = now()
   FROM settings s WHERE s.key = 'fig_' || b.key AND NOT b.is_set AND s.value ~ '^[0-9]+(\.[0-9]+)?$';
 DELETE FROM settings WHERE key LIKE 'fig\_%';
+
+-- Shared rate-limit counters (survive restarts and work across several servers)
+CREATE TABLE IF NOT EXISTS rate_hits (
+  key TEXT PRIMARY KEY,
+  hits INTEGER NOT NULL DEFAULT 0,
+  reset_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS rate_hits_reset_idx ON rate_hits (reset_at);
+
+-- Two-step verification (authenticator app) for admin and staff accounts
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_secret    TEXT;
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_enabled   BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_last_step BIGINT;
+ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_recovery  JSONB   NOT NULL DEFAULT '[]'::jsonb;

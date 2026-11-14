@@ -67,7 +67,7 @@ function billCard(ctx, result) {
     </tbody></table></div>
     <div class="bill-totals">
       <div><span>Subtotal</span><strong>${money(b.subtotal, cur)}</strong></div>
-      ${Number(b.discount) > 0 ? html`<div><span>Discount (${b.discount_code})</span><strong>− ${money(b.discount, cur)}</strong></div>` : ''}
+      ${Number(b.discount) > 0 ? html`<div><span>Discount</span><strong>− ${money(b.discount, cur)}</strong></div>` : ''}
       <div class="hl"><span>Total</span><strong>${money(b.total, cur)}</strong></div>
       ${b.status === 'confirmed' ? html`<div><span>Paid</span><strong>${money(b.paid, cur)}</strong></div><div class="${balance > 0 ? 'due' : ''}"><span>Balance</span><strong>${money(balance, cur)}</strong></div>` : ''}
     </div>
@@ -156,7 +156,7 @@ function trackPage(ctx, { ref = '', error = '', result = null, info = '' }) {
       : ''}
   </main>`;
 
-  return publicLayout(ctx, { title: 'Track order', body, bodyClass: 'public' });
+  return publicLayout(ctx, { title: 'Track order', body, bodyClass: 'public', seo: { noindex: true } });
 }
 
 function messagePage(ctx, { title, message, code = '' }) {
@@ -170,7 +170,7 @@ function messagePage(ctx, { title, message, code = '' }) {
       <a class="btn btn-primary" href="/">Back to home</a>
     </div>
   </main>`;
-  return publicLayout(ctx, { title, body, bodyClass: 'public' });
+  return publicLayout(ctx, { title, body, bodyClass: 'public', seo: { noindex: true } });
 }
 
 module.exports = { trackPage, messagePage };

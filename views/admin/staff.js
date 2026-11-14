@@ -39,7 +39,7 @@ function staffPage(ctx, { rows, created }) {
         <td>
           <select name="is_active" form="${f}" aria-label="Status for ${r.name}" ${me ? 'disabled' : ''}><option value="1" ${r.is_active ? 'selected' : ''}>Active</option><option value="0" ${r.is_active ? '' : 'selected'}>Disabled</option></select>
           ${me ? html`<input type="hidden" form="${f}" name="is_active" value="1">` : ''}
-          ${r.locked ? html`<span class="badge pay-unpaid">Locked</span>` : ''}${r.must_change_password ? html`<span class="badge pay-partial">Temp password</span>` : ''}
+          ${r.totp_enabled ? html`<span class="badge">2-step on</span>` : html`<span class="badge pay-partial">2-step off</span>`}${r.locked ? html`<span class="badge pay-unpaid">Locked</span>` : ''}${r.must_change_password ? html`<span class="badge pay-partial">Temp password</span>` : ''}
         </td>
         <td class="nowrap">${r.last_login_at ? fmtDate(r.last_login_at) : html`<span class="muted">Never</span>`}</td>
         <td class="nowrap">
@@ -47,6 +47,7 @@ function staffPage(ctx, { rows, created }) {
           ${!me
             ? html`<form method="post" action="/admin/staff/${r.id}/reset" class="inline" data-confirm="Create a new temporary password for ${r.name}? Their current password will stop working.">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit" title="Reset password" aria-label="Reset password for ${r.name}">${icon("key-round")} Reset</button></form>`
             : html`<span class="muted small">You</span>`}
+          ${!me && r.totp_enabled ? html`<form method="post" action="/admin/staff/${r.id}/2fa-reset" class="inline" data-confirm="Remove two-step verification for ${r.name}? They will sign in with their password only until they set it up again.">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">Reset 2-step</button></form>` : ''}
         </td>
       </tr>`;
       })}</tbody>

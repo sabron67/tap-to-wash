@@ -19,6 +19,7 @@ const { BILL_ROW, billFrom, payState, loadOrderParts } = require('../lib/order-v
 const { respondToBill } = require('../lib/customer-bill');
 const pickupSchedule = require('../lib/pickup-schedule');
 
+const { robotsTxt, sitemapXml } = require('../lib/seo');
 const lookup = require('../lib/lookup-guard');
 const router = express.Router();
 
@@ -33,6 +34,9 @@ const submitLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: +process.env.REQU
 const payLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 15, message: 'Too many payment attempts. Please try again in a few minutes.' });
 const payStatusLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 600, message: 'Too many checks. Please wait a moment.' });
 const trackLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, message: 'Too many lookups. Please try again in a few minutes.' });
+
+router.get('/robots.txt', (req, res) => res.type('text/plain').send(robotsTxt()));
+router.get('/sitemap.xml', (req, res) => res.type('application/xml').send(sitemapXml(new Date().toISOString().slice(0, 10))));
 
 router.get(
   '/',
@@ -129,7 +133,8 @@ router.get(
     res.setHeader('ETag', etag);
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     if (req.headers['if-none-match'] === etag) return res.status(304).end();
-    res.type(rows[0].mime).send(rows[0].data);
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+  res.type(rows[0].mime).send(rows[0].data);
   })
 );
 

@@ -5,6 +5,7 @@ const { themeSwitch } = require('../partials/theme');
 const { icon, svg, categoryIconName } = require('../../lib/icons');
 const { mediaUrl } = require('../../lib/media');
 const { publicTabbar } = require('../partials/tabbar');
+const { homeSeo } = require('../../lib/seo');
 
 function nav(s, account) {
   return html`<header class="nav">
@@ -242,7 +243,7 @@ function homePage(ctx, categories) {
       </label>
       <div class="hero-stage">
         <div class="home-banner" style="${raw(img('hero'))}" role="img" aria-label="Washing machines in a laundry room">
-          <div class="home-banner-txt"><b>${s.tagline}</b><span>${icon('truck')} We come to you</span></div>
+          <div class="home-banner-txt"><h1 class="home-h1">${s.tagline}</h1><span>${icon('truck')} We come to you</span></div>
         </div>
         <div class="hero-float hf-a" aria-hidden="true"><span class="hf-ico">${icon('truck')}</span><span><b>Picked up</b><small>From your door</small></span></div>
         <div class="hero-float hf-b" aria-hidden="true"><span class="hf-ico">${icon('circle-check')}</span><span><b>Delivered</b><small>Fresh and folded</small></span></div>
@@ -281,6 +282,17 @@ function homePage(ctx, categories) {
     </section>`
       : ''}
 
+
+    <section class="home-sec seo-copy" id="about-laundry">
+      <div class="container">
+        <h2>Laundry and washing service with pick-up and delivery</h2>
+        <p>${s.about} ${s.business_name} washes, dries, irons and folds your clothes, and we collect them from your door and bring them back clean. Book online in a few taps and track your laundry until it is delivered.</p>
+        ${categories.length ? html`<h3>What we wash and clean</h3><ul class="seo-list">${categories.map((c) => html`<li><strong>${c.name}</strong>${c.description ? html` – ${c.description}` : ''}</li>`)}</ul>` : ''}
+        <h3>How it works</h3>
+        <ol class="seo-list"><li>Choose the washing or cleaning services you need.</li><li>Share your location and pick-up time.</li><li>We collect, wash and deliver your laundry fresh and folded.</li></ol>
+      </div>
+    </section>
+
     <footer class="footer" id="contact">
       <div class="container">
         <div class="footer-grid">
@@ -304,7 +316,7 @@ function homePage(ctx, categories) {
   ${wizard(!!ctx.account, ctx.branches || [])}
   <script type="application/json" id="app-data">${raw(json.replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'))}</script>`;
 
-  return publicLayout(ctx, { body, scripts: raw('<script src="/js/booking.js" defer></script><script src="/js/app.js"></script><script src="/js/home.js"></script><script src="/js/scroll.js"></script>'), bodyClass: 'public home' });
+  return publicLayout(ctx, { body, scripts: raw('<script src="/js/booking.js" defer></script><script src="/js/app.js"></script><script src="/js/home.js"></script><script src="/js/scroll.js"></script>'), bodyClass: 'public home', seo: homeSeo(s, categories) });
 }
 
 module.exports = { homePage };

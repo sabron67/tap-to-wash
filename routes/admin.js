@@ -19,6 +19,8 @@ const { waLink, canSend: waCanSend } = require('../lib/whatsapp');
 const { PORTALS, loginUrlForRole, portalHint, loginUrlFromHint } = require('../lib/portal');
 
 const { loginPage } = require('../views/admin/login');
+const { challengePage } = require('../views/admin/twofa');
+const twofaLib = require('../lib/twofa');
 const { dashboardPage } = require('../views/admin/dashboard');
 const { requestsPage, requestDetailPage } = require('../views/admin/requests');
 const { categoriesPage } = require('../views/admin/categories');
@@ -133,7 +135,7 @@ function mountLogin(r, portal, paths) {
       const email = cleanText(req.body.email, 120).toLowerCase();
       const password = String(req.body.password || '').slice(0, 200);
       const { rows } = await pool.query(
-        'SELECT id, name, email, role, is_active, password_hash, failed_attempts, locked_until, must_change_password FROM admins WHERE email = $1',
+        'SELECT id, name, email, role, is_active, password_hash, failed_attempts, locked_until, must_change_password, totp_enabled FROM admins WHERE email = $1',
         [email]
       );
       const a = rows[0];
@@ -178,20 +180,77 @@ function mountLogin(r, portal, paths) {
           portal === 'admin' ? 'This sign-in is for the owner only. Staff sign in at the staff page.' : 'Owner accounts sign in on the owner page (/admin/login), not here.'
         );
       }
-      await pool.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = $1', [a.id]);
-      const admin = { id: a.id, name: a.name, email: a.email, role: a.role, mustChange: a.must_change_password, since: Date.now() };
-      req.session.regenerate((err) => {
-        if (err) return next(err);
-        req.session.admin = admin;
-        req.session.csrf = crypto.randomBytes(24).toString('hex');
-        req.session.save(async (err2) => {
-          if (err2) return next(err2);
-          await audit(req, 'login', `Signed in (${a.role}) via ${portal === 'admin' ? 'owner' : 'staff'} page`, admin);
-              res.redirect(admin.mustChange ? '/admin/account' : homeFor(a.role));
-        });
-      });
+      if (a.totp_enabled) {
+        // Password is right but the account has two-step verification: hold the sign-in until the code is checked.
+        // Nothing is granted yet; the pending state lives in this browser's session only and expires in 5 minutes.
+        req.session.pending2fa = { id: a.id, portal, at: Date.now(), tries: 0 };
+        return req.session.save((e) => (e ? next(e) : res.redirect(portal === 'staff' ? '/staff/login/2fa' : '/admin/login/2fa')));
+      }
+      return finishLogin(req, res, next, a, portal);
     })
   );
+
+  // Step two: authenticator code or one-time recovery code.
+  const pending = (req) => {
+    const p = req.session.pending2fa;
+    return p && p.portal === portal && Date.now() - p.at < 5 * 60 * 1000 && p.tries < 5 ? p : null;
+  };
+  r.get(
+    '/login/2fa',
+    wrap(async (req, res) => {
+      const p = pending(req);
+      if (!p) return res.redirect(portal === 'staff' ? '/staff' : '/admin/login');
+      const who = await pool.query('SELECT email FROM admins WHERE id = $1', [p.id]);
+      res.view(challengePage(await buildCtx(req), { portal, email: who.rows[0] ? who.rows[0].email : '' }));
+    })
+  );
+  r.post(
+    '/login/2fa',
+    signinLimit,
+    wrap(async (req, res, next) => {
+      const p = pending(req);
+      if (!p) return res.redirect(portal === 'staff' ? '/staff' : '/admin/login');
+      const { rows } = await pool.query('SELECT id, name, email, role, is_active, must_change_password, locked_until FROM admins WHERE id = $1', [p.id]);
+      const a = rows[0];
+      if (!a || !a.is_active || (a.locked_until && new Date(a.locked_until) > new Date())) {
+        delete req.session.pending2fa;
+        return res.redirect(portal === 'staff' ? '/staff' : '/admin/login');
+      }
+      const how = await twofaLib.checkSecondFactor(a.id, req.body.code);
+      if (!how) {
+        p.tries += 1;
+        const lock = p.tries >= 5;
+        const fails = await pool.query('UPDATE admins SET failed_attempts = failed_attempts + 1 WHERE id = $1 RETURNING failed_attempts', [a.id]);
+        if (lock || fails.rows[0].failed_attempts >= MAX_FAILS) {
+          await pool.query('UPDATE admins SET failed_attempts = 0, locked_until = $2 WHERE id = $1', [a.id, new Date(Date.now() + LOCK_MINUTES * 60 * 1000)]);
+          delete req.session.pending2fa;
+          await audit(req, 'login_locked', `Too many wrong two-step codes; locked for ${LOCK_MINUTES} minutes`, { id: a.id, email: a.email });
+          return res.status(429).view(loginPage(await buildCtx(req), { error: 'Too many wrong codes. This account is locked for a short while.', portal }));
+        }
+        await audit(req, 'twofa_failed', `Wrong two-step code (attempt ${p.tries} of 5)`, { id: a.id, email: a.email });
+        return res.status(401).view(challengePage(await buildCtx(req), { portal, email: a.email, error: 'That code is not right or has already been used. Try the next code from your app.' }));
+      }
+      if (how === 'recovery') await audit(req, 'twofa_recovery_used', 'Signed in with a recovery code', { id: a.id, email: a.email });
+      return finishLogin(req, res, next, a, portal, how === 'recovery' ? ' (recovery code)' : ' (two-step)');
+    })
+  );
+}
+
+// Grants the session. Used directly for accounts without two-step verification and after the code is checked for those with it.
+function finishLogin(req, res, next, a, portal, via = '') {
+  pool.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = $1', [a.id]).then(() => {
+    const admin = { id: a.id, name: a.name, email: a.email, role: a.role, mustChange: a.must_change_password, since: Date.now() };
+    req.session.regenerate((err) => {
+      if (err) return next(err);
+      req.session.admin = admin;
+      req.session.csrf = crypto.randomBytes(24).toString('hex');
+      req.session.save(async (err2) => {
+        if (err2) return next(err2);
+        await audit(req, 'login', `Signed in (${a.role}) via ${portal === 'admin' ? 'owner' : 'staff'} page${via}`, admin);
+        res.redirect(admin.mustChange ? '/admin/account' : homeFor(a.role));
+      });
+    });
+  }).catch(next);
 }
 
 mountLogin(router, 'admin', ['/login']);
@@ -265,7 +324,7 @@ router.use(
       return req.session.destroy(() => res.redirect(door));
     }
     // Re-read the account on every request so role changes and disabling take effect immediately.
-    const { rows } = await pool.query('SELECT name, email, role, is_active, must_change_password FROM admins WHERE id = $1', [a.id]);
+    const { rows } = await pool.query('SELECT name, email, role, is_active, must_change_password, totp_enabled FROM admins WHERE id = $1', [a.id]);
     if (!rows.length || !rows[0].is_active) {
       return req.session.destroy(() => res.redirect(door));
     }
@@ -274,6 +333,11 @@ router.use(
     if (a.mustChange) {
       const ok = (req.method === 'GET' && req.path === '/account') || (req.method === 'POST' && req.path === '/account/password');
       if (!ok) return res.redirect('/admin/account');
+    }
+    // When the owner requires two-step verification, an account without it can only set it up (or sign out).
+    if (!rows[0].totp_enabled && (await getSettings()).require_2fa === '1') {
+      const ok = req.path === '/account/2fa/setup' || req.path === '/account/2fa/enable' || req.path === '/logout' || (req.method === 'GET' && req.path === '/account');
+      if (!ok) return res.redirect('/admin/account/2fa/setup');
     }
     next();
   })
@@ -721,11 +785,7 @@ router.post(
     if (!Buffer.isBuffer(buf) || buf.length < 1000) return res.status(400).json({ ok: false, error: 'Choose a valid image first.' });
     if (buf.length > 2.5 * 1024 * 1024) return res.status(413).json({ ok: false, error: 'Image is too large. Maximum size is 2.5 MB.' });
     const mime = req.get('content-type').split(';')[0].toLowerCase();
-    const valid = mime === 'image/jpeg'
-      ? buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff
-      : mime === 'image/png'
-        ? buf.subarray(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))
-        : mime === 'image/webp' && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP';
+    const valid = require('../lib/image-check').validImage(buf, mime);
     if (!valid) return res.status(400).json({ ok: false, error: 'The selected file is not a valid JPEG, PNG or WebP image.' });
     const exists = await pool.query('SELECT id FROM categories WHERE id = $1', [id]);
     if (!exists.rows.length) return res.status(404).json({ ok: false, error: 'Category not found.' });
@@ -870,6 +930,18 @@ router.post(
 );
 
 router.post(
+  '/settings/require-2fa',
+  need('settings'),
+  wrap(async (req, res) => {
+    const on = req.body.enabled === '1';
+    await saveSettings({ require_2fa: on ? '1' : '0' });
+    await audit(req, 'require_2fa_toggle', on ? 'Two-step verification is now required for all admin and staff' : 'Two-step verification is now optional');
+    flash(req, 'success', on ? 'Two-step verification is now required. People without it will be asked to set it up on their next page.' : 'Two-step verification is optional again.');
+    res.redirect('/admin/settings#twofaCard');
+  })
+);
+
+router.post(
   '/settings/pay-before-cleaning',
   need('settings'),
   wrap(async (req, res) => {
@@ -963,7 +1035,9 @@ router.get(
     const { rows } = await pool.query('SELECT last_login_at, phone, notify_inapp, notify_push, notify_whatsapp FROM admins WHERE id = $1', [req.session.admin.id]);
     const role = req.session.admin.role;
     const alerts = Object.entries(ROUTES).filter(([, roles]) => roles.includes(role)).map(([ev]) => HEADLINES[ev]);
-    res.view(accountPage(await buildCtx(req), { lastLogin: rows[0] && rows[0].last_login_at, prefs: rows[0], alerts, waMode: waCanSend() ? 'auto' : 'link' }));
+    const tf = await pool.query('SELECT totp_enabled, jsonb_array_length(totp_recovery) AS left FROM admins WHERE id = $1', [req.session.admin.id]);
+    const twofa = { enabled: !!(tf.rows[0] && tf.rows[0].totp_enabled), left: tf.rows[0] ? tf.rows[0].left : 0, required: (await getSettings()).require_2fa === '1' };
+    res.view(accountPage(await buildCtx(req), { lastLogin: rows[0] && rows[0].last_login_at, prefs: rows[0], alerts, waMode: waCanSend() ? 'auto' : 'link', twofa }));
   })
 );
 
@@ -998,6 +1072,7 @@ router.post(
 
 require('./admin-tools')(router, { buildCtx, flash, need });
 require('./admin-staff')(router, { buildCtx, flash, need });
+require('./admin-2fa')(router, { buildCtx, flash });
 require('./admin-notify')(router, { buildCtx, flash, need });
 require('./admin-accounts')(router, { flash, need, customersView });
 require('./admin-whatsapp')(router, { buildCtx, flash, need });

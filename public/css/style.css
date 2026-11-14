@@ -1214,3 +1214,12 @@ img.mpesa-badge.logo.sm { height: 1.45rem; padding: .14rem .38rem; border-radius
 
 .pick-ico { overflow: hidden; padding: 0; background: var(--surface-2); }
 .pick-ico .pick-photo { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* SEO copy and heading */
+.home-h1 { margin: 0; font: inherit; font-weight: 700; color: inherit; }
+.seo-copy { padding-block: 2rem; }
+.seo-copy h2 { font-size: 1.3rem; margin-bottom: .6rem; }
+.seo-copy h3 { font-size: 1rem; margin: 1.1rem 0 .4rem; }
+.seo-copy p, .seo-list { color: var(--muted); font-size: .92rem; max-width: 70ch; }
+.seo-list { padding-left: 1.2rem; display: grid; gap: .3rem; }
+.seo-list strong { color: var(--text); }

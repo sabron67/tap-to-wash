@@ -3,9 +3,10 @@ const { money } = require('../../lib/helpers');
 const { adminLayout } = require('../layouts/admin');
 const { icon } = require('../../lib/icons');
 const { csrfField } = require('../partials/ui');
+const { bizHub } = require('../partials/biz-hub');
 const { FIGURES, SECTIONS } = require('../../lib/figures');
 
-function reportsPage(ctx, { from, to, kpi, presets, figures = {} }) {
+function reportsPage(ctx, { from, to, kpi, presets, figures = {}, snap }) {
   const cur = ctx.settings.currency;
   const q = (f, t) => `from=${f}&to=${t}`;
   const setCount = FIGURES.filter((f) => figures[f.key] && figures[f.key].saved).length;
@@ -17,19 +18,10 @@ function reportsPage(ctx, { from, to, kpi, presets, figures = {} }) {
   const sample = (f) => (f.def === null ? 'Auto' : `Sample: ${f.kind === 'pct' ? Math.round(f.def * 10000) / 100 : f.def}`);
   const figureField = (f) => html`<label class="field"><span>${f.label.replace('{cur}', cur)}</span><input name="${f.key}" type="number" inputmode="decimal" min="${f.min ?? 0}" ${f.max !== undefined ? html`max="${f.max}"` : ''} step="${f.kind === 'int' ? '1' : '0.01'}" value="${shown(f)}" placeholder="${sample(f)}"></label>`;
   const body = html`
+  ${bizHub(ctx, { active: 'reports', from, to, presets, snap })}
   <section class="glass pad">
-    <h2>Excel report</h2>
-    <p class="muted">Download a workbook with your requests, income and customers, plus calculators for pricing and break-even. Everything is a live formula, so you can change the yellow cells and watch the results update.</p>
-
-    <div class="presets">
-      ${presets.map(([label, f, t]) => html`<a class="tab ${f === from && t === to ? 'active' : ''}" href="/admin/reports?${q(f, t)}">${label}</a>`)}
-    </div>
-
-    <form class="row-form" method="get" action="/admin/reports">
-      <label class="field" style="margin:0"><span>From</span><input type="date" name="from" value="${from}" required></label>
-      <label class="field" style="margin:0"><span>To</span><input type="date" name="to" value="${to}" required></label>
-      <button class="btn btn-ghost" type="submit" style="align-self:flex-end">Update preview</button>
-    </form>
+    <h2>Requests and income</h2>
+    <p class="muted">Figures for the period above. The Excel workbook adds your stock, supply costs and profit from Inventory, plus calculators for pricing and break-even. Everything is a live formula, so you can change the yellow cells and watch the results update.</p>
 
     <div class="kpis">
       <div class="kpi"><b>${kpi.requests}</b><span>Requests</span></div>
@@ -39,6 +31,10 @@ function reportsPage(ctx, { from, to, kpi, presets, figures = {} }) {
       <div class="kpi"><b>${money(kpi.outstanding, cur)}</b><span>Outstanding</span></div>
     </div>
 
+    <div class="profit-link">
+      <div><strong>Profit for this period: ${money(snap.net, cur)}</strong><span class="muted small"> after ${money(snap.suppliesCost, cur)} supplies and ${money(snap.expenses, cur)} expenses${snap.margin === null ? '' : ` · ${snap.margin.toFixed(1)}% margin`}</span></div>
+      ${ctx.can('inventory') ? html`<a class="btn btn-ghost btn-sm" href="/admin/inventory?${q(from, to)}#profit">See the profit breakdown ${icon('arrow-right')}</a>` : ''}
+    </div>
     <a class="btn btn-primary btn-lg" href="/admin/reports/download?${q(from, to)}">${icon('download')} Download Excel report</a>
   </section>
 

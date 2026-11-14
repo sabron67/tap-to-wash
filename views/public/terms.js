@@ -14,7 +14,7 @@ function termsPage(ctx) {
       <div class="terms-body">${renderTerms(s.terms_text, s.business_name)}</div>
     </article>
   </main>`;
-  return publicLayout(ctx, { title: 'Terms of Service', body, bodyClass: 'public' });
+  return publicLayout(ctx, { title: 'Terms of Service', body, bodyClass: 'public', seo: { canonical: require('../../lib/seo').abs('/terms') } });
 }
 
 module.exports = { termsPage };
