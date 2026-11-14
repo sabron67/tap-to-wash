@@ -17,14 +17,14 @@ function stkBox(ctx, result, balance) {
   if (a && a.status === 'pending') {
     return html`<div class="pay-box stk-box" id="stkWait" data-status-url="${pay.statusUrl(a.id)}">
       <h4>${mpesaBadge()} <span>Check your phone</span></h4>
-      <p class="stk-msg" data-msg role="status">We sent an M-Pesa prompt to ${a.phone}. Enter your M-Pesa PIN to pay ${money(Math.ceil(balance), cur)}.</p>
+      <p class="stk-msg" data-msg role="status">We sent an M-Pesa prompt to ${a.phone}. Enter your M-Pesa PIN to pay ${money(balance, cur)}.</p>
       <p class="muted small">This page updates by itself once you have paid. No prompt? Wait a moment, or use the steps below.</p>
     </div>`;
   }
   return html`<div class="pay-box stk-box">
     <h4>${mpesaBadge()} <span>Pay with an M-Pesa prompt</span></h4>
     ${a && a.status !== 'success' ? html`<p class="err show" role="alert">${a.message}</p>` : ''}
-    <p class="muted small">We send a prompt to your phone. Enter your M-Pesa PIN and ${money(Math.ceil(balance), cur)} is paid. Nothing is taken until you enter the PIN.</p>
+    <p class="muted small">We send a prompt to your phone. Enter your M-Pesa PIN and ${money(balance, cur)} is paid. Nothing is taken until you enter the PIN.</p>
     <form method="post" action="${pay.payAction}" class="stack">
       ${hiddenFields}
       <label class="field"><span>M-Pesa phone number</span><input name="msisdn" type="tel" inputmode="tel" value="${pay.phone || ''}" placeholder="0712 345 678" maxlength="20" autocomplete="tel" required></label>
@@ -55,7 +55,7 @@ function billCard(ctx, result) {
   const b = result.bill;
   const cur = ctx.settings.currency;
   const qty = (n) => Number(n).toLocaleString('en-KE', { maximumFractionDigits: 2 });
-  const balance = Math.max(0, Number(b.total) - Number(b.paid));
+  const balance = Math.ceil(Math.max(0, Number(b.total) - Number(b.paid))); // M-Pesa takes whole shillings only
   const pay = result.pay || {};
   const billAction = pay.billAction || '/track/bill';
   const hidden = html`${pay.csrf ? html`<input type="hidden" name="_csrf" value="${pay.csrf}">` : ''}<input type="hidden" name="ref" value="${result.ref_code}"><input type="hidden" name="phone" value="${result.phone || ''}"><input type="hidden" name="version" value="${b.version}">`;

@@ -129,6 +129,11 @@ app.use(async (err, req, res, next) => {
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => {
   console.log(`Tap to Wash running at http://localhost:${port}`);
+  // M-Pesa cannot charge cents: round any unpaid bill that still has cents to a whole number of shillings (safe to repeat).
+  require('./config/db').pool
+    .query("UPDATE requests SET total_amount = GREATEST(1, ROUND(total_amount)) WHERE bill_status IN ('awaiting_confirm','confirmed') AND amount_paid = 0 AND total_amount > 0 AND total_amount <> ROUND(total_amount)")
+    .then((r) => r.rowCount && console.log(`Rounded ${r.rowCount} unpaid bill(s) to whole shillings.`))
+    .catch((e) => console.error('Whole-shilling rounding skipped:', e.message));
   // Link WhatsApp in the background so a slow connection never delays the website.
   setTimeout(() => require('./lib/whatsapp').start().catch((e) => console.error('WhatsApp start failed:', e.message)), 3000);
 });
