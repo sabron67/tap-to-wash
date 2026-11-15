@@ -31,6 +31,7 @@ ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.pn
 <link rel="stylesheet" href="/css/promo.css">
 <link rel="stylesheet" href="/css/loading.css">
 <link rel="stylesheet" href="/css/how-it-works.css">
+<link rel="stylesheet" href="/css/file-input.css">
 <script src="/js/loading.js" defer></script>
 <script src="/js/toast.js" defer></script>
 <script src="/js/dialog.js" defer></script>

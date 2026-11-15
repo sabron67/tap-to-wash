@@ -299,7 +299,9 @@ function homePage(ctx, categories) {
         </div>
 
         <aside class="about-cta" aria-label="Book your laundry pick-up">
-          <svg class="cta-art" viewBox="0 0 360 250" role="img" aria-label="Tap to book on your phone, we collect your laundry, wash it and bring it back folded">
+          ${mv.cta
+            ? html`<img class="cta-photo" src="${mediaUrl('cta', mv)}" alt="${s.business_name} laundry pick-up and delivery" width="720" height="500" loading="lazy" decoding="async">`
+            : html`<svg class="cta-art" viewBox="0 0 360 250" role="img" aria-label="Tap to book on your phone, we collect your laundry, wash it and bring it back folded">
             <rect class="a-bg" x="0" y="0" width="360" height="250" rx="22"/>
             <path class="a-route" d="M156 168 C 190 64, 236 64, 262 112"/>
             <circle class="a-pulse" cx="95" cy="168" r="26"/>
@@ -332,7 +334,7 @@ function homePage(ctx, categories) {
               <circle class="a-wheel" cx="174" cy="146" r="5"/>
               <circle class="a-wheel" cx="195" cy="146" r="5"/>
             </g>
-          </svg>
+          </svg>`}
           <div class="cta-body">
             <h3>Ready when you are</h3>
             <p>Tap, pick a time and we come to your door. Pay by M-Pesa when your bill is ready.</p>
