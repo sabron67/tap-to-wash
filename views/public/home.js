@@ -283,7 +283,7 @@ function homePage(ctx, categories) {
       : ''}
 
 
-    <section class="home-sec seo-copy about-how" id="about-laundry">
+    <section class="home-sec seo-copy about-how${mv.about ? ' has-bg' : ''}" id="about-laundry"${mv.about ? html` style="${raw(img('about'))}"` : ''}>
       <div class="container about-grid">
         <div class="about-main">
           <h2>Laundry and washing service with pick-up and delivery</h2>

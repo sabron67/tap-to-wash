@@ -78,3 +78,15 @@
 }
 @media (prefers-reduced-motion: reduce) { .a-pulse, .a-van { animation: none; } .a-pulse { opacity: .25; } }
 @media print { .about-cta .cta-actions, .a-pulse { display: none; } .how-steps li, .about-cta { box-shadow: none; border-color: #000; break-inside: avoid; } }
+
+/* Admin-uploaded background picture (Admin > Photos > About section background).
+   The photo fills the whole section edge to edge and stays clearly visible; the text sits on clean panels so it is always readable. */
+.about-how.has-bg { position: relative; isolation: isolate; overflow: hidden; padding-block: clamp(1.6rem, 5vw, 3.5rem); margin-block: 1.6rem; }
+.about-how.has-bg::before { content: ''; position: absolute; inset: 0; z-index: -2; background: var(--img) center / cover no-repeat; }
+.about-how.has-bg::after { content: ''; position: absolute; inset: 0; z-index: -1; background: color-mix(in srgb, var(--bg) 18%, transparent); } /* light, flat veil only */
+.about-how.has-bg .about-main { background: color-mix(in srgb, var(--surface) 93%, transparent); border: 1px solid var(--line); border-radius: 22px; padding: clamp(1rem, 3vw, 1.8rem); box-shadow: var(--shadow-up); }
+.about-how.has-bg .about-cta { position: relative; top: auto; } /* sticky does not work inside the clipped photo band */
+@media (min-width: 960px) { .about-how.has-bg .about-cta { align-self: start; } }
+/* Dark mode: dim the photo a little so it does not glare */
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .about-how.has-bg::after { background: color-mix(in srgb, var(--bg) 52%, transparent); } }
+:root[data-theme='dark'] .about-how.has-bg::after { background: color-mix(in srgb, var(--bg) 52%, transparent); }
