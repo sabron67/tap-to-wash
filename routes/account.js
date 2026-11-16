@@ -151,9 +151,9 @@ router.post(
   })
 );
 
-// ---------- forgot / reset password (code sent by WhatsApp) ----------
+// ---------- forgot / reset password (code sent by WhatsApp, or by email as a fallback) ----------
 const UNAVAILABLE = 'Automatic reset codes are not available right now. Please contact us on WhatsApp or by phone and we will reset your password for you.';
-const SENT = `If that email has an account with a WhatsApp number saved, we have sent it a 6-digit code (it works for ${TTL_MINUTES} minutes). Nothing arrived? Contact us and we will reset your password for you.`;
+const SENT = `If that email has an account, we have sent a 6-digit code to its WhatsApp number (or to the email itself). It works for ${TTL_MINUTES} minutes. Nothing arrived? Contact us and we will reset your password for you.`;
 
 router.get(
   '/forgot',

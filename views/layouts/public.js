@@ -1,7 +1,10 @@
 const { html, raw } = require('../../lib/html');
 const { abs } = require('../../lib/seo');
+const { href: cssHref } = require('../../lib/css-bundle');
 
-function head(title, settings, description, seo = {}) {
+// css: 'site' (public pages) or 'admin' (site + admin styles): one merged, minified file instead of 7-8 requests.
+function head(title, settings, description, seo = {}, css = 'site') {
+  const cssUrl = cssHref(css);
   const fullTitle = seo.fullTitle ? seo.title : `${title ? `${title} · ` : ''}${settings.business_name}`;
   const canonical = seo.canonical || '';
   return html`<meta charset="utf-8">
@@ -22,16 +25,11 @@ ${canonical ? html`<meta property="og:url" content="${canonical}"><meta property
 ${seo.jsonLd ? raw(`<script type="application/ld+json">${JSON.stringify(seo.jsonLd).replace(/</g, '\\u003c')}</script>`) : ''}
 <meta name="theme-color" content="#EBEBE4" media="(prefers-color-scheme: light)" data-light="#EBEBE4">
 <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)" data-dark="#121211">
+<link rel="preload" href="${cssUrl}" as="style">
 <script src="/js/boot.js"></script>
 <link rel="icon" href="/site-icon${settings.icon_v ? `?v=${settings.icon_v}` : ''}">
 ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${settings.icon_v}">` : ''}
-<link rel="stylesheet" href="/css/style.css">
-<link rel="stylesheet" href="/css/customer-premium.css">
-<link rel="stylesheet" href="/css/receipt.css">
-<link rel="stylesheet" href="/css/promo.css">
-<link rel="stylesheet" href="/css/loading.css">
-<link rel="stylesheet" href="/css/how-it-works.css">
-<link rel="stylesheet" href="/css/file-input.css">
+<link rel="stylesheet" href="${cssUrl}">
 <script src="/js/loading.js" defer></script>
 <script src="/js/toast.js" defer></script>
 <script src="/js/dialog.js" defer></script>

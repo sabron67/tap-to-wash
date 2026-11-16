@@ -42,6 +42,8 @@ app.use(compression()); // gzip html/css/js/svg: much smaller downloads on phone
 app.use(securityHeaders);
 app.use(express.json({ limit: '50kb' }));
 app.use(express.urlencoded({ extended: false, limit: '50kb' }));
+// One merged, minified, long-cached stylesheet per area (see lib/css-bundle.js); must come before express.static.
+app.use(require('./lib/css-bundle').middleware);
 app.use(
   express.static(path.join(__dirname, 'public'), {
     // pictures cache for a week; css/js are re-checked (cheap 304) so an update shows up straight away
@@ -127,7 +129,7 @@ app.use(async (err, req, res, next) => {
 });
 
 const port = Number(process.env.PORT) || 3000;
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Tap to Wash running at http://localhost:${port}`);
   // M-Pesa cannot charge cents: round any unpaid bill that still has cents to a whole number of shillings (safe to repeat).
   require('./config/db').pool
@@ -136,4 +138,53 @@ app.listen(port, () => {
     .catch((e) => console.error('Whole-shilling rounding skipped:', e.message));
   // Link WhatsApp in the background so a slow connection never delays the website.
   setTimeout(() => require('./lib/whatsapp').start().catch((e) => console.error('WhatsApp start failed:', e.message)), 3000);
+  // Ask Safaricom about prompts whose callback never arrived, so a paid customer is not left "pending".
+  require('./lib/stk').startReconciler();
+});
+
+server.on('error', (err) => {
+  console.error(err.code === 'EADDRINUSE' ? `Port ${port} is already in use.` : `Server error: ${err.message}`);
+  process.exit(1);
+});
+
+// ---------- clean shutdown and crash handling ----------
+// On a redeploy (SIGTERM) or Ctrl+C: stop taking new requests, let running ones finish, close WhatsApp, email and live streams,
+// then drain the PostgreSQL pool so no connection is left stuck on the database. A timer forces the exit if something hangs.
+let shuttingDown = false;
+function shutdown(reason, exitCode = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Shutting down (${reason})...`);
+  const force = setTimeout(() => {
+    console.error('Shutdown took too long; forcing exit.');
+    process.exit(exitCode || 1);
+  }, 10000);
+  force.unref();
+
+  const step = (name, fn) => Promise.resolve().then(fn).catch((e) => console.error(`Shutdown: ${name} failed:`, e.message));
+  (async () => {
+    await step('M-Pesa job', () => require('./lib/stk').stopReconciler());
+    await step('WhatsApp', () => require('./lib/whatsapp').shutdown());
+    await step('email', () => require('./lib/mailer').close());
+    // Stop accepting connections; end live (SSE) streams and idle keep-alive sockets so close() can finish.
+    const closed = new Promise((resolve) => server.close(resolve));
+    await step('live streams', () => require('./lib/live').closeAll());
+    server.closeIdleConnections && server.closeIdleConnections();
+    setTimeout(() => server.closeAllConnections && server.closeAllConnections(), 5000).unref(); // requests still running after 5 s are cut
+    await closed;
+    await step('database pool', () => pool.end());
+    console.log('Shutdown complete.');
+    process.exit(exitCode);
+  })();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+// A rejected promise nobody handled is logged and the site keeps running (one failed background task must not take it down).
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason instanceof Error ? reason.stack || reason.message : reason);
+});
+// An uncaught exception leaves the process in an unknown state: log it, close cleanly, and exit non-zero so the host restarts it.
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err && err.stack ? err.stack : err);
+  shutdown('uncaught exception', 1);
 });

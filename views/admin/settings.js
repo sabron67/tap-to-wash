@@ -19,13 +19,13 @@ function settingsPage(ctx) {
       ${input('tagline', 'Headline on the home page')}
       <label class="field"><span>Short description</span><textarea name="about" rows="3" maxlength="400">${s.about}</textarea></label>
       <div class="grid-2">
-        ${input('phone', 'Phone', 'type="tel"')}
-        ${input('whatsapp', 'WhatsApp number', 'type="tel"', 'With country code, e.g. 254712345678')}
+        ${input('phone', 'Phone', 'type="tel" autocomplete="tel"')}
+        ${input('whatsapp', 'WhatsApp number', 'type="tel" autocomplete="tel"', 'With country code, e.g. 254712345678')}
       </div>
-      ${input('email', 'Email', 'type="email"')}
-      ${input('address', 'Address / service area')}
-      ${input('opening_hours', 'Opening hours')}
-      ${input('currency', 'Currency code', 'maxlength="6"', 'e.g. KES')}
+      ${input('email', 'Email', 'type="email" autocomplete="email"')}
+      ${input('address', 'Address / service area', 'autocomplete="street-address"')}
+      ${input('opening_hours', 'Opening hours', 'autocomplete="off"')}
+      ${input('currency', 'Currency code', 'maxlength="6" autocomplete="off"', 'e.g. KES')}
       <button class="btn btn-primary" type="submit">Save settings</button>
     </form>
 

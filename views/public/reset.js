@@ -16,7 +16,7 @@ function forgotForm(ctx, kind, { error = '', email = '', portal = '' }) {
   return html`<form method="post" action="${c.base}/forgot" class="stack">
     ${csrfField(ctx)}
     <h1 class="rs-title">Forgot your password?</h1>
-    <p class="muted small">Enter the email of your ${c.who}. We will WhatsApp a 6-digit code to the number saved on it.</p>
+    <p class="muted small">Enter the email of your ${c.who}. We will send a 6-digit code to the WhatsApp number saved on it, or to the email if WhatsApp is not available.</p>
     ${error ? html`<p class="err show" role="alert">${error}</p>` : ''}
     <label class="field"><span>Email</span><input type="email" name="email" value="${email}" required maxlength="120" autocomplete="username" autofocus></label>
     <button class="btn btn-primary btn-block" type="submit">Send me a code</button>

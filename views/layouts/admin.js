@@ -25,9 +25,8 @@ function adminLayout(ctx, { title, active, body }) {
   return html`<!doctype html>
 <html lang="en">
 <head>
-${head(`${title} · Admin`, s)}
+${head(`${title} · Admin`, s, '', {}, 'admin')}
 <meta name="robots" content="noindex,nofollow">
-<link rel="stylesheet" href="/css/admin-hub.css">
 </head>
 <body class="admin">
 <div class="shell">

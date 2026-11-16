@@ -261,8 +261,8 @@ mountLogin(router, 'admin', ['/login']);
 mountLogin(staffRouter, 'staff', ['/', '/login']);
 
 // ---------- forgot / reset password (code sent by WhatsApp to the number on the staff account) ----------
-const STAFF_UNAVAILABLE = 'Automatic reset codes are not available right now (WhatsApp is not linked). Ask the owner to reset your password under Staff.';
-const STAFF_SENT = `If that email belongs to a staff account with a WhatsApp number saved, we have sent it a 6-digit code (it works for ${TTL_MINUTES} minutes). Nothing arrived? Ask the owner to reset your password under Staff.`;
+const STAFF_UNAVAILABLE = 'Automatic reset codes are not available right now (neither WhatsApp nor email is set up). Ask the owner to reset your password under Staff.';
+const STAFF_SENT = `If that email belongs to a staff account, we have sent a 6-digit code to its WhatsApp number (or to the email itself). It works for ${TTL_MINUTES} minutes. Nothing arrived? Ask the owner to reset your password under Staff.`;
 
 router.get(
   '/forgot',
@@ -306,7 +306,7 @@ router.post(
       await audit(req, 'password_reset_failed', 'Wrong or expired code', { email });
       return res.status(400).view(resetPage(await buildCtx(req), 'admin', { error: r.error, email, portal: portalHint(req) }));
     }
-    await audit(req, 'password_reset', 'Password reset with a WhatsApp code', { id: r.user.id, email: r.user.email });
+    await audit(req, 'password_reset', 'Password reset with an emailed or WhatsApp code', { id: r.user.id, email: r.user.email });
     flash(req, 'success', 'Your password was updated. Please sign in.');
     const who = await pool.query('SELECT role FROM admins WHERE id = $1', [r.user.id]);
     res.redirect(loginUrlForRole(who.rows[0] && who.rows[0].role)); // owner -> /admin/login, everyone else -> /staff
