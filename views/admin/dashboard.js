@@ -59,7 +59,7 @@ function dashboardPage(ctx, d) {
               <td class="nowrap">${fmtDate(r.created_at)}</td>
             </tr>`
           )}</tbody></table></div>`
-      : html`<div class="empty"><div class="big">${icon('droplets')}</div><p>No requests yet. They will appear here as customers tap to wash.</p></div>`}
+      : html`<div class="empty"><div class="big">${icon('droplets')}</div><p>No requests yet. They will appear here as customers place requests.</p></div>`}
   </section>`;
 
   return adminLayout(ctx, { title: 'Dashboard', active: 'dashboard', body });

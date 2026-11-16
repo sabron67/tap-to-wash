@@ -17,7 +17,7 @@ function nav(s, account) {
       ${account ? html`<a href="/account">My account</a>` : html`<a href="/account/login">Sign in</a>`}
     </nav>
     ${themeSwitch()}
-    <button class="btn btn-primary btn-sm" type="button" data-open-wizard>Tap to wash</button>
+    <button class="btn btn-primary btn-sm" type="button" data-open-wizard>Get started</button>
   </header>`;
 }
 
@@ -45,8 +45,8 @@ const DONE_COUNT = { new: 0, confirmed: 1, rider_arrived: 1, picked_up: 2, washi
 function recentCard(recent, s) {
   if (!recent) {
     return html`<div class="recent-card recent-empty">
-      <div class="recent-top"><div><h3>No laundry in progress</h3><p>Tap to wash and we will come to you.</p></div></div>
-      <div class="recent-actions"><button class="btn btn-primary btn-sm" type="button" data-open-wizard>Tap to wash</button><a class="btn btn-light btn-sm" href="/track">Track an order</a></div>
+      <div class="recent-top"><div><h3>No laundry in progress</h3><p>Get started and we will come to you.</p></div></div>
+      <div class="recent-actions"><button class="btn btn-primary btn-sm" type="button" data-open-wizard>Get started</button><a class="btn btn-light btn-sm" href="/track">Track an order</a></div>
     </div>`;
   }
   const st = STATUS_MAP[recent.status] || { label: recent.status };
@@ -97,7 +97,7 @@ function wizard(signedIn, branches = []) {
       <button class="modal-x" type="button" data-close aria-label="Close">${icon('x')}</button>
 
       <div class="wiz-head">
-        <h2 id="wizTitle">Tap to wash</h2>
+        <h2 id="wizTitle">Get started</h2>
         <p class="muted" id="wizSub">Tell us what to wash and where to find you.</p>
       </div>
 
@@ -269,7 +269,7 @@ function homePage(ctx, categories) {
         ${categories.length
           ? html`<div class="svc-rail" id="catGrid">${categories.map((c) => categoryCard(c, s.currency))}</div><p class="muted small svc-none" id="svcNone" hidden>No service matches your search.</p>`
           : html`<div class="empty glass"><div class="big">${icon('shopping-basket')}</div><p>Our services are being set up. Please check back soon!</p></div>`}
-        <button class="btn btn-primary btn-block tap-btn home-tap" type="button" data-open-wizard>Tap to wash</button>
+        <button class="btn btn-primary btn-block tap-btn home-tap" type="button" data-open-wizard>Get started</button>
       </div>
     </section>
 
@@ -339,7 +339,7 @@ function homePage(ctx, categories) {
             <h3>Ready when you are</h3>
             <p>Tap, pick a time and we come to your door. Pay by M-Pesa when your bill is ready.</p>
             <div class="cta-actions">
-              <button class="btn btn-primary btn-lg" type="button" data-open-wizard>${icon('sparkles')} Tap to wash</button>
+              <button class="btn btn-primary btn-lg" type="button" data-open-wizard>${icon('sparkles')} Get started</button>
               <a class="btn btn-light btn-lg" href="/track">${icon('search')} Track an order</a>
             </div>
           </div>
@@ -364,7 +364,7 @@ function homePage(ctx, categories) {
 
   <div class="selbar glass-strong" id="selBar" hidden>
     <span id="selText">0 selected</span>
-    <button class="btn btn-primary btn-sm" type="button" data-open-wizard>Tap to wash</button>
+    <button class="btn btn-primary btn-sm" type="button" data-open-wizard>Get started</button>
   </div>
 
   ${wizard(!!ctx.account, ctx.branches || [])}

@@ -97,7 +97,7 @@ function settingsPage(ctx) {
       ${csrfField(ctx)}
       <div class="switch-text">
         <h2>Multiple branches</h2>
-        <p class="muted small">Switch on to add more branches. Customers can then pick their nearest branch when they tap to wash, and staff can assign every request to a branch. Switch off to run as a single outlet - your branches and past assignments are kept.</p>
+        <p class="muted small">Switch on to add more branches. Customers can then pick their nearest branch when they place a request, and staff can assign every request to a branch. Switch off to run as a single outlet - your branches and past assignments are kept.</p>
       </div>
       <input type="hidden" name="enabled" value="${s.branches_enabled === '1' ? '0' : '1'}">
       <button type="submit" class="switch ${s.branches_enabled === '1' ? 'on' : ''}" role="switch" aria-checked="${s.branches_enabled === '1' ? 'true' : 'false'}" aria-label="Multiple branches">

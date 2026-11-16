@@ -5,7 +5,7 @@ Laundry services website — Node.js + Express, PostgreSQL, views written as pla
 ## What is included
 
 **Public site (`/`)**
-- Text wordmark (no logo art) and an animated "Tap to wash" button that starts a request
+- Text wordmark (no logo art) and an animated "Get started" button that starts a request
 - Scroll experience: the page slides over a sticky hero, sections and cards reveal as you scroll, progress bar, active menu link; respects "reduce motion"
 - Background pictures of laundry machines and clothes (drawn illustrations by default; upload real photos in **Admin → Photos**)
 - **Terms of Service**: public `/terms` page, editable in Admin → Settings (each change = new version); customers must tick acceptance, stored with every request
@@ -14,7 +14,7 @@ Laundry services website — Node.js + Express, PostgreSQL, views written as pla
 - Database indexes for the common queries, plus trigram (pg_trgm) indexes for the admin search boxes
 - Warm white / clay flat design with a **System / Light / Dark** switch (System follows the device live; Light or Dark overrides it and is remembered in the browser). Available on the public site, the admin panel and the login page.
 - Category section built from whatever the admin adds
-- "Tap to wash" wizard: choose categories, share GPS location and describe where you are, then name and phone
+- "Get started" wizard: choose categories, share GPS location and describe where you are, then name and phone
 - Reference code after sending, and an order tracking page (`/track`)
 
 **Admin (`/admin`)**
@@ -54,7 +54,7 @@ Removed as unnecessary: garment-level tracking, machines and wash batches, custo
 **Admin → Settings → Multiple branches** switches multi-branch mode on or off (owner only).
 
 - **Off (default):** single outlet. No branch pickers or branch columns anywhere.
-- **On:** a **Branches** section appears in Operations (add branches, switch each one Active/Off). Customers see a "Nearest branch" choice when they tap to wash, staff can assign a branch in the dispatch form, and the branch shows on the request page.
+- **On:** a **Branches** section appears in Operations (add branches, switch each one Active/Off). Customers see a "Nearest branch" choice when they place a request, staff can assign a branch in the dispatch form, and the branch shows on the request page.
 - Switching off keeps all branches and past assignments; they simply stop being used.
 
 After updating run `npm install` (adds `compression`) and `npm run db:init` once.

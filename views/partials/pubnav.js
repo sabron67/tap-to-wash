@@ -15,7 +15,7 @@ function pubNav(ctx, active = '') {
       ${ctx.account ? link('account', '/account', 'My account') : link('account', '/account/login', 'Sign in')}
     </nav>
     ${themeSwitch()}
-    <a class="btn btn-primary btn-sm" href="/">Tap to wash</a>
+    <a class="btn btn-primary btn-sm" href="/">Get started</a>
   </header>
   ${publicTabbar(ctx, ({ account: 'account', track: 'track', services: 'services' })[active] || '')}`;
 }

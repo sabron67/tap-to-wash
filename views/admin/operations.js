@@ -94,7 +94,7 @@ function operationsPage(ctx, d) {
         ${Number(x.orders) === 0 ? html`<form method="post" action="/admin/operations/promotion-delete" class="inline" data-confirm="Delete “${x.title}”? This cannot be undone.">${csrfField(ctx)}<input type="hidden" name="id" value="${x.id}"><button class="btn btn-danger btn-sm" type="submit">Delete</button></form>` : ''}</div></td></tr>`), 'No promotions yet.')}
   `)}
 
-  ${d.branchesOn ? section('branches', 'Branches', 'Add outlets and switch each one on or off. Only active branches appear to customers when they tap to wash.', html`
+  ${d.branchesOn ? section('branches', 'Branches', 'Add outlets and switch each one on or off. Only active branches appear to customers when they place a request.', html`
     ${form('branch', html`${field('name', 'Branch name')}${field('phone', 'Contact phone', 'tel', false)}${field('address', 'Address', 'text', false)}`, 'Add branch')}
     ${table(['Branch', 'Phone', 'Address', 'Orders', 'Active'], d.branches.map((x) => html`<tr><td>${x.name}</td><td>${x.phone || '—'}</td><td>${x.address || '—'}</td><td>${x.orders}</td><td>${toggleForm('branch-status', x)}</td></tr>`), 'No branches yet. Add your first one above.')}
   `) : ''}
