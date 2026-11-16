@@ -20,8 +20,8 @@ ${canonical ? html`<meta property="og:url" content="${canonical}"><meta property
 <meta name="twitter:title" content="${fullTitle}">
 <meta name="twitter:description" content="${seo.description || description || settings.tagline}">
 ${seo.jsonLd ? raw(`<script type="application/ld+json">${JSON.stringify(seo.jsonLd).replace(/</g, '\\u003c')}</script>`) : ''}
-<meta name="theme-color" content="#F3FAF6" media="(prefers-color-scheme: light)" data-light="#F3FAF6">
-<meta name="theme-color" content="#101513" media="(prefers-color-scheme: dark)" data-dark="#101513">
+<meta name="theme-color" content="#EBEBE4" media="(prefers-color-scheme: light)" data-light="#EBEBE4">
+<meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)" data-dark="#121211">
 <script src="/js/boot.js"></script>
 <link rel="icon" href="/site-icon${settings.icon_v ? `?v=${settings.icon_v}` : ''}">
 ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${settings.icon_v}">` : ''}

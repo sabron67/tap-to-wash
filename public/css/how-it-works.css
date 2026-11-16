@@ -40,7 +40,7 @@
 .a-pulse { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; animation: a-pulse 2.4s ease-out infinite; }
 .a-pulse.p2 { animation-delay: 1.2s; }
 @keyframes a-pulse { 0% { opacity: .6; transform: scale(.7); } 100% { opacity: 0; transform: scale(1.7); } }
-.a-phone { fill: var(--surface); stroke: light-dark(#0B3331, #8E9C95); stroke-width: 3; }
+.a-phone { fill: var(--surface); stroke: light-dark(#1B1B1A, #8E9C95); stroke-width: 3; }
 .a-notch { fill: var(--line); }
 .a-line { fill: var(--line); }
 .a-line.short { opacity: .7; }
@@ -48,16 +48,16 @@
 .a-pin-dot { fill: var(--surface); }
 .a-btn { fill: var(--accent); }
 .a-tick { fill: none; stroke: var(--on-accent); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
-.a-mach { fill: var(--surface); stroke: light-dark(#0B3331, #8E9C95); stroke-width: 3; }
+.a-mach { fill: var(--surface); stroke: light-dark(#1B1B1A, #8E9C95); stroke-width: 3; }
 .a-panel { fill: var(--surface-2); }
 .a-dial { fill: var(--accent); }
-.a-door { fill: var(--surface-2); stroke: light-dark(#0B3331, #8E9C95); stroke-width: 3; }
+.a-door { fill: var(--surface-2); stroke: light-dark(#1B1B1A, #8E9C95); stroke-width: 3; }
 .a-glass { fill: var(--accent); opacity: .25; }
 .a-bubble { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
 .a-fold.f1 { fill: var(--accent); }
 .a-fold.f2 { fill: var(--accent); opacity: .55; }
-.a-van-body, .a-van-cab { fill: var(--accent); stroke: light-dark(#0B3331, #8E9C95); stroke-width: 2.5; }
-.a-wheel { fill: light-dark(#0B3331, #8E9C95); }
+.a-van-body, .a-van-cab { fill: var(--accent); stroke: light-dark(#1B1B1A, #8E9C95); stroke-width: 2.5; }
+.a-wheel { fill: light-dark(#1B1B1A, #8E9C95); }
 .a-van { animation: a-drive 3.2s ease-in-out infinite alternate; }
 @keyframes a-drive { from { transform: translate(0, 0); } to { transform: translate(6px, -3px); } }
 

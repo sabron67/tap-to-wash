@@ -29,7 +29,7 @@
       var dark = m.getAttribute('data-dark');
       var own = light || dark;
       if (mode === 'system') m.setAttribute('content', own);
-      else m.setAttribute('content', mode === 'dark' ? '#101513' : '#F3FAF6');
+      else m.setAttribute('content', mode === 'dark' ? '#121211' : '#EBEBE4');
     });
   }
 

@@ -10,9 +10,9 @@
 body.public {
   background: var(--bg);
   color: var(--text);
-  --field-bg: light-dark(#FFFFFF, #0F1B15);
+  --field-bg: light-dark(#FFFFFF, #141413);
   --nav-bg: color-mix(in srgb, var(--surface) 92%, transparent);
-  --soft-green: light-dark(#DDF3E6, #1F3A2B);
+  --soft-green: light-dark(#DCEBDD, #1F3427);
   --tone-warn: light-dark(#B7791F, #F2B84B);
 }
 
@@ -38,10 +38,10 @@ body.public .btn { min-height: 46px; }
 body.public .btn-sm { min-height: 42px; }
 body.public input, body.public select { min-height: 48px; }
 body.public .btn-primary {
-  color: var(--on-accent); background: var(--accent); border-color: var(--accent);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--on-ink); background: var(--ink); border-color: var(--ink);
+  box-shadow: 0 6px 16px rgba(27, 27, 26, .2);
 }
-body.public .btn-primary:hover { background: var(--accent-h); border-color: var(--accent-h); }
+body.public .btn-primary:hover { background: color-mix(in srgb, var(--ink) 82%, var(--bg)); border-color: color-mix(in srgb, var(--ink) 82%, var(--bg)); }
 body.public .btn-ghost { color: var(--text); background: var(--surface); border-color: var(--line-2); }
 body.public .btn-ghost:hover { background: var(--surface-2); }
 body.public .btn-light { background: var(--soft-green); color: var(--accent-ink); border-color: transparent; }
@@ -59,7 +59,7 @@ body.public input:focus, body.public select:focus, body.public textarea:focus {
 body.public .theme-switch { background: var(--surface); border-color: var(--line-2); box-shadow: var(--shadow); }
 body.public .theme-switch button { color: var(--muted); }
 body.public .theme-switch button:hover { background: var(--surface-2); color: var(--text); }
-body.public .theme-switch button[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); }
+body.public .theme-switch button[aria-pressed='true'] { background: var(--ink); color: var(--on-ink); }
 
 /* ---------- section headings ---------- */
 body.public .section-head h2 { color: var(--text); letter-spacing: -.04em; }
