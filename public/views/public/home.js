@@ -295,10 +295,6 @@ function homePage(ctx, categories) {
     <section class="home-sec seo-copy about-how${mv.about ? ' has-bg' : ''}" id="about-laundry"${mv.about ? html` style="${raw(img('about'))}"` : ''}>
       <div class="container about-grid">
         <div class="about-main">
-          <h2>Laundry and washing service with pick-up and delivery</h2>
-          <p>${s.about} ${s.business_name} washes, dries, irons and folds your clothes, and we collect them from your door and bring them back clean. Book online in a few taps and track your laundry until it is delivered.</p>
-          ${categories.length ? html`<h3>What we wash and clean</h3><ul class="seo-list">${categories.map((c) => html`<li><strong>${c.name}</strong>${c.description ? html` – ${c.description}` : ''}</li>`)}</ul>` : ''}
-
           <h3 class="how-title">How it works</h3>
           <ol class="how-steps">
             <li><span class="how-num" aria-hidden="true">1</span><span class="how-ico" aria-hidden="true">${icon('shirt')}</span><div><strong>Choose</strong><span>Choose the washing or cleaning services you need.</span></div></li>
