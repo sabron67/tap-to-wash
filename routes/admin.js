@@ -7,7 +7,7 @@ const { validateMpesa } = require('../lib/mpesa');
 const { rateLimit, safeEqual, adminNoCache, backPath } = require('../lib/security');
 const { audit } = require('../lib/audit');
 const { passwordProblem } = require('../lib/password');
-const { wrap, STATUS_MAP, cleanText, cleanMultiline, backwardBlocker } = require('../lib/helpers');
+const { wrap, STATUS_MAP, cleanText, cleanMultiline, backwardBlocker, parseAreas } = require('../lib/helpers');
 const { categoryIconName } = require('../lib/icons');
 const { mediaVersions } = require('../lib/media');
 const { can, roleOf, visibleStatuses, settableStatuses, riderSql, riderMayView } = require('../lib/roles');
@@ -985,6 +985,18 @@ router.post(
     await audit(req, 'branches_toggle', on ? 'Multiple branches switched on' : 'Multiple branches switched off');
     flash(req, 'success', on ? 'Multiple branches is on. Add your branches under Operations.' : 'Multiple branches is off.');
     res.redirect('/admin/settings#branchCard');
+  })
+);
+
+router.post(
+  '/settings/areas',
+  need('settings'),
+  wrap(async (req, res) => {
+    const areas = parseAreas(req.body.service_areas);
+    await saveSettings({ service_areas: areas.join('\n') });
+    await audit(req, 'areas_save', areas.length ? `${areas.length} service areas` : 'Service areas cleared');
+    flash(req, 'success', areas.length ? 'Service areas saved.' : 'Service areas cleared.');
+    res.redirect('/admin/settings#areasCard');
   })
 );
 

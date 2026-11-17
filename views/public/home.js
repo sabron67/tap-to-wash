@@ -1,4 +1,5 @@
 const { html, raw } = require('../../lib/html');
+const { parseAreas } = require('../../lib/helpers');
 const { money, STATUS_MAP } = require('../../lib/helpers');
 const { publicLayout } = require('../layouts/public');
 const { themeSwitch } = require('../partials/theme');
@@ -282,6 +283,14 @@ function homePage(ctx, categories) {
     </section>`
       : ''}
 
+    ${s.branches_enabled !== '1' && parseAreas(s.service_areas).length
+      ? html`<section class="home-sec" id="areas">
+      <div class="container">
+        <div class="sec-row"><h2>Where we offer our services</h2></div>
+        <ul class="area-list">${parseAreas(s.service_areas).map((a) => html`<li>${icon('map-pin')}<span>${a}</span></li>`)}</ul>
+      </div>
+    </section>`
+      : ''}
 
     <section class="home-sec seo-copy about-how${mv.about ? ' has-bg' : ''}" id="about-laundry"${mv.about ? html` style="${raw(img('about'))}"` : ''}>
       <div class="container about-grid">

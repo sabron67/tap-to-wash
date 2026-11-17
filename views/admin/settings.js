@@ -107,6 +107,18 @@ function settingsPage(ctx) {
     ${s.branches_enabled === '1' ? html`<p class="small" style="margin:.8rem 0 0"><a class="link" href="/admin/operations#branches">Manage branches</a></p>` : ''}
   </section>
 
+  <section class="glass pad stack" id="areasCard">
+    <h2>Areas we serve</h2>
+    ${s.branches_enabled === '1'
+      ? html`<p class="muted small">Multiple branches is on, so customers see your branches instead. Switch it off above to list service areas here.</p>`
+      : html`<form method="post" action="/admin/settings/areas" class="stack">
+      ${csrfField(ctx)}
+      <p class="muted small">The towns, estates or places where you pick up and deliver. They are shown on the home page, one place per line.</p>
+      <label class="field"><span>Places (one per line)</span><textarea name="service_areas" rows="6" maxlength="1500" placeholder="Murang'a Town&#10;Kenol&#10;Maragua&#10;Kiriaini">${s.service_areas}</textarea><small class="muted">Up to 30 places. Leave empty to hide this section.</small></label>
+      <button class="btn btn-primary" type="submit">Save areas</button>
+    </form>`}
+  </section>
+
   <section class="glass pad stack" id="faviconCard">
     <h2>Site icon (favicon)</h2>
     <p class="muted small">The small picture shown in the browser tab, bookmarks, the phone home screen and phone alerts. Choose a square logo or picture (PNG, JPG, WebP or SVG). It is resized to 512 × 512 in your browser and saved in the database. Browsers can keep an old icon for a while - refresh the page if the tab still shows the old one.</p>

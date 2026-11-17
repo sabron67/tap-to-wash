@@ -48,7 +48,7 @@ app.use(
   express.static(path.join(__dirname, 'public'), {
     // pictures cache for a week; css/js are re-checked (cheap 304) so an update shows up straight away
     setHeaders: (res, file) => {
-      res.setHeader('Cache-Control', /\.(css|js)$/.test(file) || !isProd ? 'no-cache' : 'public, max-age=604800');
+      res.setHeader('Cache-Control', /\.(css|js)$/.test(file) || !isProd ? 'no-cache' : /\.woff2$/.test(file) ? 'public, max-age=31536000, immutable' : 'public, max-age=604800');
     },
   })
 );

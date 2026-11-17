@@ -26,6 +26,7 @@ ${seo.jsonLd ? raw(`<script type="application/ld+json">${JSON.stringify(seo.json
 <meta name="theme-color" content="#EBEBE4" media="(prefers-color-scheme: light)" data-light="#EBEBE4">
 <meta name="theme-color" content="#121211" media="(prefers-color-scheme: dark)" data-dark="#121211">
 <link rel="preload" href="${cssUrl}" as="style">
+<link rel="preload" href="/fonts/plus-jakarta-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
 <script src="/js/boot.js"></script>
 <link rel="icon" href="/site-icon${settings.icon_v ? `?v=${settings.icon_v}` : ''}">
 ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${settings.icon_v}">` : ''}
