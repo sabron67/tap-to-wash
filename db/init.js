@@ -19,6 +19,14 @@ const STARTER_CATEGORIES = [
   ['Carpets & Rugs', 'Deep wash and dry for carpets and rugs.', 'layers', '#c98b6b', 250, 'sq m', 6],
 ];
 
+// Starter item options per category name (only added to a category that has none yet; edit them in Admin > Categories).
+const STARTER_OPTIONS = {
+  'Bedding & Duvets': [['Single duvet', 400], ['Double duvet', 600], ['King-size duvet', 800], ['Bedsheet', 150], ['Pillowcase', 50], ['Blanket', 400]],
+  'Suits & Formal Wear': [['Suit (2-piece)', 600], ['Jacket / blazer', 350], ['Trousers', 200], ['Dress shirt', 150], ['Coat', 500]],
+  'Curtains': [['Light / sheer curtain', 250], ['Standard curtain', 350], ['Heavy curtain', 500]],
+  'Shoes & Sneakers': [['Sneakers', 300], ['Leather shoes', 400], ['Sandals', 200], ['Boots', 450]],
+};
+
 // Older versions used green/blue starter colours and emoji icons. Move those to the current look.
 const OLD_COLOURS = { '#10b981': '#c2663a', '#14b8a6': '#b8935a', '#84cc16': '#d99a4e', '#22d3ee': '#c2663a', '#38bdf8': '#c98b6b', '#34d399': '#d6b48a' };
 
@@ -89,6 +97,16 @@ async function main() {
     console.log('[ok] Starter categories added (edit or delete them in Admin > Categories)');
   } else {
     console.log('[--] Categories already exist - skipped');
+  }
+  for (const [catName, opts] of Object.entries(STARTER_OPTIONS)) {
+    const cat = await pool.query('SELECT id FROM categories WHERE lower(name) = lower($1) LIMIT 1', [catName]);
+    if (!cat.rowCount) continue;
+    const has = await pool.query('SELECT 1 FROM category_options WHERE category_id = $1 LIMIT 1', [cat.rows[0].id]);
+    if (has.rowCount) continue;
+    for (let i = 0; i < opts.length; i++) {
+      await pool.query('INSERT INTO category_options (category_id, name, price, sort_order) VALUES ($1,$2,$3,$4)', [cat.rows[0].id, opts[i][0], opts[i][1], i + 1]);
+    }
+    console.log(`[ok] Item options added to "${catName}"`);
   }
   // Move old emoji icons / green-blue colours on existing categories to the current icon set and palette.
   const existing = await pool.query('SELECT id, icon, color FROM categories');

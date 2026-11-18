@@ -382,7 +382,7 @@ router.get(
         ) c ON c.day = d::date
         ORDER BY d`),
       pool.query(`SELECT r.id, r.ref_code, r.status, r.created_at, c.name AS customer_name, c.phone AS customer_phone,
-          (SELECT string_agg(i.category_name || ' ×' || i.quantity, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items
+          (SELECT string_agg((i.category_name || COALESCE(' – ' || i.option_name, '')) || ' ×' || i.quantity, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items
         FROM requests r JOIN customers c ON c.id = r.customer_id
         ORDER BY r.created_at DESC LIMIT 8`),
       pool.query(`SELECT
@@ -424,7 +424,7 @@ router.get(
       pool.query(
         `SELECT r.id, r.ref_code, r.status, r.created_at, r.location_description, r.latitude, r.longitude, r.total_amount, r.amount_paid,
             c.name AS customer_name, c.phone AS customer_phone,
-            (SELECT string_agg(i.category_name || ' ×' || i.quantity, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items
+            (SELECT string_agg((i.category_name || COALESCE(' – ' || i.option_name, '')) || ' ×' || i.quantity, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items
            FROM requests r JOIN customers c ON c.id = r.customer_id
           WHERE ${where}
           ORDER BY r.created_at DESC LIMIT ${PAGE_SIZE} OFFSET $5`,
@@ -458,7 +458,7 @@ router.get(
         [id]
       ),
       pool.query(
-        `SELECT i.id, i.category_name, i.quantity, i.unit, i.rate, i.measured_qty, i.line_total, cat.unit AS cat_unit, cat.price
+        `SELECT i.id, (i.category_name || COALESCE(' – ' || i.option_name, '')) AS category_name, i.quantity, i.unit, i.rate, i.measured_qty, i.line_total, cat.unit AS cat_unit, COALESCE(i.option_price, cat.price) AS price, i.option_name
            FROM request_items i LEFT JOIN categories cat ON cat.id = i.category_id
           WHERE i.request_id = $1 ORDER BY i.id`,
         [id]
@@ -734,7 +734,9 @@ router.get(
       ),
       mediaVersions(),
     ]);
-    res.view(categoriesPage(ctx, { rows: cats.rows, versions }));
+    const opts = await pool.query('SELECT * FROM category_options ORDER BY sort_order, id');
+    const rows = cats.rows.map((c) => ({ ...c, options: opts.rows.filter((o) => o.category_id === c.id) }));
+    res.view(categoriesPage(ctx, { rows, versions }));
   })
 );
 
@@ -840,6 +842,90 @@ router.post(
     await pool.query('DELETE FROM categories WHERE id = $1', [cid]);
     await audit(req, 'category_delete', `#${req.params.id}`);
     flash(req, 'success', 'Category deleted.');
+    res.redirect('/admin/categories');
+  })
+);
+
+// ---------- category item options (e.g. Single duvet, Bedsheet) ----------
+function parseOption(body) {
+  const priceRaw = String(body.price == null ? '' : body.price).trim();
+  const price = priceRaw === '' ? null : Number(priceRaw);
+  const sort = parseInt(body.sort_order, 10);
+  return {
+    name: cleanText(body.name, 60),
+    price: price !== null && Number.isFinite(price) && price >= 0 ? price : null,
+    sort_order: Number.isFinite(sort) ? sort : 0,
+  };
+}
+
+router.post(
+  '/categories/:id/options',
+  need('categories'),
+  wrap(async (req, res) => {
+    const cid = parseInt(req.params.id, 10);
+    const o = parseOption(req.body);
+    if (!Number.isInteger(cid) || !o.name) {
+      flash(req, 'error', 'Please give the item a name.');
+      return res.redirect('/admin/categories');
+    }
+    const next = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM category_options WHERE category_id = $1', [cid]);
+    const ins = await pool.query(
+      'INSERT INTO category_options (category_id, name, price, sort_order) SELECT id, $2, $3, $4 FROM categories WHERE id = $1',
+      [cid, o.name, o.price, req.body.sort_order === undefined || req.body.sort_order === '' ? next.rows[0].n : o.sort_order]
+    );
+    if (!ins.rowCount) {
+      flash(req, 'error', 'That category no longer exists.');
+      return res.redirect('/admin/categories');
+    }
+    await audit(req, 'category_option_add', `#${cid} ${o.name}`);
+    flash(req, 'success', `Item “${o.name}” added.`);
+    res.redirect('/admin/categories');
+  })
+);
+
+router.post(
+  '/categories/:id/options/:oid',
+  need('categories'),
+  wrap(async (req, res) => {
+    const cid = parseInt(req.params.id, 10);
+    const oid = parseInt(req.params.oid, 10);
+    const o = parseOption(req.body);
+    if (!Number.isInteger(cid) || !Number.isInteger(oid) || !o.name) {
+      flash(req, 'error', 'Please give the item a name.');
+      return res.redirect('/admin/categories');
+    }
+    await pool.query('UPDATE category_options SET name=$1, price=$2, sort_order=$3 WHERE id=$4 AND category_id=$5', [o.name, o.price, o.sort_order, oid, cid]);
+    await audit(req, 'category_option_edit', `#${oid} ${o.name}`);
+    flash(req, 'success', 'Item saved.');
+    res.redirect('/admin/categories');
+  })
+);
+
+router.post(
+  '/categories/:id/options/:oid/toggle',
+  need('categories'),
+  wrap(async (req, res) => {
+    const cid = parseInt(req.params.id, 10);
+    const oid = parseInt(req.params.oid, 10);
+    if (Number.isInteger(cid) && Number.isInteger(oid)) {
+      await pool.query('UPDATE category_options SET is_active = NOT is_active WHERE id = $1 AND category_id = $2', [oid, cid]);
+      await audit(req, 'category_option_toggle', `#${oid}`);
+    }
+    res.redirect('/admin/categories');
+  })
+);
+
+router.post(
+  '/categories/:id/options/:oid/delete',
+  need('categories'),
+  wrap(async (req, res) => {
+    const cid = parseInt(req.params.id, 10);
+    const oid = parseInt(req.params.oid, 10);
+    if (Number.isInteger(cid) && Number.isInteger(oid)) {
+      await pool.query('DELETE FROM category_options WHERE id = $1 AND category_id = $2', [oid, cid]);
+      await audit(req, 'category_option_delete', `#${oid}`);
+      flash(req, 'success', 'Item deleted. Past requests keep their history.');
+    }
     res.redirect('/admin/categories');
   })
 );

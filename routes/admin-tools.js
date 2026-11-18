@@ -175,7 +175,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
         pool.query(
           `SELECT r.ref_code, to_char((r.created_at AT TIME ZONE 'Africa/Nairobi')::date, 'YYYY-MM-DD') AS day, r.status, r.location_description,
                   r.total_amount, r.amount_paid, r.terms_version, c.name AS customer_name, c.phone AS customer_phone,
-                  (SELECT string_agg(i.category_name || ' x' || i.quantity, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items,
+                  (SELECT string_agg((i.category_name || COALESCE(' – ' || i.option_name, '')) || ' x' || i.quantity, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items,
                   (SELECT to_char((max(e.created_at) AT TIME ZONE 'Africa/Nairobi')::date, 'YYYY-MM-DD') FROM request_events e WHERE e.request_id = r.id AND e.status = 'delivered') AS delivered_day
              FROM requests r JOIN customers c ON c.id = r.customer_id
             WHERE ${RANGE} ORDER BY r.created_at DESC LIMIT 5001`,

@@ -242,7 +242,7 @@ router.get(
   wrap(async (req, res) => {
     const { rows } = await pool.query(
       `SELECT r.id, r.ref_code, r.status, r.created_at,
-              (SELECT string_agg(i.category_name || ' ×' || i.quantity, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items
+              (SELECT string_agg((i.category_name || COALESCE(' – ' || i.option_name, '')) || ' ×' || i.quantity, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items
          FROM requests r WHERE r.account_id = $1 ORDER BY r.created_at DESC LIMIT 50`,
       [req.acc.id]
     );
@@ -448,7 +448,7 @@ router.get(
       [ref, req.acc.id]
     );
     if (!rows.length) return next();
-    const items = await pool.query('SELECT i.category_name, i.quantity, i.measured_qty, i.rate, i.line_total, i.unit AS line_unit, c.icon, c.price, c.unit FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 ORDER BY i.id', [rows[0].id]);
+    const items = await pool.query('SELECT (i.category_name || COALESCE(\' – \' || i.option_name, \'\')) AS category_name, i.quantity, i.measured_qty, i.rate, i.line_total, i.unit AS line_unit, c.icon, COALESCE(i.option_price, c.price) AS price, c.unit FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 ORDER BY i.id', [rows[0].id]);
     const ctx = await pubCtx(req);
     res.view(receiptPage(ctx, { request: rows[0], items: items.rows, backHref: `/account/requests/${ref}`, backLabel: 'Back' }));
   })

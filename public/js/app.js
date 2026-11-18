@@ -10,8 +10,9 @@
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
 
-  // state.items: { categoryId: quantity }
+  // state.items: { key: quantity } where key is "categoryId" or, for categories with item options, "categoryId:optionId"
   const state = { items: {}, lat: null, lng: null, acc: null, step: 1, sending: false };
+  const expanded = new Set(); // category ids whose option list is open in the picker
 
   const modal = $('#wizard');
   const picker = $('#picker');
@@ -29,18 +30,35 @@
   };
 
   const money = (n) => currency + ' ' + Number(n).toLocaleString('en-KE', { maximumFractionDigits: 2 });
-  const selectedIds = () => Object.keys(state.items).map(Number);
+  const hasOpts = (c) => !!(c && c.options && c.options.length);
+  const catOf = (key) => String(key).split(':')[0];
+  const catSelected = (id) => Object.keys(state.items).some((k) => catOf(k) === String(id));
+  // One entry per ordered line: { key, c, o (option or null), qty, price (unit price or null) }
+  function lines() {
+    const out = [];
+    Object.keys(state.items).forEach((key) => {
+      const parts = key.split(':');
+      const c = byId.get(Number(parts[0]));
+      if (!c) return;
+      const o = parts[1] ? (c.options || []).find((x) => x.id === Number(parts[1])) : null;
+      if (parts[1] && !o) return;
+      const price = o && o.price !== null ? o.price : c.price;
+      out.push({ key, c, o, qty: state.items[key], price, name: o ? c.name + ' – ' + o.name : c.name });
+    });
+    return out;
+  }
+  const selectedCount = () => new Set(Object.keys(state.items).map(catOf)).size;
 
   /* ---------- selection on the page cards ---------- */
   function syncCards() {
     $$('.cat-card').forEach((card) => {
-      const on = state.items[card.dataset.id] !== undefined;
+      const on = catSelected(card.dataset.id);
       card.classList.toggle('selected', on);
       card.setAttribute('aria-pressed', on ? 'true' : 'false');
       const check = $('.cat-check', card);
       if (check) check.innerHTML = on ? ui.check : ui.plus;
     });
-    const n = selectedIds().length;
+    const n = selectedCount();
     if (selBar) {
       selBar.hidden = n === 0 || !modal.hidden;
       selText.textContent = n + (n === 1 ? ' category selected' : ' categories selected');
@@ -48,6 +66,14 @@
   }
 
   function toggleCategory(id) {
+    const c = byId.get(Number(id));
+    if (hasOpts(c)) {
+      // Categories with options: open the wizard on that category so the customer picks the exact items.
+      expanded.add(Number(id));
+      if (modal.hidden) openWizard();
+      else renderPicker();
+      return;
+    }
     if (state.items[id] !== undefined) delete state.items[id];
     else state.items[id] = 1;
     syncCards();
@@ -71,9 +97,41 @@
       return;
     }
     picker.innerHTML = '';
+    const stepper = (key, label, unit) => {
+      const q = document.createElement('div');
+      q.className = 'qty';
+      const minus = document.createElement('button');
+      minus.type = 'button';
+      minus.innerHTML = ui.minus;
+      minus.setAttribute('aria-label', 'Less ' + label);
+      const val = document.createElement('span');
+      val.textContent = state.items[key] + ' ' + unit;
+      const plus = document.createElement('button');
+      plus.type = 'button';
+      plus.innerHTML = ui.plus;
+      plus.setAttribute('aria-label', 'More ' + label);
+      minus.addEventListener('click', () => {
+        if (hasOptKey(key) && state.items[key] <= 1) delete state.items[key];
+        else state.items[key] = Math.max(1, state.items[key] - 1);
+        syncCards();
+        renderPicker();
+      });
+      plus.addEventListener('click', () => {
+        state.items[key] = Math.min(999, state.items[key] + 1);
+        renderPicker();
+      });
+      q.append(minus, val, plus);
+      return q;
+    };
+    const hasOptKey = (key) => String(key).indexOf(':') > -1;
+
     categories.forEach((c) => {
+      const withOpts = hasOpts(c);
       const qty = state.items[c.id];
-      const on = qty !== undefined;
+      const on = withOpts ? catSelected(c.id) : qty !== undefined;
+      const open = withOpts && expanded.has(c.id);
+      const wrap = document.createElement('div');
+      wrap.className = 'pick-group';
       const row = document.createElement('div');
       row.className = 'pick' + (on ? ' on' : '');
       row.style.setProperty('--c', c.color);
@@ -82,6 +140,7 @@
       main.type = 'button';
       main.className = 'pick-main';
       main.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (withOpts) main.setAttribute('aria-expanded', open ? 'true' : 'false');
       const ico = document.createElement('span');
       ico.className = 'pick-ico';
       if (c.imageUrl) {
@@ -100,40 +159,65 @@
       const nm = document.createElement('strong');
       nm.textContent = c.name;
       const pr = document.createElement('small');
-      pr.textContent = c.price !== null ? 'From ' + money(c.price) + ' / ' + c.unit : 'Price on request';
+      if (withOpts) {
+        const n = Object.keys(state.items).filter((k) => catOf(k) === String(c.id)).length;
+        pr.textContent = n ? n + (n === 1 ? ' item chosen' : ' items chosen') : c.options.length + ' options - tap to choose';
+      } else {
+        pr.textContent = c.price !== null ? 'From ' + money(c.price) + ' / ' + c.unit : 'Price on request';
+      }
       txt.append(nm, pr);
       const chk = document.createElement('span');
       chk.className = 'pick-check';
       chk.innerHTML = on ? ui.check : '';
       main.append(ico, txt, chk);
-      main.addEventListener('click', () => toggleCategory(String(c.id)));
+      main.addEventListener('click', () => {
+        if (withOpts) {
+          if (expanded.has(c.id)) expanded.delete(c.id); else expanded.add(c.id);
+          renderPicker();
+        } else {
+          toggleCategory(String(c.id));
+        }
+      });
       row.appendChild(main);
+      if (!withOpts && on) row.appendChild(stepper(String(c.id), c.name, c.unit));
+      wrap.appendChild(row);
 
-      if (on) {
-        const q = document.createElement('div');
-        q.className = 'qty';
-        const minus = document.createElement('button');
-        minus.type = 'button';
-        minus.innerHTML = ui.minus;
-        minus.setAttribute('aria-label', 'Less ' + c.name);
-        const val = document.createElement('span');
-        val.textContent = qty + ' ' + c.unit;
-        const plus = document.createElement('button');
-        plus.type = 'button';
-        plus.innerHTML = ui.plus;
-        plus.setAttribute('aria-label', 'More ' + c.name);
-        minus.addEventListener('click', () => {
-          state.items[c.id] = Math.max(1, state.items[c.id] - 1);
-          renderPicker();
+      if (open) {
+        const list = document.createElement('div');
+        list.className = 'opt-list';
+        c.options.forEach((o) => {
+          const key = c.id + ':' + o.id;
+          const sel = state.items[key] !== undefined;
+          const price = o.price !== null ? o.price : c.price;
+          const orow = document.createElement('div');
+          orow.className = 'opt' + (sel ? ' on' : '');
+          const obtn = document.createElement('button');
+          obtn.type = 'button';
+          obtn.className = 'opt-main';
+          obtn.setAttribute('aria-pressed', sel ? 'true' : 'false');
+          const oname = document.createElement('strong');
+          oname.textContent = o.name;
+          const oprice = document.createElement('small');
+          oprice.textContent = price !== null ? money(price) + ' / ' + c.unit : 'Price on request';
+          const otxt = document.createElement('span');
+          otxt.className = 'opt-txt';
+          otxt.append(oname, oprice);
+          const ochk = document.createElement('span');
+          ochk.className = 'pick-check';
+          ochk.innerHTML = sel ? ui.check : '';
+          obtn.append(otxt, ochk);
+          obtn.addEventListener('click', () => {
+            if (sel) delete state.items[key]; else state.items[key] = 1;
+            syncCards();
+            renderPicker();
+          });
+          orow.appendChild(obtn);
+          if (sel) orow.appendChild(stepper(key, o.name, c.unit));
+          list.appendChild(orow);
         });
-        plus.addEventListener('click', () => {
-          state.items[c.id] = Math.min(999, state.items[c.id] + 1);
-          renderPicker();
-        });
-        q.append(minus, val, plus);
-        row.appendChild(q);
+        wrap.appendChild(list);
       }
-      picker.appendChild(row);
+      picker.appendChild(wrap);
     });
   }
 
@@ -174,18 +258,16 @@
     const box = $('#summary');
     let total = 0;
     let hasPrice = false;
-    const lines = selectedIds().map((id) => {
-      const c = byId.get(id);
-      const q = state.items[id];
-      if (c.price !== null) {
-        total += c.price * q;
+    const rows = lines().map((l) => {
+      if (l.price !== null) {
+        total += l.price * l.qty;
         hasPrice = true;
       }
-      return '<li><span class="sum-name">' + c.icon + ' ' + esc(c.name) + '</span><strong>× ' + q + ' ' + esc(c.unit) + '</strong></li>';
+      return '<li><span class="sum-name">' + l.c.icon + ' ' + esc(l.name) + '</span><strong>× ' + l.qty + ' ' + esc(l.c.unit) + '</strong></li>';
     });
     box.innerHTML =
       '<h4>Your request</h4><ul>' +
-      lines.join('') +
+      rows.join('') +
       '</ul>' +
       (state.lat !== null ? '<p class="small sum-loc">' + ui.pin + ' Location shared</p>' : '') +
       (hasPrice ? '<p class="small muted">Estimated from ' + money(total) + ' - final price is confirmed after weighing/inspection.</p>' : '');
@@ -197,7 +279,7 @@
 
   function next() {
     if (state.step === 1) {
-      if (!selectedIds().length) return showError(1, 'Please choose at least one category.');
+      if (!lines().length) return showError(1, 'Please choose at least one thing to wash.');
       showError(1, '');
       return goStep(2);
     }
@@ -236,6 +318,7 @@
   }
   function resetForm() {
     state.items = {};
+    expanded.clear();
     state.lat = state.lng = state.acc = null;
     state.step = 1;
     ['#locDesc', '#fName', '#fPhone', '#fNotes'].forEach((s) => ($(s).value = ''));
@@ -314,15 +397,15 @@
     let total = 0;
     let hasPrice = false;
     let count = 0;
-    const rows = selectedIds().map((id) => {
-      const c = byId.get(id);
-      const q = state.items[id];
+    const rows = lines().map((l) => {
+      const c = l.c;
+      const q = l.qty;
       count += q;
-      const priced = c.price !== null;
-      if (priced) { total += c.price * q; hasPrice = true; }
-      return '<li class="rc-row"><span class="rc-thumb">' + c.icon + '</span><div class="rc-nm"><b>' + esc(c.name) + '</b>' +
-        (priced ? '<small>' + money(c.price) + ' per ' + esc(c.unit) + '</small>' : '<small>Price on request</small>') + '</div>' +
-        '<span class="rc-qty">× ' + q + '</span>' + (priced ? '<span class="rc-lt">' + money(c.price * q) + '</span>' : '') + '</li>';
+      const priced = l.price !== null;
+      if (priced) { total += l.price * q; hasPrice = true; }
+      return '<li class="rc-row"><span class="rc-thumb">' + c.icon + '</span><div class="rc-nm"><b>' + esc(l.name) + '</b>' +
+        (priced ? '<small>' + money(l.price) + ' per ' + esc(c.unit) + '</small>' : '<small>Price on request</small>') + '</div>' +
+        '<span class="rc-qty">× ' + q + '</span>' + (priced ? '<span class="rc-lt">' + money(l.price * q) + '</span>' : '') + '</li>';
     });
     const when = new Date().toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' });
     const loc = ($('#locDesc').value || '').trim();
@@ -442,7 +525,7 @@
           website: $('#fWebsite').value,
           accept_terms: true,
           terms_version: data.termsVersion,
-          items: selectedIds().map((id) => ({ category_id: id, quantity: state.items[id] })),
+          items: lines().map((l) => ({ category_id: l.c.id, option_id: l.o ? l.o.id : null, quantity: l.qty })),
         }),
       });
       const out = await res.json().catch(() => ({}));
@@ -479,7 +562,14 @@
     if (withAgain && me.again) {
       state.items = {};
       (me.again.items || []).forEach((it) => {
-        if (byId.has(it.category_id)) state.items[it.category_id] = Math.min(999, Math.max(1, it.quantity || 1));
+        const c = byId.get(it.category_id);
+        if (!c) return;
+        const q = Math.min(999, Math.max(1, it.quantity || 1));
+        if (hasOpts(c)) {
+          if (it.option_id && c.options.some((o) => o.id === it.option_id)) { state.items[c.id + ':' + it.option_id] = q; expanded.add(c.id); }
+        } else if (!it.option_id) {
+          state.items[c.id] = q;
+        }
       });
       $('#locDesc').value = me.again.text || '';
       

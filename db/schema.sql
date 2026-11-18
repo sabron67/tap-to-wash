@@ -492,3 +492,20 @@ ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_secret    TEXT;
 ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_enabled   BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_last_step BIGINT;
 ALTER TABLE admins ADD COLUMN IF NOT EXISTS totp_recovery  JSONB   NOT NULL DEFAULT '[]'::jsonb;
+
+-- Service-specific item options (e.g. Bedding & Duvets -> Single duvet, Bedsheet...). Unit comes from the category.
+-- price is optional: when empty the category price is used.
+CREATE TABLE IF NOT EXISTS category_options (
+  id          SERIAL PRIMARY KEY,
+  category_id INTEGER       NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  name        TEXT          NOT NULL,
+  price       NUMERIC(12,2),
+  is_active   BOOLEAN       NOT NULL DEFAULT TRUE,
+  sort_order  INTEGER       NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS category_options_cat_idx ON category_options(category_id, is_active, sort_order);
+-- Snapshot of the option on each order line, so history survives option edits/deletes.
+ALTER TABLE request_items ADD COLUMN IF NOT EXISTS option_id    INTEGER REFERENCES category_options(id) ON DELETE SET NULL;
+ALTER TABLE request_items ADD COLUMN IF NOT EXISTS option_name  TEXT;
+ALTER TABLE request_items ADD COLUMN IF NOT EXISTS option_price NUMERIC(12,2);

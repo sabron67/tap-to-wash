@@ -43,3 +43,9 @@
   .rc-card { border: 1px solid #000; box-shadow: none; max-width: none; background: #fff; color: #000; }
   .rc-grid li { border: 1px solid #000; background: #fff; } .rc-grid code { color: #000; }
 }
+
+/* Category item options (admin) */
+.cat-options { margin-top: .6rem; }
+.opt-admin { display: grid; gap: .4rem; padding: .5rem 0; border-top: 1px solid var(--line); }
+.opt-admin.is-off { opacity: .6; }
+.opt-admin-form { align-items: end; }

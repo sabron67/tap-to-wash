@@ -68,6 +68,31 @@ function categoriesPage(ctx, { rows, versions = {} }) {
               <p class="err" data-category-image-err="${c.id}" role="alert"></p>
               ${versions[`category-${c.id}`] ? html`<form method="post" action="/admin/categories/${c.id}/image/reset" class="inline" data-confirm="Remove this uploaded photo and use the default category photo?">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon('rotate-ccw')} Use default photo</button></form>` : html`<span class="muted small">Using the built-in service photo.</span>`}
             </div>
+            <details class="cat-options" ${c.options.length ? 'open' : ''}>
+              <summary>${icon('tag')} Items customers can choose <span class="muted small">(${c.options.length})</span></summary>
+              <p class="muted small">Optional. When a category has items (e.g. Single duvet, Bedsheet), customers pick from them instead of the whole category. Leave an item's price empty to use the category price.</p>
+              ${c.options.map(
+                (o) => html`<div class="opt-admin ${o.is_active ? '' : 'is-off'}">
+                  <form method="post" action="/admin/categories/${c.id}/options/${o.id}" class="grid-3 opt-admin-form">
+                    ${csrfField(ctx)}
+                    <label class="field"><span>Item</span><input name="name" value="${o.name}" maxlength="60" required></label>
+                    <label class="field"><span>Price (${cur})</span><input type="number" step="0.01" min="0" name="price" value="${o.price === null ? '' : o.price}" placeholder="${c.price === null ? 'none' : c.price}"></label>
+                    <label class="field"><span>Order</span><input type="number" step="1" name="sort_order" value="${o.sort_order}"></label>
+                    <div class="cat-actions"><button class="btn btn-primary btn-sm" type="submit">Save</button></div>
+                  </form>
+                  <div class="cat-actions">
+                    <form method="post" action="/admin/categories/${c.id}/options/${o.id}/toggle" class="inline">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon(o.is_active ? 'eye-off' : 'eye')} ${o.is_active ? 'Hide' : 'Show'}</button></form>
+                    <form method="post" action="/admin/categories/${c.id}/options/${o.id}/delete" class="inline" data-confirm="Delete “${o.name}”? Past requests keep their history.">${csrfField(ctx)}<button class="btn btn-danger btn-sm" type="submit" aria-label="Delete ${o.name}">${icon('trash-2')}</button></form>
+                  </div>
+                </div>`
+              )}
+              <form method="post" action="/admin/categories/${c.id}/options" class="grid-3 opt-admin-form">
+                ${csrfField(ctx)}
+                <label class="field"><span>New item</span><input name="name" maxlength="60" required placeholder="e.g. King-size duvet"></label>
+                <label class="field"><span>Price (${cur}) <small>optional</small></span><input type="number" step="0.01" min="0" name="price" placeholder="${c.price === null ? 'e.g. 800' : c.price}"></label>
+                <div class="cat-actions"><button class="btn btn-secondary btn-sm" type="submit">${icon('plus')} Add item</button></div>
+              </form>
+            </details>
             <details>
               <summary>${icon('pencil')} Edit details</summary>
               <form method="post" action="/admin/categories/${c.id}" class="stack">

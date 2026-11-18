@@ -193,6 +193,7 @@ function homePage(ctx, categories) {
     color: 'var(--accent)',
     price: c.price === null ? null : Number(c.price),
     unit: c.unit,
+    options: c.options || [],
   }));
   const json = JSON.stringify({
     categories: data,

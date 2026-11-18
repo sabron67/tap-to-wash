@@ -105,7 +105,7 @@ module.exports = function mountBilling(router, { flash, need }) {
           return { error: kg.rows.length ? 'The customer has already confirmed this bill. Ask a manager to re-open it before weighing again.' : 'Only clothes charged per kg are weighed. This order is billed from what the customer ordered, so there is nothing to weigh.' };
         }
         const { rows: items } = await client.query(
-          `SELECT i.id, i.category_name, i.quantity, i.unit, i.rate, c.unit AS cat_unit, c.price AS cat_price
+          `SELECT i.id, (i.category_name || COALESCE(' – ' || i.option_name, '')) AS category_name, i.quantity, i.unit, i.rate, c.unit AS cat_unit, COALESCE(i.option_price, c.price) AS cat_price
              FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1 ORDER BY i.id`,
           [id]
         );
@@ -161,7 +161,7 @@ module.exports = function mountBilling(router, { flash, need }) {
         const autoConfirmed = r.bill_status === 'confirmed' && r.bill_confirmed_by === 'Order confirmation' && Number(r.amount_paid) === 0;
         if (!['needs_price', 'awaiting_confirm', 'disputed'].includes(r.bill_status) && !autoConfirmed) return { error: 'This bill cannot be changed now.' };
         const { rows: items } = await client.query(
-          `SELECT i.id, i.measured_qty, i.rate, c.price AS cat_price FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1`,
+          `SELECT i.id, i.measured_qty, i.rate, COALESCE(i.option_price, c.price) AS cat_price FROM request_items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.request_id = $1`,
           [id]
         );
         if (items.some((i) => i.measured_qty === null)) return { error: 'Weigh or count the laundry first.' };

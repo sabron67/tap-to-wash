@@ -53,7 +53,16 @@ router.get(
       acc ? pool.query('SELECT name, phone FROM accounts WHERE id = $1 AND is_active', [acc.id]) : { rows: [] },
     ]);
     const categoryVersions = media;
-    cats.rows = cats.rows.map((c) => ({ ...c, imageUrl: categoryImageUrl(c, categoryVersions) }));
+    const opts = await pool.query(
+      `SELECT id, category_id, name, price FROM category_options
+        WHERE is_active AND category_id = ANY($1::int[]) ORDER BY sort_order, id`,
+      [cats.rows.map((c) => c.id)]
+    );
+    cats.rows = cats.rows.map((c) => ({
+      ...c,
+      imageUrl: categoryImageUrl(c, categoryVersions),
+      options: opts.rows.filter((o) => o.category_id === c.id).map((o) => ({ id: o.id, name: o.name, price: o.price === null ? null : Number(o.price) })),
+    }));
     // Signed-in customers get their details pre-filled, a list of earlier places, and "request again".
     let personal = null;
     if (acc && mine.rows.length) {
@@ -68,7 +77,7 @@ router.get(
         Number.isInteger(again)
           ? pool.query(
               `SELECT r.location_description, r.latitude, r.longitude, r.preferred_time,
-                      (SELECT json_agg(json_build_object('category_id', i.category_id, 'quantity', i.quantity)) FROM request_items i WHERE i.request_id = r.id AND i.category_id IS NOT NULL) AS items
+                      (SELECT json_agg(json_build_object('category_id', i.category_id, 'option_id', i.option_id, 'quantity', i.quantity)) FROM request_items i WHERE i.request_id = r.id AND i.category_id IS NOT NULL) AS items
                  FROM requests r WHERE r.id = $1 AND r.account_id = $2`,
               [again, acc.id]
             )
@@ -89,7 +98,7 @@ router.get(
       acc
         ? pool.query(
             `SELECT r.ref_code, r.status, r.created_at,
-                    (SELECT string_agg(i.category_name, ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items
+                    (SELECT string_agg((i.category_name || COALESCE(' – ' || i.option_name, '')), ', ' ORDER BY i.id) FROM request_items i WHERE i.request_id = r.id) AS items
                FROM requests r WHERE r.account_id = $1 ORDER BY r.created_at DESC LIMIT 1`,
             [acc.id]
           )
@@ -225,11 +234,12 @@ router.post(
     }
 
     const rawItems = Array.isArray(b.items) ? b.items.slice(0, 40) : [];
-    const wanted = new Map();
+    const wanted = new Map(); // "categoryId" or "categoryId:optionId" -> quantity
     for (const it of rawItems) {
       const id = parseInt(it && it.category_id, 10);
+      const oid = parseInt(it && it.option_id, 10);
       const qty = Math.min(Math.max(parseInt(it && it.quantity, 10) || 1, 1), 999);
-      if (Number.isInteger(id)) wanted.set(id, qty);
+      if (Number.isInteger(id)) wanted.set(Number.isInteger(oid) ? `${id}:${oid}` : String(id), { id, oid: Number.isInteger(oid) ? oid : null, qty });
     }
     if (wanted.size === 0) return fail('Please choose at least one thing to wash.');
 
@@ -244,8 +254,29 @@ router.post(
       }
     }
 
-    const cats = await pool.query('SELECT id, name FROM categories WHERE is_active AND id = ANY($1::int[])', [[...wanted.keys()]]);
+    const cats = await pool.query('SELECT id, name FROM categories WHERE is_active AND id = ANY($1::int[])', [[...new Set([...wanted.values()].map((w) => w.id))]]);
     if (cats.rows.length === 0) return fail('Those categories are no longer available. Please refresh the page.');
+
+    const optIds = [...wanted.values()].filter((w) => w.oid !== null).map((w) => w.oid);
+    const optRows = optIds.length ? await pool.query('SELECT id, category_id, name, price FROM category_options WHERE is_active AND id = ANY($1::int[])', [optIds]) : { rows: [] };
+    const optById = new Map(optRows.rows.map((o) => [o.id, o]));
+    const catById = new Map(cats.rows.map((c) => [c.id, c]));
+    const lines = [];
+    for (const w of wanted.values()) {
+      const cat = catById.get(w.id);
+      if (!cat) continue;
+      if (w.oid === null) {
+        // A category that has options must be ordered through its options.
+        const has = await pool.query('SELECT 1 FROM category_options WHERE is_active AND category_id = $1 LIMIT 1', [cat.id]);
+        if (has.rowCount) return fail(`Please choose what you want washed under ${cat.name}.`);
+        lines.push({ cat, opt: null, qty: w.qty });
+      } else {
+        const opt = optById.get(w.oid);
+        if (!opt || opt.category_id !== cat.id) return fail('One of the items you chose is no longer available. Please refresh the page.');
+        lines.push({ cat, opt, qty: w.qty });
+      }
+    }
+    if (lines.length === 0) return fail('Please choose at least one thing to wash.');
 
     const client = await pool.connect();
     try {
@@ -281,12 +312,15 @@ router.post(
       if (!requestId) throw new Error('Could not generate a unique reference');
       await pickupSchedule.reserve(client, pickupDate, pickupSlot, requestId);
 
-      for (const c of cats.rows) {
-        await client.query('INSERT INTO request_items (request_id, category_id, category_name, quantity) VALUES ($1,$2,$3,$4)', [
+      for (const l of lines) {
+        await client.query('INSERT INTO request_items (request_id, category_id, category_name, quantity, option_id, option_name, option_price) VALUES ($1,$2,$3,$4,$5,$6,$7)', [
           requestId,
-          c.id,
-          c.name,
-          wanted.get(c.id),
+          l.cat.id,
+          l.cat.name,
+          l.qty,
+          l.opt ? l.opt.id : null,
+          l.opt ? l.opt.name : null,
+          l.opt ? l.opt.price : null,
         ]);
       }
       await client.query(`INSERT INTO request_events (request_id, status, note, created_by) VALUES ($1,'new','Request received','customer')`, [requestId]);
