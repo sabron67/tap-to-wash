@@ -58,11 +58,12 @@ router.get(
         WHERE is_active AND category_id = ANY($1::int[]) ORDER BY sort_order, id`,
       [cats.rows.map((c) => c.id)]
     );
-    cats.rows = cats.rows.map((c) => ({
-      ...c,
-      imageUrl: categoryImageUrl(c, categoryVersions),
-      options: opts.rows.filter((o) => o.category_id === c.id).map((o) => ({ id: o.id, name: o.name, price: o.price === null ? null : Number(o.price) })),
-    }));
+    cats.rows = cats.rows.map((c) => {
+      const options = opts.rows.filter((o) => o.category_id === c.id).map((o) => ({ id: o.id, name: o.name, price: o.price === null ? null : Number(o.price) }));
+      // With item options the card's "from" price is the cheapest item (an item with no price uses the category price), so it never contradicts the list.
+      const eff = options.map((o) => (o.price !== null ? o.price : c.price === null ? null : Number(c.price))).filter((v) => v !== null);
+      return { ...c, imageUrl: categoryImageUrl(c, categoryVersions), options, fromPrice: options.length ? (eff.length ? Math.min(...eff) : null) : (c.price === null ? null : Number(c.price)) };
+    });
     // Signed-in customers get their details pre-filled, a list of earlier places, and "request again".
     let personal = null;
     if (acc && mine.rows.length) {

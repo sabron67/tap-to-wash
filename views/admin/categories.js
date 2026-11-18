@@ -70,7 +70,7 @@ function categoriesPage(ctx, { rows, versions = {} }) {
             </div>
             <details class="cat-options" ${c.options.length ? 'open' : ''}>
               <summary>${icon('tag')} Items customers can choose <span class="muted small">(${c.options.length})</span></summary>
-              <p class="muted small">Optional. When a category has items (e.g. Single duvet, Bedsheet), customers pick from them instead of the whole category. Leave an item's price empty to use the category price.</p>
+              <p class="muted small">Optional. When a category has items (e.g. Single duvet, Bedsheet), customers pick from them instead of the whole category. Leave an item's price empty to use the category price. The service card on the home page shows “Start from” the cheapest item, so it always matches this list.</p>
               ${c.options.map(
                 (o) => html`<div class="opt-admin ${o.is_active ? '' : 'is-off'}">
                   <form method="post" action="/admin/categories/${c.id}/options/${o.id}" class="grid-3 opt-admin-form">

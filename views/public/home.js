@@ -24,7 +24,8 @@ function nav(s, account) {
 
 function categoryCard(c, currency) {
   const opts = c.options || [];
-  const price = c.price !== null && c.price !== undefined ? `Start from ${money(c.price, currency)} / ${c.unit}` : 'Price on request';
+  const from = c.fromPrice !== undefined ? c.fromPrice : c.price;
+  const price = from !== null && from !== undefined ? `Start from ${money(from, currency)} / ${c.unit}` : 'Price on request';
   return html`<article class="cat-card svc-card" data-id="${c.id}" data-name="${String(c.name).toLowerCase()}" style="--c:var(--accent)" tabindex="0" role="button" aria-pressed="false" aria-label="Select ${c.name}">
     <div class="svc-pic"><img class="svc-photo" src="${c.imageUrl || '/img/categories/default.webp'}" alt="${c.name}" loading="lazy" decoding="async"><span class="cat-icon svc-fallback-icon">${icon(categoryIconName(c.icon))}</span></div>
     <div class="svc-body">
