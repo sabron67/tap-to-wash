@@ -11,6 +11,10 @@ function settingsPage(ctx) {
     return html`<label class="field"><span>${label}</span><input name="${name}" value="${s[name]}" ${extra}>${hint ? html`<small class="muted">${hint}</small>` : ''}</label>`;
   };
 
+  const m = ctx.backupView.mail;
+  const bk = ctx.backupView.backup;
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+
   const body = html`
   <form class="glass pad stack" method="post" action="/admin/settings">
       ${csrfField(ctx)}
@@ -137,6 +141,57 @@ function settingsPage(ctx) {
       ? html`<form method="post" action="/admin/settings/favicon/reset" class="inline" data-confirm="Go back to the built-in icon?">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon('rotate-ccw')} Reset to built-in icon</button></form>`
       : ''}
     <input type="hidden" id="csrfToken" value="${ctx.csrf}">
+  </section>
+
+  <section class="glass pad stack" id="mailCard">
+    <form class="stack" method="post" action="/admin/settings/mail" autocomplete="off">
+      ${csrfField(ctx)}
+      <h2>Email sending</h2>
+      <p class="muted small">The mailbox the website uses to send email: backups, password-reset codes and staff alerts when WhatsApp is down. For Gmail use <span class="mono">smtp.gmail.com</span>, port <span class="mono">587</span>, your Gmail address as the user, and a Google “App Password” (Google Account &gt; Security &gt; 2-Step Verification &gt; App passwords) instead of your normal password.</p>
+      <div class="grid-2">
+        <label class="field"><span>Mail server</span><input name="mail_host" value="${m.host}" maxlength="120" placeholder="smtp.gmail.com" autocomplete="off" inputmode="url"></label>
+        <label class="field"><span>Port</span><input name="mail_port" value="${m.host ? m.port : 587}" maxlength="5" inputmode="numeric" autocomplete="off"><small class="muted">587 is usual; 465 for secure-from-the-start.</small></label>
+      </div>
+      <div class="grid-2">
+        <label class="field"><span>Mailbox login (user)</span><input name="mail_user" value="${m.user}" maxlength="160" autocomplete="off" placeholder="you@gmail.com"></label>
+        <label class="field"><span>Password</span><input name="mail_pass" type="password" value="" maxlength="200" autocomplete="new-password" placeholder="${m.hasPass ? 'Saved. Leave empty to keep it' : 'Mailbox or App Password'}"><small class="muted">${m.hasPass ? 'A password is saved. Type a new one only to change it.' : 'Stored encrypted. It is never shown again.'}</small></label>
+      </div>
+      <label class="field"><span>Send emails from</span><input name="mail_from" value="${m.from}" maxlength="200" autocomplete="off" placeholder="Tap to Wash &lt;you@gmail.com&gt;"><small class="muted">Leave empty to use the mailbox login. Clear the mail server and save to remove all email settings.</small></label>
+      <button class="btn btn-primary" type="submit">Save email settings</button>
+    </form>
+    <form class="row-form" method="post" action="/admin/settings/mail/test">
+      ${csrfField(ctx)}
+      <input name="test_to" type="email" value="${bk.to}" maxlength="160" placeholder="Send a test email to…" aria-label="Send a test email to" autocomplete="off">
+      <button class="btn btn-ghost btn-sm" type="submit">Send a test email</button>
+    </form>
+  </section>
+
+  <section class="glass pad stack" id="backupCard">
+    <form class="stack" method="post" action="/admin/settings/backup" autocomplete="off">
+      ${csrfField(ctx)}
+      <h2>Email backups</h2>
+      <p class="muted small">Every day the website emails a full copy of its data (customers, orders, payments, settings) as one encrypted attachment. Only someone with the backup password can open it, so keep that password somewhere safe: <strong>a backup cannot be read without it</strong>. Email sending (above) must be working. If the file grows too big for email, the Activity page will say so.</p>
+      <label class="field"><span>Automatic backups</span>
+        <select name="backup_on">
+          <option value="0" ${!bk.on ? 'selected' : ''}>Off</option>
+          <option value="1" ${bk.on ? 'selected' : ''}>On: send one every day</option>
+        </select>
+      </label>
+      <div class="grid-2">
+        <label class="field"><span>Send backups to</span><input name="backup_to" type="email" value="${bk.to}" maxlength="160" placeholder="owner@example.com" autocomplete="off"></label>
+        <label class="field"><span>Send after</span>
+          <select name="backup_hour">${hours.map((h) => html`<option value="${h}" ${bk.hour === h ? 'selected' : ''}>${String(h).padStart(2, '0')}:00</option>`)}</select>
+          <small class="muted">Nairobi time. If the site is asleep then, it is sent when it wakes.</small>
+        </label>
+      </div>
+      <label class="field"><span>Backup password</span><input name="backup_pass" type="password" value="" maxlength="200" autocomplete="new-password" placeholder="${bk.hasPass ? 'Saved. Leave empty to keep it' : 'At least 8 characters'}"><small class="muted">${bk.hasPass ? 'A password is saved. Changing it only affects new backups; old backups still need the old one.' : 'Choose a long phrase and write it down. It is stored encrypted and never shown again.'}</small></label>
+      <button class="btn btn-primary" type="submit">Save backup settings</button>
+    </form>
+    <form class="row-form" method="post" action="/admin/settings/backup/now" data-confirm="Make a backup now and email it to ${bk.to || 'the backup address'}?">
+      ${csrfField(ctx)}
+      <button class="btn btn-ghost btn-sm" type="submit" ${bk.to && bk.hasPass ? '' : 'disabled'}>Send a backup now</button>
+      <span class="muted small">${bk.lastNote ? bk.lastNote : 'No backup has been sent yet.'}</span>
+    </form>
   </section>
 
   <section class="glass pad">

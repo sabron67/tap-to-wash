@@ -140,6 +140,8 @@ const server = app.listen(port, () => {
   setTimeout(() => require('./lib/whatsapp').start().catch((e) => console.error('WhatsApp start failed:', e.message)), 3000);
   // Ask Safaricom about prompts whose callback never arrived, so a paid customer is not left "pending".
   require('./lib/stk').startReconciler();
+  // Daily encrypted backup by email (switched on in Admin > Settings > Backups). Also loads the email settings saved in the admin page.
+  require('./lib/auto-backup').start();
 });
 
 server.on('error', (err) => {
@@ -164,6 +166,7 @@ function shutdown(reason, exitCode = 0) {
   const step = (name, fn) => Promise.resolve().then(fn).catch((e) => console.error(`Shutdown: ${name} failed:`, e.message));
   (async () => {
     await step('M-Pesa job', () => require('./lib/stk').stopReconciler());
+    await step('auto backup', () => require('./lib/auto-backup').stop());
     await step('WhatsApp', () => require('./lib/whatsapp').shutdown());
     await step('email', () => require('./lib/mailer').close());
     // Stop accepting connections; end live (SSE) streams and idle keep-alive sockets so close() can finish.

@@ -94,6 +94,24 @@ After updating run `npm run db:init` once (installs the trigger; safe to repeat)
 
 The project includes `npm run db:backup`. It requires PostgreSQL's `pg_dump` utility to be installed on the server and `DATABASE_URL` to be configured. It creates a private custom-format dump in `backups/` and removes dumps older than 14 days by default. Configure `BACKUP_DIR` and `BACKUP_KEEP_DAYS` to change those defaults. Keep the backup directory outside public web roots and restrict server access because dumps contain customer information.
 
+### Email backups (no `pg_dump` needed)
+
+The app can email itself a full backup. **Everything is set in the admin area, under Settings** (owner only). Nothing needs to go in the environment:
+
+1. **Email sending.** Enter your mail server, port, mailbox login and password, and who the emails are sent from. For Gmail: `smtp.gmail.com`, port `587`, your Gmail address, and a Google *App Password* (Google Account > Security > 2-Step Verification > App passwords), not your normal password. Press **Send a test email** to check it.
+2. **Email backups.** Choose the address that receives the backups, the hour of the day, and a **backup password** (any long phrase, at least 8 characters; write it down, a backup cannot be opened without it). Set Automatic backups to **On** and save. **Send a backup now** sends one straight away.
+
+The backup is every table exported to one JSON file, compressed and encrypted (AES-256-GCM), sent as an attachment. The email password and the backup password are stored encrypted in the database (using `SESSION_SECRET`, so keep that value the same between deploys). The Settings page shows when the last backup was sent, or why it failed.
+
+**Automatic backups.** Once switched on, the app emails a backup every day after the chosen hour (Nairobi time; set `BACKUP_TZ` to change the time zone). If the server was off or asleep at that hour, it is sent as soon as the site is running again, and never twice in one day. A failed backup is shown on the Settings page and in the Activity log ("auto_backup_failed" with the reason), then retried 3 hours later. Set `AUTO_BACKUP=0` in the environment to switch the scheduler off completely. Email providers refuse large attachments (about 18 MB is the limit used here); if a backup grows past that, the Activity log says so, and you can save a file on the server with `npm run db:backup:email -- --local`.
+
+Command line: `npm run db:backup:email` sends a backup using the saved settings (add `-- --local` to save a file in `backups/` instead). To restore, save the attachment on the server, set `BACKUP_PASSPHRASE` to your backup password and run `npm run db:restore -- <file.json.gz.enc>` (empty tables only; add `--wipe` to replace the current data, it asks you to type the database name). It runs in one transaction and changes nothing if anything fails. Restart the app afterwards.
+
+The older `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` and `BACKUP_PASSPHRASE` environment variables still work as a fallback when nothing is saved in the admin page.
+
+Not backed up (rebuilt by themselves): sessions, rate-limit counters, the WhatsApp message cache and one-time password-reset codes.
+
+
 For scheduled backups, run `npm run db:backup` from the project directory using the host's scheduler (for example, a daily cron job). To restore a dump into a prepared database, use `pg_restore --clean --if-exists --no-owner --no-acl --dbname=YOUR_DATABASE backup-file.dump`. Test restores on a separate database before relying on backups.
 
 ## Setup
@@ -249,7 +267,7 @@ Every owner and staff account can turn on an authenticator-app code (Google/Micr
 
 ## Reliability: email fallback, M-Pesa status checks, clean shutdown, one stylesheet
 
-- **Email fallback (SMTP).** Set `SMTP_HOST`, `SMTP_PORT` (587, or 465 for TLS), `SMTP_USER`, `SMTP_PASS` and `SMTP_FROM` (see `lib/mailer.js`). Password-reset codes go to WhatsApp when it is linked and the account has a number, otherwise (or if WhatsApp fails) to the account's own email. Staff alerts for people who have WhatsApp alerts switched on are emailed when WhatsApp cannot deliver them. With `SMTP_HOST` empty, email stays off and nothing changes. Run `npm install` (adds `nodemailer` and `csso`).
+- **Email fallback (SMTP).** Set the mail server in Admin > Settings > Email sending (or, as a fallback, `SMTP_HOST`, `SMTP_PORT` (587, or 465 for TLS), `SMTP_USER`, `SMTP_PASS` and `SMTP_FROM`; see `lib/mailer.js`). Password-reset codes go to WhatsApp when it is linked and the account has a number, otherwise (or if WhatsApp fails) to the account's own email. Staff alerts for people who have WhatsApp alerts switched on are emailed when WhatsApp cannot deliver them. With no mail server set, email stays off and nothing changes. Run `npm install` (adds `nodemailer` and `csso`).
 - **M-Pesa status checks.** A background job (`lib/stk.js`, every minute) asks Safaricom about prompts still pending after 60 seconds, and about prompts closed as "timeout" in the last 3 hours. Safaricom's query does not return the M-Pesa receipt number, so a payment confirmed this way is credited immediately under the placeholder reference `STKQ-<CheckoutRequestID>` and left **not received** for a manager to check against the statement. If the real callback arrives later, the placeholder is replaced with the real receipt number automatically. The page that waits for the answer uses the same check.
 - **Shutdown and crashes.** On SIGTERM/SIGINT the server stops taking requests, closes live streams, WhatsApp and email, drains the PostgreSQL pool and exits (forced after 10 s). Unhandled promise rejections are logged and the site keeps running; an uncaught exception is logged, the server shuts down cleanly and exits with code 1 so the host restarts it.
 - **One stylesheet.** The 7 public CSS files (8 in admin) are merged and minified into one file in memory (`lib/css-bundle.js`), with a content hash in its address so browsers cache it for a year. The files in `public/css` are still the ones you edit. Everything is served from your own domain, so there is nothing to `preconnect` to; the page does `preload` the stylesheet so it downloads alongside `boot.js`.

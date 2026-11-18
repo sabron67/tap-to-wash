@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { pool } = require('../config/db');
 const { getSettings, saveSettings } = require('../lib/settings');
 const { validateMpesa } = require('../lib/mpesa');
+const backupSettings = require('../lib/backup-settings');
 const { rateLimit, safeEqual, adminNoCache, backPath } = require('../lib/security');
 const { audit } = require('../lib/audit');
 const { passwordProblem } = require('../lib/password');
@@ -980,7 +981,10 @@ router.get(
   '/settings',
   need('settings'),
   wrap(async (req, res) => {
-    res.view(settingsPage(await buildCtx(req)));
+    await backupSettings.load();
+    const ctx = await buildCtx(req);
+    ctx.backupView = backupSettings.view();
+    res.view(settingsPage(ctx));
   })
 );
 
@@ -1181,6 +1185,7 @@ require('./admin-whatsapp')(router, { buildCtx, flash, need });
 require('./admin-operations')(router, { buildCtx, flash, need });
 require('./admin-inventory')(router, { buildCtx, flash, need });
 require('./admin-billing')(router, { flash, need });
+require('./admin-backup')(router, { flash, need });
 
 module.exports = router;
 module.exports.staffRouter = staffRouter;
