@@ -307,6 +307,9 @@ router.post(
   })
 );
 
+// Public "services changed" channel (no customer data, only a version number).
+router.get('/live/catalog', (req, res) => live.openCatalog(req, res));
+
 // Live updates for the customer who owns the order (reference code + phone, the same check as the tracking page).
 router.get(
   '/live/order',
