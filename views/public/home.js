@@ -23,6 +23,7 @@ function nav(s, account) {
 }
 
 function categoryCard(c, currency) {
+  const opts = c.options || [];
   const price = c.price !== null && c.price !== undefined ? `Start from ${money(c.price, currency)} / ${c.unit}` : 'Price on request';
   return html`<article class="cat-card svc-card" data-id="${c.id}" data-name="${String(c.name).toLowerCase()}" style="--c:var(--accent)" tabindex="0" role="button" aria-pressed="false" aria-label="Select ${c.name}">
     <div class="svc-pic"><img class="svc-photo" src="${c.imageUrl || '/img/categories/default.webp'}" alt="${c.name}" loading="lazy" decoding="async"><span class="cat-icon svc-fallback-icon">${icon(categoryIconName(c.icon))}</span></div>
@@ -30,6 +31,10 @@ function categoryCard(c, currency) {
       <h3>${c.name}</h3>
       <p>${c.description}</p>
       <div class="cat-foot"><span class="svc-price">${price}</span><span class="cat-check" aria-hidden="true">${icon('plus')}</span></div>
+      ${opts.length ? html`<div class="svc-opts">
+        <button class="svc-opts-btn" type="button" aria-expanded="false" aria-controls="opts-${c.id}" data-opts-toggle><span>View items <em>(${opts.length})</em></span>${icon('chevron-down')}</button>
+        <div class="svc-opts-panel" id="opts-${c.id}"><ul class="svc-opts-list">${opts.map((o) => html`<li><span>${o.name}</span><b>${o.price === null || o.price === undefined ? (c.price !== null && c.price !== undefined ? money(c.price, currency) : '') : money(o.price, currency)}</b></li>`)}</ul></div>
+      </div>` : ''}
     </div>
   </article>`;
 }
