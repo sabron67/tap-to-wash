@@ -1,6 +1,10 @@
 // Service worker: shows phone/desktop notifications sent by the server and opens the job when tapped.
+// It also makes the site installable as an app. It deliberately caches nothing: pages hold private order and account data.
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+
+// Required by some browsers for the install prompt. Every request simply goes to the network as normal.
+self.addEventListener('fetch', () => {});
 
 self.addEventListener('push', (event) => {
   let d = {};

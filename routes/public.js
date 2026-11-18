@@ -167,6 +167,30 @@ async function siteIcon(req, res) {
 }
 router.get(['/site-icon', '/favicon.ico', '/apple-touch-icon.png'], wrap(siteIcon));
 
+// Web app manifest: what the browser reads to offer "Install app" (name, icons, colours). The name follows the business name in Settings.
+router.get('/manifest.webmanifest', wrap(async (req, res) => {
+  const s = await getSettings();
+  const name = s.business_name;
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.type('application/manifest+json').send(JSON.stringify({
+    id: '/',
+    name,
+    short_name: name.length > 12 ? name.split(/\s+/).slice(0, 2).join(' ').slice(0, 12) : name,
+    description: s.tagline,
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+    orientation: 'portrait',
+    background_color: '#FFFFFF',
+    theme_color: '#FFFFFF',
+    icons: [
+      { src: '/icons/icon-192.webp', sizes: '192x192', type: 'image/webp', purpose: 'any' },
+      { src: '/icons/icon-512.webp', sizes: '512x512', type: 'image/webp', purpose: 'any' },
+      { src: '/icons/icon-512-maskable.webp', sizes: '512x512', type: 'image/webp', purpose: 'maskable' },
+    ],
+  }));
+}));
+
 // Customer taps to wash -> this creates the request.
 // Live availability for the customer booking calendar.
 router.get('/api/pickup-slots', wrap(async (req, res) => {

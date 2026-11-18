@@ -1,0 +1,21 @@
+/* "Install app" banner (public/js/install.js): a bottom card on phones, a floating card on larger screens. */
+.install-banner {
+  position: fixed; z-index: 95; left: 50%; bottom: calc(1rem + env(safe-area-inset-bottom));
+  width: min(30rem, calc(100vw - 1.6rem)); display: grid; grid-template-columns: auto 1fr; gap: .75rem 1rem; align-items: center;
+  padding: .9rem 2.4rem .9rem .9rem; background: var(--surface); color: var(--text);
+  border: 1px solid var(--line-2); border-radius: var(--radius); box-shadow: var(--shadow-up);
+  opacity: 0; transform: translate(-50%, 24px); transition: opacity .3s var(--ease, ease), transform .3s var(--ease, ease);
+}
+.install-banner.show { opacity: 1; transform: translate(-50%, 0); }
+.install-icon { width: 48px; height: 48px; border-radius: 12px; background: #fff; border: 1px solid var(--line); object-fit: cover; }
+.install-txt { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.install-title { font-size: .98rem; line-height: 1.25; }
+.install-sub { font-size: .82rem; line-height: 1.35; color: var(--text-2, var(--text)); opacity: .85; }
+.install-actions { grid-column: 1 / -1; display: flex; gap: .6rem; }
+.install-actions .btn { flex: 1; min-height: 44px; }
+.install-x { position: absolute; top: .35rem; right: .45rem; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--text); font-size: 1.5rem; line-height: 1; cursor: pointer; }
+.install-x:hover { background: var(--surface-2); }
+/* phones show a bottom tab bar on public pages: sit above it */
+@media (max-width: 720px) { .install-banner { bottom: calc(4.9rem + env(safe-area-inset-bottom)); } }
+@media (prefers-reduced-motion: reduce) { .install-banner { transition: none; } }
+@media print { .install-banner { display: none !important; } }

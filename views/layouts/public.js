@@ -29,7 +29,11 @@ ${seo.jsonLd ? raw(`<script type="application/ld+json">${JSON.stringify(seo.json
 <link rel="preload" href="/fonts/plus-jakarta-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
 <script src="/js/boot.js"></script>
 <link rel="icon" href="/site-icon${settings.icon_v ? `?v=${settings.icon_v}` : ''}">
-${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${settings.icon_v}">` : ''}
+${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=${settings.icon_v}">` : html`<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">`}
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="${settings.business_name}">
 <link rel="stylesheet" href="${cssUrl}">
 <script src="/js/loading.js" defer></script>
 <script src="/js/toast.js" defer></script>
@@ -48,6 +52,7 @@ ${head(title, ctx.settings, '', seo)}
 ${body}
 <script src="/js/theme.js"></script>
 <script src="/js/password.js"></script>
+<script src="/js/install.js" defer></script>
 ${scripts}
 </body>
 </html>`;
