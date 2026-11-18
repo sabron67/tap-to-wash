@@ -1,4 +1,6 @@
-/* Promotion popup ad (customer side). Closed with the X; it stays closed until the site is opened again. */
+/* Promotion popup ad (customer side). The page behind cannot scroll until the X is clicked; it stays closed until the site is opened again. */
+html.promo-lock, body.promo-lock { overflow: hidden; }
+.promo-pop { overscroll-behavior: contain; touch-action: none; }
 .promo-pop { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(8, 20, 14, .55); opacity: 0; transition: opacity .25s ease; }
 .promo-pop.in { opacity: 1; }
 .promo-card { position: relative; width: min(400px, 100%); background: var(--surface, #fff); color: var(--text, #1b1b1a); border: 1px solid var(--line, #dadad1); border-radius: 22px; padding: 30px 24px 22px; text-align: center; box-shadow: 0 24px 60px rgba(0, 0, 0, .3); transform: translateY(14px) scale(.97); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }

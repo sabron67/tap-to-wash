@@ -1,6 +1,6 @@
-// Promotion popup ad. It appears on every page load while a promotion is live, until the customer closes it
-// (X, Esc or tapping outside). After that it stays closed for the rest of the visit and comes back
-// only when the customer opens the website again (new tab/window).
+// Promotion popup ad. It appears on every page load while a promotion is live and blocks the page (no scrolling, no tapping
+// behind it) until the customer closes it with the X (or uses the "Book a pick-up" button). After that it stays closed for the
+// rest of the visit and comes back only when the customer opens the website again (new tab/window).
 (function () {
   'use strict';
   if (/^\/(admin|staff)/.test(location.pathname)) return;
@@ -35,18 +35,27 @@
     function close() {
       mark(p.id);
       document.removeEventListener('keydown', onKey);
+      document.documentElement.classList.remove('promo-lock');
+      document.body.classList.remove('promo-lock');
       pop.classList.remove('in');
       setTimeout(function () { pop.remove(); if (last && last.focus) try { last.focus(); } catch (e) {} }, 250);
     }
-    function onKey(e) { if (e.key === 'Escape') close(); }
+    // Only the X closes it: Esc and tapping outside do nothing. Tab stays on the popup's two buttons.
+    function onKey(e) {
+      if (e.key !== 'Tab') return;
+      var first = x, lastBtn = cta;
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); lastBtn.focus(); }
+      else if (!e.shiftKey && document.activeElement === lastBtn) { e.preventDefault(); first.focus(); }
+    }
     x.addEventListener('click', close);
-    pop.addEventListener('click', function (e) { if (e.target === pop) close(); });
     cta.addEventListener('click', function () {
       close();
       var open = document.querySelector('[data-open-wizard]');
       if (open) open.click(); else location.href = '/?start=1';
     });
     document.addEventListener('keydown', onKey);
+    document.documentElement.classList.add('promo-lock');
+    document.body.classList.add('promo-lock');
     document.body.appendChild(pop);
     requestAnimationFrame(function () { pop.classList.add('in'); x.focus(); });
   }
