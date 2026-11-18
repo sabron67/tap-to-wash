@@ -1,4 +1,5 @@
-// Owner tools on the Settings page: the email server, and the emailed database backup (who gets it, when, and the backup password).
+// Owner tools on the Settings page: the email server, the emailed database backup (who gets it, when, and the backup password),
+// and the "I am not a robot" check (Cloudflare Turnstile).
 // Secrets are never shown again after saving: a blank password box means "keep the saved one".
 const { wrap, cleanText } = require('../lib/helpers');
 const { audit } = require('../lib/audit');
@@ -82,6 +83,28 @@ module.exports = function mount(router, { flash, need }) {
       const r = await backup.runOnce({ by: req.session.admin });
       flash(req, r.ok ? 'success' : 'error', r.ok ? `Backup sent to ${r.to} (${(r.bytes / 1024).toFixed(0)} KB). Check the inbox (and the spam folder).` : `The backup was not sent: ${r.error}`);
       res.redirect('/admin/settings#backupCard');
+    })
+  );
+
+  router.post(
+    '/settings/captcha',
+    need('settings'),
+    wrap(async (req, res) => {
+      const b = req.body;
+      const back = '/admin/settings#captchaCard';
+      const on = b.captcha_on === '1';
+      const site = cleanText(b.captcha_site, 100);
+      const secret = typeof b.captcha_secret === 'string' ? b.captcha_secret.trim().slice(0, 200) : '';
+      if (site && !/^[0-9A-Za-z_-]{8,100}$/.test(site)) { flash(req, 'error', 'The site key looks wrong. Copy it again from Cloudflare (it is the public one, starting with 0x or 1x).'); return res.redirect(back); }
+      if (secret && !/^[0-9A-Za-z_-]{8,200}$/.test(secret)) { flash(req, 'error', 'The secret key looks wrong. Copy it again from Cloudflare.'); return res.redirect(back); }
+      if (on && !site) { flash(req, 'error', 'Enter the Turnstile site key before switching the robot check on.'); return res.redirect(back); }
+      if (on && !(secret || settings.captchaSecret())) { flash(req, 'error', 'Enter the Turnstile secret key before switching the robot check on.'); return res.redirect(back); }
+      const patch = { captcha_on: on ? '1' : '0', captcha_site: site };
+      if (secret) patch.captcha_secret = secret;
+      await settings.save(patch);
+      await audit(req, 'captcha_settings', on ? `Robot check switched on${secret ? ' (secret key changed)' : ''}` : 'Robot check switched off');
+      flash(req, 'success', on ? 'The robot check is on. Open the sign-in page in a private window to confirm the tick box appears and works.' : 'The robot check is off.');
+      res.redirect(back);
     })
   );
 };

@@ -265,6 +265,12 @@ Every owner and staff account can turn on an authenticator-app code (Google/Micr
 - Wrong codes count toward the 15-minute account lock; a used code cannot be replayed. Authenticator secrets are encrypted in the database with `TOTP_KEY` (or `SESSION_SECRET`). **Set a stable `TOTP_KEY` before people enrol**: changing the key later makes existing codes unreadable (use the reset above).
 - Run `npm run db:init` once (adds the new columns).
 
+## Robot check (Cloudflare Turnstile)
+
+Settings > **Robot check** adds Cloudflare's free "I am not a robot" tick box to the owner, staff and customer sign-in pages, customer sign-up, the forgot-password pages and the booking form on the home page (`lib/turnstile.js`). In the Cloudflare dashboard open **Turnstile > Add widget**, add your domain, choose *Managed*, then paste the **Site key** and **Secret key** into Settings and switch it on. The secret key is stored encrypted. The server checks every answer with Cloudflare before the form is processed. If Cloudflare cannot be reached, people are let through (and a warning is logged) instead of being locked out.
+
+Test it in a private window before signing out. If a wrong key ever locks everyone out, set `TURNSTILE_DISABLE=1` in the environment and restart. Cloudflare publishes test keys (site key `1x00000000000000000000AA`, secret key `1x0000000000000000000000000000000AA`) that always pass, useful on a local machine.
+
 ## Reliability: email fallback, M-Pesa status checks, clean shutdown, one stylesheet
 
 - **Email fallback (SMTP).** Set the mail server in Admin > Settings > Email sending (or, as a fallback, `SMTP_HOST`, `SMTP_PORT` (587, or 465 for TLS), `SMTP_USER`, `SMTP_PASS` and `SMTP_FROM`; see `lib/mailer.js`). Password-reset codes go to WhatsApp when it is linked and the account has a number, otherwise (or if WhatsApp fails) to the account's own email. Staff alerts for people who have WhatsApp alerts switched on are emailed when WhatsApp cannot deliver them. With no mail server set, email stays off and nothing changes. Run `npm install` (adds `nodemailer` and `csso`).

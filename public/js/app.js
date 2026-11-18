@@ -501,6 +501,10 @@
     if (phone.replace(/\D/g, '').length < 9) return showError(3, 'Please enter a valid phone number.');
     if (!$('#pickupDate').value || !$('#pickupSlot').value) return showError(3, 'Choose an available pickup date and time slot.');
     if (!$('#fTerms').checked) return showError(3, 'Please accept the Terms of Service to continue.');
+    // "I am not a robot" check (only present when the owner switched it on in Admin > Settings)
+    const robot = document.querySelector('.ttw-captcha');
+    const robotToken = robot ? ((robot.querySelector('input[name="cf-turnstile-response"]') || {}).value || '') : '';
+    if (robot && !robotToken) return showError(3, 'Please tick the "I am not a robot" box.');
     showError(3, '');
 
     state.sending = true;
@@ -524,13 +528,17 @@
           accuracy: state.acc,
           website: $('#fWebsite').value,
           accept_terms: true,
+          'cf-turnstile-response': robotToken,
           terms_version: data.termsVersion,
           items: lines().map((l) => ({ category_id: l.c.id, option_id: l.o ? l.o.id : null, quantity: l.qty })),
         }),
       });
       const out = await res.json().catch(() => ({}));
       if (res.status === 401 && out.login) { window.location.href = out.login; return; }
-      if (!res.ok || !out.ok) throw new Error(out.error || 'Something went wrong. Please try again.');
+      if (!res.ok || !out.ok) {
+        if (out.captcha && window.turnstile) window.turnstile.reset(); // a token works once: get a fresh one
+        throw new Error(out.error || 'Something went wrong. Please try again.');
+      }
       $('#refBox').textContent = out.ref;
       renderReceipt(name, phone);
       applyOrderState(out.confirmed ? out : { order_status: 'new' }, out.ref); // auto-confirm answers at once; the stream below keeps it live

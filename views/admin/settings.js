@@ -13,6 +13,7 @@ function settingsPage(ctx) {
 
   const m = ctx.backupView.mail;
   const bk = ctx.backupView.backup;
+  const cp = ctx.backupView.captcha;
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
   const body = html`
@@ -191,6 +192,32 @@ function settingsPage(ctx) {
       ${csrfField(ctx)}
       <button class="btn btn-ghost btn-sm" type="submit" ${bk.to && bk.hasPass ? '' : 'disabled'}>Send a backup now</button>
       <span class="muted small">${bk.lastNote ? bk.lastNote : 'No backup has been sent yet.'}</span>
+    </form>
+  </section>
+
+  <section class="glass pad stack" id="captchaCard">
+    <form class="stack" method="post" action="/admin/settings/captcha" autocomplete="off">
+      ${csrfField(ctx)}
+      <h2>Robot check (“I am not a robot”)</h2>
+      <p class="muted small">Adds a free Cloudflare Turnstile check to the sign-in pages (owner, staff and customers), customer sign-up, forgot-password pages and the booking form on the home page. Most visitors just see a tick that completes by itself.</p>
+      ${cp.disabledByEnv ? html`<p class="err show" role="alert">The check is forced off by the server setting TURNSTILE_DISABLE=1.</p>` : ''}
+      <ol class="muted small" style="margin:0;padding-left:1.2rem">
+        <li>Sign in at <span class="mono">dash.cloudflare.com</span> (a free account is enough) and open <strong>Turnstile</strong>.</li>
+        <li>Choose <strong>Add widget</strong>, give it a name, add your website's domain (for example <span class="mono">yourlaundry.co.ke</span>), and pick <strong>Managed</strong>.</li>
+        <li>Copy the <strong>Site key</strong> and the <strong>Secret key</strong> into the boxes below.</li>
+      </ol>
+      <label class="field"><span>Robot check</span>
+        <select name="captcha_on">
+          <option value="0" ${!cp.on ? 'selected' : ''}>Off</option>
+          <option value="1" ${cp.on ? 'selected' : ''}>On</option>
+        </select>
+      </label>
+      <div class="grid-2">
+        <label class="field"><span>Site key</span><input name="captcha_site" value="${cp.site}" maxlength="100" autocomplete="off" placeholder="0x4AAAAAAA…"></label>
+        <label class="field"><span>Secret key</span><input name="captcha_secret" type="password" value="" maxlength="200" autocomplete="new-password" placeholder="${cp.hasSecret ? 'Saved. Leave empty to keep it' : 'Paste the secret key'}"><small class="muted">${cp.hasSecret ? 'A secret key is saved.' : 'Stored encrypted. It is never shown again.'}</small></label>
+      </div>
+      <p class="muted small"><strong>Careful:</strong> a wrong key or a domain that is not on the Cloudflare widget will stop everyone, including you, from signing in. After saving, test in a private window <em>before</em> you sign out here. If you ever get locked out, set <span class="mono">TURNSTILE_DISABLE=1</span> on the server and restart.</p>
+      <button class="btn btn-primary" type="submit">Save robot check</button>
     </form>
   </section>
 

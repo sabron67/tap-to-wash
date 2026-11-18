@@ -24,6 +24,7 @@ const payCallback = require('./routes/pay-callback');
 const { slotMiddleware, newSlotId } = require('./lib/slots');
 const { liveHook } = require('./lib/live');
 
+const turnstile = require('./lib/turnstile');
 const isProd = process.env.NODE_ENV === 'production';
 const app = express();
 
@@ -58,7 +59,7 @@ app.use('/pay', payCallback);
 
 // Views are plain .js functions that return html`...`; res.view() sends the result.
 app.use((req, res, next) => {
-  res.view = (page) => res.type('html').send(res.prefixHtml ? res.prefixHtml(page) : String(page));
+  res.view = (page) => res.type('html').send(turnstile.decorate(res.prefixHtml ? res.prefixHtml(page) : String(page)));
   next();
 });
 
@@ -105,6 +106,7 @@ app.get('/admin/another', (req, res) => {
   res.set('Cache-Control', 'no-store').redirect(302, `/${newSlotId()}${door}`);
 });
 
+app.use(turnstile.guard); // "I am not a robot" check on sign-in, sign-up, password reset and booking (only when switched on in Admin > Settings)
 app.use('/admin', adminRoutes);
 app.use('/staff', staffRouter); // staff sign-in page (every role except the owner)
 app.use('/account', accountRoutes);
