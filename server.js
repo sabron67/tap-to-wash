@@ -25,10 +25,28 @@ const { slotMiddleware, newSlotId } = require('./lib/slots');
 const { liveHook } = require('./lib/live');
 
 const turnstile = require('./lib/turnstile');
+const bus = require('./lib/bus');
+const leader = require('./lib/leader');
 const isProd = process.env.NODE_ENV === 'production';
 const app = express();
 
-if (isProd) app.set('trust proxy', 1);
+// Number of proxies in front of the app (the client address, and so the rate limits, depend on it): 1 = one load balancer or nginx;
+// 2 = for example Cloudflare + nginx. Any value Express accepts for "trust proxy" works (a number, "loopback", a subnet list).
+if (isProd) app.set('trust proxy', /^\d+$/.test(process.env.TRUST_PROXY || '') ? Number(process.env.TRUST_PROXY) : process.env.TRUST_PROXY || 1);
+
+// Health check for load balancers (nginx, Render, Kubernetes, Docker). 200 = send me traffic; 503 = take me out of rotation
+// (database unreachable, or this copy is shutting down and draining). Sits before everything else: no session, no redirect.
+let draining = false;
+app.get('/healthz', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (draining) return res.status(503).json({ ok: false, reason: 'draining' });
+  try {
+    await Promise.race([pool.query('SELECT 1'), new Promise((_, rej) => setTimeout(() => rej(new Error('database timeout')), 2500))]);
+    res.json({ ok: true, instance: bus.NODE_ID, leader: leader.isLeader() });
+  } catch (e) {
+    res.status(503).json({ ok: false, reason: 'database' });
+  }
+});
 // Behind the host's proxy, send plain-HTTP page requests to HTTPS (requests with no proxy header, such as internal health checks, are left alone).
 if (isProd && process.env.FORCE_HTTPS !== '0') {
   app.use((req, res, next) => {
@@ -138,13 +156,19 @@ const server = app.listen(port, () => {
     .query("UPDATE requests SET total_amount = GREATEST(1, ROUND(total_amount)) WHERE bill_status IN ('awaiting_confirm','confirmed') AND amount_paid = 0 AND total_amount > 0 AND total_amount <> ROUND(total_amount)")
     .then((r) => r.rowCount && console.log(`Rounded ${r.rowCount} unpaid bill(s) to whole shillings.`))
     .catch((e) => console.error('Whole-shilling rounding skipped:', e.message));
-  // Link WhatsApp in the background so a slow connection never delays the website.
-  setTimeout(() => require('./lib/whatsapp').start().catch((e) => console.error('WhatsApp start failed:', e.message)), 3000);
-  // Ask Safaricom about prompts whose callback never arrived, so a paid customer is not left "pending".
-  require('./lib/stk').startReconciler();
+  // Several copies of the app can run side by side (see docs/SCALING.md). They talk through PostgreSQL (lib/bus.js), and ONE of them
+  // at a time (lib/leader.js) holds the WhatsApp link and asks Safaricom about unconfirmed prompts. WhatsApp starts itself when this copy is elected.
+  bus.start();
+  leader.onElected(() => require('./lib/stk').startReconciler());
+  leader.onLost(() => require('./lib/stk').stopReconciler());
+  leader.start();
   // Daily encrypted backup by email (switched on in Admin > Settings > Backups). Also loads the email settings saved in the admin page.
   require('./lib/auto-backup').start();
 });
+
+// Keep idle connections open longer than the load balancer does (nginx 60 s, AWS ALB 60 s), or it may reuse one just as we close it.
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
 
 server.on('error', (err) => {
   console.error(err.code === 'EADDRINUSE' ? `Port ${port} is already in use.` : `Server error: ${err.message}`);
@@ -155,18 +179,22 @@ server.on('error', (err) => {
 // On a redeploy (SIGTERM) or Ctrl+C: stop taking new requests, let running ones finish, close WhatsApp, email and live streams,
 // then drain the PostgreSQL pool so no connection is left stuck on the database. A timer forces the exit if something hangs.
 let shuttingDown = false;
+const DRAIN_MS = Math.max(0, Number(process.env.DRAIN_MS) || 0); // time for the load balancer to notice /healthz = 503 before we stop (set 5000 behind a load balancer)
 function shutdown(reason, exitCode = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`Shutting down (${reason})...`);
+  draining = true;
   const force = setTimeout(() => {
     console.error('Shutdown took too long; forcing exit.');
     process.exit(exitCode || 1);
-  }, 10000);
+  }, 10000 + DRAIN_MS);
   force.unref();
 
   const step = (name, fn) => Promise.resolve().then(fn).catch((e) => console.error(`Shutdown: ${name} failed:`, e.message));
   (async () => {
+    if (DRAIN_MS) await new Promise((r) => setTimeout(r, DRAIN_MS));
+    await step('leader lock', () => leader.stop());
     await step('M-Pesa job', () => require('./lib/stk').stopReconciler());
     await step('auto backup', () => require('./lib/auto-backup').stop());
     await step('WhatsApp', () => require('./lib/whatsapp').shutdown());
@@ -177,6 +205,7 @@ function shutdown(reason, exitCode = 0) {
     server.closeIdleConnections && server.closeIdleConnections();
     setTimeout(() => server.closeAllConnections && server.closeAllConnections(), 5000).unref(); // requests still running after 5 s are cut
     await closed;
+    await step('cluster bus', () => bus.stop());
     await step('database pool', () => pool.end());
     console.log('Shutdown complete.');
     process.exit(exitCode);

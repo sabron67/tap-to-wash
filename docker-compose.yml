@@ -1,0 +1,49 @@
+# Tap to Wash behind a load balancer: nginx -> 3 copies of the app -> PostgreSQL.
+#   docker compose up -d --build        start everything
+#   open http://localhost:8080          (check balancing: curl -sI localhost:8080/healthz and look at X-Upstream)
+# Add a copy: duplicate the "app3" block as "app4", then add "server app4:3000 ..." to nginx/nginx.conf and run: docker compose up -d
+# Put real secrets in a .env file next to this one (SESSION_SECRET, MPESA_*, SMTP_*, APP_URL ...); see docs/SCALING.md.
+x-app: &app
+  build: .
+  restart: unless-stopped
+  env_file:
+    - { path: .env, required: false }
+  environment:
+    NODE_ENV: production
+    DATABASE_URL: postgres://tapwash:${DB_PASSWORD:-change-this-db-password}@db:5432/tapwash
+    FORCE_HTTPS: "0"      # TLS is handled in front of nginx (Cloudflare, a cloud load balancer or certbot)
+    TRUST_PROXY: "1"      # nginx is the only proxy in front of the app
+    DRAIN_MS: "5000"      # let nginx notice /healthz = 503 before a copy stops
+    DB_POOL_MAX: "10"     # copies x DB_POOL_MAX (+2 per copy for the bus and leader) must stay below PostgreSQL max_connections
+  depends_on:
+    db: { condition: service_healthy }
+  stop_grace_period: 25s
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tapwash
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-this-db-password}
+      POSTGRES_DB: tapwash
+    command: ["postgres", "-c", "max_connections=100"]
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tapwash -d tapwash"]
+      interval: 5s
+      retries: 10
+
+  app1: { <<: *app, hostname: app1 }
+  app2: { <<: *app, hostname: app2 }
+  app3: { <<: *app, hostname: app3 }
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports: ["8080:80"]
+    volumes: ["./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro"]
+    depends_on: [app1, app2, app3]
+
+volumes:
+  dbdata:
