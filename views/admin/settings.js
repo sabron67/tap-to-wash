@@ -130,7 +130,7 @@ function settingsPage(ctx) {
     <div class="fav-row">
       <img class="fav-preview" src="/site-icon${s.icon_v ? `?v=${s.icon_v}` : ''}" alt="Current site icon" width="64" height="64">
       <div class="fav-controls">
-        <p class="muted small" style="margin:0 0 .5rem">${s.icon_v ? 'Using your uploaded icon.' : 'Using the built-in icon.'}</p>
+        <p class="muted small" data-img-note style="margin:0 0 .5rem">${s.icon_v ? 'Using your uploaded icon.' : 'Using the built-in icon.'}</p>
         <div class="row-form">
           <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" id="faviconInput" aria-label="Choose a site icon">
           <button class="btn btn-primary btn-sm" type="button" id="faviconUpload">${icon('upload')} Upload icon</button>
@@ -139,7 +139,7 @@ function settingsPage(ctx) {
       </div>
     </div>
     ${s.icon_v
-      ? html`<form method="post" action="/admin/settings/favicon/reset" class="inline" data-confirm="Go back to the built-in icon?">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon('rotate-ccw')} Reset to built-in icon</button></form>`
+      ? html`<form method="post" action="/admin/settings/favicon/reset" class="inline" data-ajax-delete data-scope="#faviconCard" data-img=".fav-preview" data-note="[data-img-note]" data-note-text="Using the built-in icon." data-confirm="Go back to the built-in icon?">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon('rotate-ccw')} Reset to built-in icon</button></form>`
       : ''}
     <input type="hidden" id="csrfToken" value="${ctx.csrf}">
   </section>

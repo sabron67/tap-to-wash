@@ -170,7 +170,7 @@ function requestDetailPage(ctx, { r, items, payments = [], events, estimate, wa,
   </section>
 
   ${ctx.can('delete') ? html`  <section class="danger glass pad">
-    <form method="post" action="/admin/requests/${r.id}/delete" data-confirm="Delete this request permanently? This cannot be undone.">
+    <form method="post" action="/admin/requests/${r.id}/delete" data-ajax-delete data-confirm="Delete this request permanently? This cannot be undone.">
       ${csrfField(ctx)}
       <button class="btn btn-danger btn-sm" type="submit">${icon('trash-2')} Delete request</button>
     </form>

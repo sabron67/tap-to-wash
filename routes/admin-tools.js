@@ -2,9 +2,9 @@
 const express = require('express');
 const { pool } = require('../config/db');
 const { getSettings } = require('../lib/settings');
-const { wrap, cleanText } = require('../lib/helpers');
+const { wrap, cleanText, wantsJson } = require('../lib/helpers');
 const { audit } = require('../lib/audit');
-const { SLOTS, mediaVersions } = require('../lib/media');
+const { SLOTS, mediaVersions, mediaUrl } = require('../lib/media');
 const { buildWorkbook } = require('../lib/report');
 const { snapshot } = require('../lib/finance');
 const { getFigures, saveFigures } = require('../lib/figures');
@@ -261,7 +261,14 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     '/photos/:slot/reset',
     need('photos'),
     wrap(async (req, res) => {
-      if (Object.prototype.hasOwnProperty.call(SLOTS, req.params.slot)) {
+      const known = Object.prototype.hasOwnProperty.call(SLOTS, req.params.slot);
+      if (wantsJson(req)) {
+        if (!known) return res.status(404).json({ ok: false, error: 'That picture does not exist.' });
+        await pool.query('DELETE FROM media WHERE slot = $1', [req.params.slot]);
+        await audit(req, 'photo_reset', req.params.slot);
+        return res.json({ ok: true, message: 'Picture reset to the default illustration.', imageUrl: `${mediaUrl(req.params.slot)}?r=${Date.now()}` });
+      }
+      if (known) {
         await pool.query('DELETE FROM media WHERE slot = $1', [req.params.slot]);
         await audit(req, 'photo_reset', req.params.slot);
         flash(req, 'success', 'Picture reset to the default illustration.');
@@ -304,6 +311,7 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
     wrap(async (req, res) => {
       await pool.query(`DELETE FROM media WHERE slot = 'favicon'`);
       await audit(req, 'favicon_reset', 'Back to the built-in icon');
+      if (wantsJson(req)) return res.json({ ok: true, message: 'Site icon reset to the built-in icon.', imageUrl: `/site-icon?r=${Date.now()}` });
       flash(req, 'success', 'Site icon reset to the built-in icon.');
       res.redirect('/admin/settings');
     })

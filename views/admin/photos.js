@@ -16,14 +16,14 @@ function photosPage(ctx, { versions }) {
         <h3 style="margin-top:0">${info.label}</h3>
         <p class="muted small" style="margin:0">${info.hint}</p>
         <img src="${mediaUrl(slot, versions)}" alt="Current ${info.label} picture" loading="lazy">
-        <p class="muted small">${versions[slot] ? 'Using your uploaded photo.' : 'Using the default illustration.'}</p>
+        <p class="muted small" data-img-note>${versions[slot] ? 'Using your uploaded photo.' : 'Using the default illustration.'}</p>
         <div class="row-form">
           <input type="file" accept="image/jpeg,image/png,image/webp" data-photo-input="${slot}" aria-label="Choose a picture for ${info.label}">
           <button class="btn btn-primary btn-sm" type="button" data-photo-upload="${slot}">${icon('upload')} Upload</button>
         </div>
         <p class="err" data-photo-err="${slot}" role="alert"></p>
         ${versions[slot]
-          ? html`<form method="post" action="/admin/photos/${slot}/reset" class="inline" data-confirm="Go back to the default illustration?">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit" style="margin-top:.6rem">${icon('rotate-ccw')} Reset to default</button></form>`
+          ? html`<form method="post" action="/admin/photos/${slot}/reset" class="inline" data-ajax-delete data-scope=".photo-card" data-img="img" data-note="[data-img-note]" data-note-text="Using the default illustration." data-confirm="Go back to the default illustration?">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit" style="margin-top:.6rem">${icon('rotate-ccw')} Reset to default</button></form>`
           : ''}
       </div>`)}
   </section>

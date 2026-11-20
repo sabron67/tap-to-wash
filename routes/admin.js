@@ -8,9 +8,9 @@ const backupSettings = require('../lib/backup-settings');
 const { rateLimit, safeEqual, adminNoCache, backPath } = require('../lib/security');
 const { audit } = require('../lib/audit');
 const { passwordProblem } = require('../lib/password');
-const { wrap, STATUS_MAP, cleanText, cleanMultiline, backwardBlocker, parseAreas } = require('../lib/helpers');
+const { wrap, STATUS_MAP, cleanText, cleanMultiline, backwardBlocker, parseAreas, wantsJson, withBase } = require('../lib/helpers');
 const { categoryIconName } = require('../lib/icons');
-const { mediaVersions } = require('../lib/media');
+const { mediaVersions, categoryImageUrl } = require('../lib/media');
 const { can, roleOf, visibleStatuses, settableStatuses, riderSql, riderMayView } = require('../lib/roles');
 const { pickupBlocker, GATED_TARGETS, autoBill, advanceIfPaid } = require('../lib/bill');
 const live = require('../lib/live');
@@ -323,26 +323,28 @@ router.post('/logout', async (req, res) => {
 router.use(
   wrap(async (req, res, next) => {
     const a = req.session.admin;
-    if (!a) return res.redirect(loginUrlFromHint(req));
+    // Background (fetch) requests get JSON they can show as a message; normal pages keep the redirects.
+    const signedOut = (to) => res.status(401).json({ ok: false, error: 'Your session ended. Please sign in again.', redirect: withBase(req, to) });
+    if (!a) return wantsJson(req) ? signedOut(loginUrlFromHint(req)) : res.redirect(loginUrlFromHint(req));
     const door = loginUrlForRole(a.role);
     if (Date.now() - (a.since || 0) > ABSOLUTE_SESSION_MS) {
-      return req.session.destroy(() => res.redirect(door));
+      return req.session.destroy(() => (wantsJson(req) ? signedOut(door) : res.redirect(door)));
     }
     // Re-read the account on every request so role changes and disabling take effect immediately.
     const { rows } = await pool.query('SELECT name, email, role, is_active, must_change_password, totp_enabled FROM admins WHERE id = $1', [a.id]);
     if (!rows.length || !rows[0].is_active) {
-      return req.session.destroy(() => res.redirect(door));
+      return req.session.destroy(() => (wantsJson(req) ? signedOut(door) : res.redirect(door)));
     }
     Object.assign(a, { name: rows[0].name, email: rows[0].email, role: rows[0].role, mustChange: rows[0].must_change_password });
     // A temporary / default password must be replaced before anything else can be used.
     if (a.mustChange) {
       const ok = (req.method === 'GET' && req.path === '/account') || (req.method === 'POST' && req.path === '/account/password');
-      if (!ok) return res.redirect('/admin/account');
+      if (!ok) return wantsJson(req) ? res.status(403).json({ ok: false, error: 'Please change your temporary password first.', redirect: withBase(req, '/admin/account') }) : res.redirect('/admin/account');
     }
     // When the owner requires two-step verification, an account without it can only set it up (or sign out).
     if (!rows[0].totp_enabled && (await getSettings()).require_2fa === '1') {
       const ok = req.path === '/account/2fa/setup' || req.path === '/account/2fa/enable' || req.path === '/logout' || (req.method === 'GET' && req.path === '/account');
-      if (!ok) return res.redirect('/admin/account/2fa/setup');
+      if (!ok) return wantsJson(req) ? res.status(403).json({ ok: false, error: 'Please set up two-step verification first.', redirect: withBase(req, '/admin/account/2fa/setup') }) : res.redirect('/admin/account/2fa/setup');
     }
     next();
   })
@@ -353,6 +355,7 @@ const need = (perm) =>
   wrap(async (req, res, next) => {
     if (can(req.session.admin.role, perm)) return next();
     await audit(req, 'access_denied', `${req.method} ${req.originalUrl}`.slice(0, 200));
+    if (wantsJson(req)) return res.status(403).json({ ok: false, error: 'You do not have permission to do that.' });
     const ctx = await buildCtx(req);
     res.status(403).view(forbiddenPage(ctx));
   });
@@ -666,8 +669,10 @@ router.post(
   '/requests/:id/delete',
   need('delete'),
   wrap(async (req, res) => {
+    const json = wantsJson(req);
     const rid = parseInt(req.params.id, 10);
-    if (!Number.isInteger(rid)) {
+    if (!Number.isInteger(rid) || rid <= 0) {
+      if (json) return res.status(400).json({ ok: false, error: 'Request not found.' });
       flash(req, 'error', 'Request not found.');
       return res.redirect('/admin/requests');
     }
@@ -699,8 +704,17 @@ router.post(
     } finally {
       client.release();
     }
-    await audit(req, 'request_delete', kept ? `Request #${rid} ${kept.ref_code} (paid ${kept.amount_paid} kept in the totals)` : `Request #${rid}`);
-    flash(req, 'success', kept && Number(kept.amount_paid) > 0 ? 'Request deleted. The money already received on it is still counted in your totals.' : 'Request deleted.');
+    // Nothing was deleted: it is already gone (someone else deleted it) - never report that as a success.
+    if (!kept) {
+      if (json) return res.status(404).json({ ok: false, gone: true, error: 'This request no longer exists. It may already have been deleted.', redirect: withBase(req, '/admin/requests') });
+      flash(req, 'error', 'This request no longer exists. It may already have been deleted.');
+      return res.redirect('/admin/requests');
+    }
+    await audit(req, 'request_delete', `Request #${rid} ${kept.ref_code} (paid ${kept.amount_paid} kept in the totals)`);
+    const msg = Number(kept.amount_paid) > 0 ? 'Request deleted. The money already received on it is still counted in your totals.' : 'Request deleted.';
+    flash(req, 'success', msg);
+    // The page showing this request is gone with it, so the one thing left to do is go back to the list (the toast follows).
+    if (json) return req.session.save(() => res.json({ ok: true, message: msg, redirect: withBase(req, '/admin/requests') }));
     res.redirect('/admin/requests');
   })
 );
@@ -812,6 +826,14 @@ router.post(
   need('categories'),
   wrap(async (req, res) => {
     const id = Number.parseInt(req.params.id, 10);
+    if (wantsJson(req)) {
+      if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ ok: false, error: 'Category not found.' });
+      const cat = await pool.query('SELECT id, name FROM categories WHERE id = $1', [id]);
+      if (!cat.rowCount) return res.status(404).json({ ok: false, error: 'Category not found. Refresh the page.' });
+      await pool.query('DELETE FROM media WHERE slot = $1', [`category-${id}`]);
+      await audit(req, 'category_image_reset', `Category #${id}`);
+      return res.json({ ok: true, message: 'Category photo reset to its built-in image.', imageUrl: categoryImageUrl(cat.rows[0], {}) });
+    }
     if (Number.isInteger(id) && id > 0) {
       await pool.query('DELETE FROM media WHERE slot = $1', [`category-${id}`]);
       await audit(req, 'category_image_reset', `Category #${id}`);
@@ -838,10 +860,31 @@ router.post(
   '/categories/:id/delete',
   need('categories'),
   wrap(async (req, res) => {
+    const json = wantsJson(req);
     const cid = parseInt(req.params.id, 10);
-    if (!Number.isInteger(cid)) return res.redirect('/admin/categories');
-    await pool.query('DELETE FROM categories WHERE id = $1', [cid]);
+    if (!Number.isInteger(cid) || cid <= 0) {
+      if (json) return res.status(400).json({ ok: false, error: 'Category not found.' });
+      return res.redirect('/admin/categories');
+    }
+    let del;
+    try {
+      del = await pool.query('DELETE FROM categories WHERE id = $1', [cid]);
+    } catch (err) {
+      if (err && err.code === '23503') { // something still points at it
+        const msg = 'This category is still in use, so it cannot be deleted. Hide it instead.';
+        if (json) return res.status(409).json({ ok: false, error: msg });
+        flash(req, 'error', msg);
+        return res.redirect('/admin/categories');
+      }
+      throw err;
+    }
+    if (!del.rowCount) { // nothing deleted: already gone
+      if (json) return res.status(404).json({ ok: false, gone: true, error: 'This category was already deleted.' });
+      flash(req, 'error', 'This category was already deleted.');
+      return res.redirect('/admin/categories');
+    }
     await audit(req, 'category_delete', `#${req.params.id}`);
+    if (json) return res.json({ ok: true, message: 'Category deleted.' });
     flash(req, 'success', 'Category deleted.');
     res.redirect('/admin/categories');
   })
@@ -920,13 +963,22 @@ router.post(
   '/categories/:id/options/:oid/delete',
   need('categories'),
   wrap(async (req, res) => {
+    const json = wantsJson(req);
     const cid = parseInt(req.params.id, 10);
     const oid = parseInt(req.params.oid, 10);
-    if (Number.isInteger(cid) && Number.isInteger(oid)) {
-      await pool.query('DELETE FROM category_options WHERE id = $1 AND category_id = $2', [oid, cid]);
-      await audit(req, 'category_option_delete', `#${oid}`);
-      flash(req, 'success', 'Item deleted. Past requests keep their history.');
+    if (!Number.isInteger(cid) || !Number.isInteger(oid) || cid <= 0 || oid <= 0) {
+      if (json) return res.status(400).json({ ok: false, error: 'Item not found.' });
+      return res.redirect('/admin/categories');
     }
+    const del = await pool.query('DELETE FROM category_options WHERE id = $1 AND category_id = $2', [oid, cid]);
+    if (!del.rowCount) { // nothing deleted: already gone
+      if (json) return res.status(404).json({ ok: false, gone: true, error: 'This item was already deleted.' });
+      flash(req, 'error', 'This item was already deleted.');
+      return res.redirect('/admin/categories');
+    }
+    await audit(req, 'category_option_delete', `#${oid}`);
+    if (json) return res.json({ ok: true, message: 'Item deleted. Past requests keep their history.' });
+    flash(req, 'success', 'Item deleted. Past requests keep their history.');
     res.redirect('/admin/categories');
   })
 );

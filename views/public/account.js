@@ -117,7 +117,7 @@ function accountPage(ctx, { account, requests }) {
       </div>
       <button class="btn btn-ghost" type="submit">Add order</button>
     </form>
-    <form class="glass pad stack danger" method="post" action="/account/delete" data-confirm="Delete your account? Your login and saved details will be removed. This cannot be undone.">
+    <form class="glass pad stack danger" method="post" action="/account/delete" data-ajax-delete data-confirm="Delete your account? Your login and saved details will be removed. This cannot be undone.">
       ${csrfField(ctx)}
       <h2>Delete my account</h2>
       <p class="muted small">Deleting removes your login and saved details. Past orders stay in our business records without your account link. See our <a class="link" href="/privacy">Privacy Notice</a>.</p>

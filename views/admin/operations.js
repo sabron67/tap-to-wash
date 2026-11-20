@@ -18,7 +18,7 @@ function operationsPage(ctx, d) {
     html`<form class="ops-form" method="post" action="/admin/operations/${action}">${csrfField(ctx)}${body}<button class="btn btn-primary" type="submit">${button}</button></form>`;
   const table = (headers, rows, empty = 'No records yet.') =>
     rows.length
-      ? html`<div class="table-wrap"><table class="table"><thead><tr>${headers.map((h) => html`<th>${h}</th>`)}</tr></thead><tbody>${rows}</tbody></table></div>`
+      ? html`<div class="table-wrap"><table class="table"><thead><tr>${headers.map((h) => html`<th>${h}</th>`)}</tr></thead><tbody>${rows}</tbody></table></div><template data-empty><div class="empty"><p>${empty}</p></div></template>`
       : html`<div class="empty"><p>${empty}</p></div>`;
   const options = (list, current) => list.map((o) => html`<option value="${o[0]}" ${o[0] === current ? 'selected' : ''}>${o[1]}</option>`);
   const statusForm = (action, x, list, extra = '') =>
@@ -91,7 +91,7 @@ function operationsPage(ctx, d) {
       <td><code>${x.code}</code></td><td>${x.orders}</td><td>${money(x.given, cur)}</td>
       <td>${x.state === 'live' ? 'Live now' : x.state === 'scheduled' ? 'Scheduled' : 'Ended'}</td>
       <td><div class="inline-form">${x.state === 'live' ? html`<form method="post" action="/admin/operations/promotion-end" class="inline" data-confirm="End “${x.title}” now? The popup stops and new requests no longer get the discount.">${csrfField(ctx)}<input type="hidden" name="id" value="${x.id}"><button class="btn btn-ghost btn-sm" type="submit">End now</button></form>` : ''}
-        ${Number(x.orders) === 0 ? html`<form method="post" action="/admin/operations/promotion-delete" class="inline" data-confirm="Delete “${x.title}”? This cannot be undone.">${csrfField(ctx)}<input type="hidden" name="id" value="${x.id}"><button class="btn btn-danger btn-sm" type="submit">Delete</button></form>` : ''}</div></td></tr>`), 'No promotions yet.')}
+        ${Number(x.orders) === 0 ? html`<form method="post" action="/admin/operations/promotion-delete" class="inline" data-ajax-delete data-remove="tr" data-confirm="Delete “${x.title}”? This cannot be undone.">${csrfField(ctx)}<input type="hidden" name="id" value="${x.id}"><button class="btn btn-danger btn-sm" type="submit">Delete</button></form>` : ''}</div></td></tr>`), 'No promotions yet.')}
   `)}
 
   ${d.branchesOn ? section('branches', 'Branches', 'Add outlets and switch each one on or off. Only active branches appear to customers when they place a request.', html`

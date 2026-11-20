@@ -38,6 +38,7 @@ ${settings.icon_v ? html`<link rel="apple-touch-icon" href="/apple-touch-icon.pn
 <script src="/js/loading.js" defer></script>
 <script src="/js/toast.js" defer></script>
 <script src="/js/dialog.js" defer></script>
+<script src="/js/ajax-delete.js" defer></script>
 <script src="/js/promo.js" defer></script>`;
 }
 

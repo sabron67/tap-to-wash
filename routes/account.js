@@ -6,7 +6,7 @@ const { pool } = require('../config/db');
 const { getSettings } = require('../lib/settings');
 const { rateLimit, safeEqual, backPath } = require('../lib/security');
 const { passwordProblem } = require('../lib/password');
-const { wrap, phoneKey, validPhone, cleanText } = require('../lib/helpers');
+const { wrap, phoneKey, validPhone, cleanText, wantsJson, withBase } = require('../lib/helpers');
 const { authPage, accountPage } = require('../views/public/account');
 const { trackPage } = require('../views/public/track');
 const { receiptPage } = require('../views/admin/receipt');
@@ -35,6 +35,7 @@ router.use((req, res, next) => {
   if (req.method === 'POST' && !safeEqual(req.body && req.body._csrf, req.session.csrf)) {
     // Do not leave the person on a dead-end page: go back to the form with a fresh token and a short note.
     req.session.csrf = crypto.randomBytes(24).toString('hex');
+    if (wantsJson(req)) return res.status(403).json({ ok: false, error: 'Your session expired. Refresh the page and try again.' });
     req.session.aflash = { type: 'warn', msg: 'That page was out of date, so nothing was sent. Please try again.' };
     const back = backPath(req, '/account/login');
     return req.session.save(() => res.redirect(/^\/account(\/|$)/.test(back) ? back : '/account/login'));
@@ -211,11 +212,12 @@ router.post('/logout', (req, res) => {
 router.use(
   wrap(async (req, res, next) => {
     const a = req.session.account;
-    if (!a) return res.redirect('/account/login');
+    const signedOut = () => res.status(401).json({ ok: false, error: 'Your session ended. Please sign in again.', redirect: withBase(req, '/account/login') });
+    if (!a) return wantsJson(req) ? signedOut() : res.redirect('/account/login');
     const { rows } = await pool.query('SELECT name, email, is_active FROM accounts WHERE id = $1', [a.id]);
     if (!rows.length || !rows[0].is_active) {
       delete req.session.account;
-      return res.redirect('/account/login');
+      return wantsJson(req) ? signedOut() : res.redirect('/account/login');
     }
     a.name = rows[0].name;
     a.email = rows[0].email;
@@ -458,14 +460,22 @@ router.post(
   '/delete',
   wrap(async (req, res, next) => {
     const { rows } = await pool.query('SELECT password_hash FROM accounts WHERE id = $1', [req.acc.id]);
-    if (!(await bcrypt.compare(String(req.body.password || ''), rows[0].password_hash))) {
+    const json = wantsJson(req);
+    if (!rows.length || !(await bcrypt.compare(String(req.body.password || ''), rows[0].password_hash))) {
+      if (json) return res.status(400).json({ ok: false, error: 'Enter your password to delete your account.' });
       flash(req, 'error', 'Enter your password to delete your account.');
       return res.redirect('/account');
     }
-    await pool.query('DELETE FROM accounts WHERE id = $1', [req.acc.id]); // requests keep existing; account_id is set to NULL
+    const del = await pool.query('DELETE FROM accounts WHERE id = $1', [req.acc.id]); // requests keep existing; account_id is set to NULL
+    if (!del.rowCount) {
+      if (json) return res.status(404).json({ ok: false, error: 'This account was already deleted.', redirect: '/' });
+      return res.redirect('/');
+    }
     delete req.session.account;
-    if (req.session.admin) return res.redirect('/');
-    req.session.destroy(() => res.redirect('/'));
+    // The account is gone, so the page has to move on: JSON tells the script where, and it is the only navigation left.
+    const finish = () => (json ? res.json({ ok: true, message: 'Your account was deleted.', redirect: '/' }) : res.redirect('/'));
+    if (req.session.admin) return req.session.save(finish);
+    req.session.destroy(finish);
     void next;
   })
 );

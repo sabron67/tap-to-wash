@@ -48,7 +48,7 @@ function categoriesPage(ctx, { rows, versions = {} }) {
 
   <section class="cat-admin">
     ${rows.length
-      ? rows.map(
+      ? html`${rows.map(
           (c) => html`<article class="glass pad cat-admin-card ${c.is_active ? '' : 'is-off'}" style="--c:var(--accent)">
             <div class="cat-admin-top">
               <img class="category-admin-thumb" src="${categoryImageUrl(c, versions)}" alt="${c.name}" loading="lazy">
@@ -59,17 +59,18 @@ function categoriesPage(ctx, { rows, versions = {} }) {
               </div>
               <div class="cat-actions">
                 <form method="post" action="/admin/categories/${c.id}/toggle" class="inline">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon(c.is_active ? 'eye-off' : 'eye')} ${c.is_active ? 'Hide' : 'Show'}</button></form>
-                <form method="post" action="/admin/categories/${c.id}/delete" class="inline" data-confirm="Delete “${c.name}”? Past requests keep their history.">${csrfField(ctx)}<button class="btn btn-danger btn-sm" type="submit" aria-label="Delete ${c.name}">${icon('trash-2')}</button></form>
+                <form method="post" action="/admin/categories/${c.id}/delete" class="inline" data-ajax-delete data-remove=".cat-admin-card" data-confirm="Delete “${c.name}”? Past requests keep their history.">${csrfField(ctx)}<button class="btn btn-danger btn-sm" type="submit" aria-label="Delete ${c.name}">${icon('trash-2')}</button></form>
               </div>
             </div>
             <div class="category-image-tools">
               <label class="field"><span>Category photo <small>PNG, JPEG or WebP · max 2.5 MB</small></span><input type="file" accept="image/jpeg,image/png,image/webp" data-category-image-input="${c.id}" aria-label="Choose photo for ${c.name}"></label>
               <button class="btn btn-secondary btn-sm" type="button" data-category-image-upload="${c.id}">${icon('upload')} Upload photo</button>
               <p class="err" data-category-image-err="${c.id}" role="alert"></p>
-              ${versions[`category-${c.id}`] ? html`<form method="post" action="/admin/categories/${c.id}/image/reset" class="inline" data-confirm="Remove this uploaded photo and use the default category photo?">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon('rotate-ccw')} Use default photo</button></form>` : html`<span class="muted small">Using the built-in service photo.</span>`}
+              ${versions[`category-${c.id}`] ? html`<form method="post" action="/admin/categories/${c.id}/image/reset" class="inline" data-ajax-delete data-scope=".cat-admin-card" data-img=".category-admin-thumb" data-note="[data-img-note]" data-confirm="Remove this uploaded photo and use the default category photo?">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon('rotate-ccw')} Use default photo</button></form>` : ''}
+              <span class="muted small" data-img-note ${versions[`category-${c.id}`] ? 'hidden' : ''}>Using the built-in service photo.</span>
             </div>
             <details class="cat-options" ${c.options.length ? 'open' : ''}>
-              <summary>${icon('tag')} Items customers can choose <span class="muted small">(${c.options.length})</span></summary>
+              <summary>${icon('tag')} Items customers can choose <span class="muted small" id="optCount${c.id}">(${c.options.length})</span></summary>
               <p class="muted small">Optional. When a category has items (e.g. Single duvet, Bedsheet), customers pick from them instead of the whole category. Leave an item's price empty to use the category price. The service card on the home page shows “Start from” the cheapest item, so it always matches this list.</p>
               ${c.options.map(
                 (o) => html`<div class="opt-admin ${o.is_active ? '' : 'is-off'}">
@@ -82,7 +83,7 @@ function categoriesPage(ctx, { rows, versions = {} }) {
                   </form>
                   <div class="cat-actions">
                     <form method="post" action="/admin/categories/${c.id}/options/${o.id}/toggle" class="inline">${csrfField(ctx)}<button class="btn btn-ghost btn-sm" type="submit">${icon(o.is_active ? 'eye-off' : 'eye')} ${o.is_active ? 'Hide' : 'Show'}</button></form>
-                    <form method="post" action="/admin/categories/${c.id}/options/${o.id}/delete" class="inline" data-confirm="Delete “${o.name}”? Past requests keep their history.">${csrfField(ctx)}<button class="btn btn-danger btn-sm" type="submit" aria-label="Delete ${o.name}">${icon('trash-2')}</button></form>
+                    <form method="post" action="/admin/categories/${c.id}/options/${o.id}/delete" class="inline" data-ajax-delete data-remove=".opt-admin" data-counter="#optCount${c.id}" data-confirm="Delete “${o.name}”? Past requests keep their history.">${csrfField(ctx)}<button class="btn btn-danger btn-sm" type="submit" aria-label="Delete ${o.name}">${icon('trash-2')}</button></form>
                   </div>
                 </div>`
               )}
@@ -102,7 +103,7 @@ function categoriesPage(ctx, { rows, versions = {} }) {
               </form>
             </details>
           </article>`
-        )
+        )}<template data-empty><div class="glass pad empty"><div class="big">${icon('tag')}</div><p>No categories yet. Add your first one above.</p></div></template>`
       : html`<div class="glass pad empty"><div class="big">${icon('tag')}</div><p>No categories yet. Add your first one above.</p></div>`}
   </section>
   <input type="hidden" id="csrfToken" value="${ctx.csrf}">`;

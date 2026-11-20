@@ -1,5 +1,5 @@
 const { pool } = require('../config/db');
-const { wrap, cleanText, cleanMultiline, backwardBlocker } = require('../lib/helpers');
+const { wrap, cleanText, cleanMultiline, backwardBlocker, wantsJson } = require('../lib/helpers');
 const { audit } = require('../lib/audit');
 const { visibleStatuses, riderMayView } = require('../lib/roles');
 const { operationsPage } = require('../views/admin/operations');
@@ -270,12 +270,21 @@ module.exports = function mount(router, { buildCtx, flash, need }) {
   }));
 
   router.post('/operations/promotion-delete', need('operations'), wrap(async (req, res) => {
+    const json = wantsJson(req);
+    // One place for every way this can end: JSON for the page's background request, the old flash + redirect otherwise.
+    const fail = (status, msg, extra) => {
+      if (json) return res.status(status).json({ ok: false, error: msg, ...extra });
+      flash(req, 'error', msg);
+      return back(res, 'promos');
+    };
     const id = posInt(req.body.id);
-    if (!id) { flash(req, 'error', 'Invalid promotion.'); return back(res, 'promos'); }
+    if (!id) return fail(400, 'Invalid promotion.');
     const used = await pool.query('SELECT 1 FROM requests r JOIN promotions p ON p.code = r.discount_code WHERE p.id = $1 LIMIT 1', [id]);
-    if (used.rowCount) { flash(req, 'error', 'Requests already received this discount, so it cannot be deleted. Use End now instead.'); return back(res, 'promos'); }
-    await pool.query('DELETE FROM promotions WHERE id = $1', [id]);
+    if (used.rowCount) return fail(409, 'Requests already received this discount, so it cannot be deleted. Use End now instead.');
+    const del = await pool.query('DELETE FROM promotions WHERE id = $1', [id]);
+    if (!del.rowCount) return fail(404, 'This promotion was already deleted.', { gone: true });
     await audit(req, 'promotion_deleted', `Promotion #${id}`);
+    if (json) return res.json({ ok: true, message: 'Promotion deleted.' });
     flash(req, 'success', 'Promotion deleted.');
     back(res, 'promos');
   }));

@@ -141,7 +141,7 @@ app.use(async (err, req, res, next) => {
   if (!clientErr) console.error(err);
   if (res.headersSent) return;
   const cleanUrl = req.cleanUrl || req.originalUrl;
-  if (cleanUrl.startsWith('/api') || cleanUrl.startsWith('/admin/api') || cleanUrl.startsWith('/admin/photos') || cleanUrl.startsWith('/admin/settings/favicon')) {
+  if (req.get('x-requested-with') === 'ttw-fetch' || cleanUrl.startsWith('/api') || cleanUrl.startsWith('/admin/api') || cleanUrl.startsWith('/admin/photos') || cleanUrl.startsWith('/admin/settings/favicon')) {
     return res.status(clientErr ? err.status : 500).json({ ok: false, error: clientErr ? 'That request could not be processed (too large or malformed).' : 'Something went wrong. Please try again.' });
   }
   const settings = await getSettings().catch(() => ({ business_name: 'Tap to Wash', tagline: '' }));
