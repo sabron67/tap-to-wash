@@ -269,6 +269,8 @@ Every owner and staff account can turn on an authenticator-app code (Google/Micr
 
 Settings > **Robot check** adds Cloudflare's free "I am not a robot" tick box to the owner, staff and customer sign-in pages, customer sign-up, the forgot-password pages and the booking form on the home page (`lib/turnstile.js`). In the Cloudflare dashboard open **Turnstile > Add widget**, add your domain, choose *Managed*, then paste the **Site key** and **Secret key** into Settings and switch it on. The secret key is stored encrypted. The server checks every answer with Cloudflare before the form is processed. If Cloudflare cannot be reached, people are let through (and a warning is logged) instead of being locked out.
 
+Alternatively set `TURNSTILE_SITE_KEY` (public) and `TURNSTILE_SECRET` in the server environment (`.env`); when both are present the check is on without touching Settings. Keys saved in Settings take precedence.
+
 Test it in a private window before signing out. If a wrong key ever locks everyone out, set `TURNSTILE_DISABLE=1` in the environment and restart. Cloudflare publishes test keys (site key `1x00000000000000000000AA`, secret key `1x0000000000000000000000000000000AA`) that always pass, useful on a local machine.
 
 ## Reliability: email fallback, M-Pesa status checks, clean shutdown, one stylesheet
