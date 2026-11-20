@@ -124,7 +124,7 @@ body.public .svc-price { color: var(--info); font-size: .82rem; font-weight: 700
 body.public .cat-check { background: var(--accent); color: var(--on-accent); border-radius: 50%; }
 body.public .cat-card.selected .cat-check { background: var(--brand); color: #04200F; }
 
-/* The primary call to action: green pill with chevrons, like the welcome screen. */
+/* The primary call to action: green pill, like the welcome screen. */
 body.public .home-tap {
   position: relative; max-width: 360px; height: 58px; margin: 1.1rem auto 0; padding: 0 1.4rem;
   display: flex; align-items: center; justify-content: center; gap: .9rem;
@@ -132,12 +132,7 @@ body.public .home-tap {
   animation: tap-pulse 2.8s ease-out infinite;
 }
 body.public .home-tap::before,
-body.public .home-tap::after {
-  position: static; inset: auto; width: auto; height: auto; border: 0; border-radius: 0; background: none;
-  transform: none; animation: none; opacity: .75; font-size: 1.5rem; font-weight: 400; letter-spacing: -.12em; line-height: 1;
-}
-body.public .home-tap::before { content: '\203A\203A\203A'; }
-body.public .home-tap::after { content: '\2039\2039\2039'; }
+body.public .home-tap::after { content: none; }
 @keyframes tap-pulse {
   0% { box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 26%, transparent), 0 0 0 0 color-mix(in srgb, var(--brand) 45%, transparent); }
   70%, 100% { box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 26%, transparent), 0 0 0 16px color-mix(in srgb, var(--brand) 0%, transparent); }

@@ -34,7 +34,7 @@ function bizHub(ctx, { active, from, to, presets, snap }) {
       ${showRep ? tile(`/admin/reports?${range}`, 'receipt', 'Outstanding', money(snap.outstanding, cur), 'red', 'Still to collect') : ''}
       ${showInv ? tile(`/admin/inventory?${range}#items`, 'droplets', 'Supplies used', money(snap.suppliesCost, cur), 'cyan', 'Cost of washing') : ''}
       ${showInv ? tile(`/admin/operations#finance`, 'clipboard-list', 'Expenses', money(snap.expenses, cur), 'amber', 'Rent, wages, water') : ''}
-      ${showInv ? tile(`/admin/inventory?${range}#profit`, 'sparkles', 'Net profit', money(snap.net, cur), snap.net >= 0 ? 'green' : 'red', marginTxt) : ''}
+      ${showInv ? tile(`/admin/inventory?${range}#profit`, 'banknote', 'Net profit', money(snap.net, cur), snap.net >= 0 ? 'green' : 'red', marginTxt) : ''}
       ${showInv ? tile(`/admin/inventory?${range}#reorder`, 'package', 'Stock on hand', money(snap.stockValue, cur), 'violet', snap.lowCount ? `${snap.lowCount} to reorder` : 'All supplies OK') : ''}
     </div>
   </section>`;

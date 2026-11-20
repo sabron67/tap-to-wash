@@ -16,7 +16,7 @@ function dashboardPage(ctx, d) {
 
   const body = html`
   <section class="stats">
-    ${stat('sparkles', 'New requests', d.counts.new, 'amber', '/admin/requests?status=new')}
+    ${stat('bell', 'New requests', d.counts.new, 'amber', '/admin/requests?status=new')}
     ${stat('droplets', 'In progress', d.counts.in_progress, 'cyan', '/admin/requests')}
     ${stat('shopping-basket', 'Ready for delivery', d.counts.ready, 'green', '/admin/requests?status=ready')}
     ${stat('users', 'Customers', d.customers, 'violet', '/admin/customers')}

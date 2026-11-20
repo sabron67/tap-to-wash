@@ -33,7 +33,7 @@ function categoryCard(c, currency) {
       <p>${c.description}</p>
       <div class="cat-foot"><span class="svc-price">${price}</span><span class="cat-check" aria-hidden="true">${icon('plus')}</span></div>
       ${opts.length ? html`<div class="svc-opts">
-        <button class="svc-opts-btn" type="button" aria-expanded="false" aria-controls="opts-${c.id}" data-opts-toggle><span>View items <em>(${opts.length})</em></span>${icon('chevron-down')}</button>
+        <button class="svc-opts-btn" type="button" aria-expanded="false" aria-controls="opts-${c.id}" data-opts-toggle><span>View items <em>(${opts.length})</em></span></button>
         <div class="svc-opts-panel" id="opts-${c.id}"><ul class="svc-opts-list">${opts.map((o) => html`<li><span>${o.name}</span><b>${o.price === null || o.price === undefined ? (c.price !== null && c.price !== undefined ? money(c.price, currency) : '') : money(o.price, currency)}</b></li>`)}</ul></div>
       </div>` : ''}
     </div>
@@ -255,8 +255,6 @@ function homePage(ctx, categories) {
         </div>
         <div class="hero-float hf-a" aria-hidden="true"><span class="hf-ico">${icon('truck')}</span><span><b>Picked up</b><small>From your door</small></span></div>
         <div class="hero-float hf-b" aria-hidden="true"><span class="hf-ico">${icon('circle-check')}</span><span><b>Delivered</b><small>Fresh and folded</small></span></div>
-        <span class="hero-coin hc-a" aria-hidden="true">${icon('sparkles')}</span>
-        <span class="hero-coin hc-b" aria-hidden="true">${icon('droplets')}</span>
       </div>
     </div>
   </header>
@@ -265,7 +263,7 @@ function homePage(ctx, categories) {
     ${ctx.recent
       ? html`<section class="home-sec" id="recent">
       <div class="container">
-        <div class="sec-row"><h2>Recent laundry</h2><a href="/account">See all ${icon('chevron-right')}</a></div>
+        <div class="sec-row"><h2>Recent laundry</h2><a href="/account">See all</a></div>
         ${recentCard(ctx.recent, s)}
       </div>
     </section>`
@@ -351,7 +349,7 @@ function homePage(ctx, categories) {
             <h3>Ready when you are</h3>
             <p>Tap, pick a time and we come to your door. Pay by M-Pesa when your bill is ready.</p>
             <div class="cta-actions">
-              <button class="btn btn-primary btn-lg" type="button" data-open-wizard>${icon('sparkles')} Get started</button>
+              <button class="btn btn-primary btn-lg" type="button" data-open-wizard>Get started</button>
               <a class="btn btn-light btn-lg" href="/track">${icon('search')} Track an order</a>
             </div>
           </div>
